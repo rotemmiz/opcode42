@@ -136,6 +136,46 @@ func TestConfigContentWins(t *testing.T) {
 	}
 }
 
+func TestServerSettings(t *testing.T) {
+	home := withCleanEnv(t)
+	cfgDir := filepath.Join(home, ".config", "opencode")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(cfgDir, "opencode.json"),
+		`{"server":{"port":4321,"hostname":"0.0.0.0","mdns":true,"mdnsDomain":"forge.local"}}`)
+
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	s := Server(cfg)
+	if s.Port == nil || *s.Port != 4321 {
+		t.Errorf("port = %v, want 4321", s.Port)
+	}
+	if s.Hostname == nil || *s.Hostname != "0.0.0.0" {
+		t.Errorf("hostname = %v, want 0.0.0.0", s.Hostname)
+	}
+	if s.MDNS == nil || !*s.MDNS {
+		t.Errorf("mdns = %v, want true", s.MDNS)
+	}
+	if s.MDNSDomain == nil || *s.MDNSDomain != "forge.local" {
+		t.Errorf("mdnsDomain = %v, want forge.local", s.MDNSDomain)
+	}
+}
+
+func TestServerSettingsEmpty(t *testing.T) {
+	withCleanEnv(t)
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	s := Server(cfg)
+	if s.Port != nil || s.Hostname != nil || s.MDNS != nil {
+		t.Errorf("empty config should yield nil settings, got %+v", s)
+	}
+}
+
 func write(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

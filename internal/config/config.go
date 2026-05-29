@@ -223,6 +223,32 @@ func postProcess(cfg map[string]any) {
 	}
 }
 
+// ServerSettings is the typed view of the config "server" block
+// (config.ts ServerConfig). Pointer fields distinguish "unset" from a zero
+// value so the caller can apply config-over-flag precedence.
+type ServerSettings struct {
+	Port       *int     `json:"port,omitempty"`
+	Hostname   *string  `json:"hostname,omitempty"`
+	MDNS       *bool    `json:"mdns,omitempty"`
+	MDNSDomain *string  `json:"mdnsDomain,omitempty"`
+	CORS       []string `json:"cors,omitempty"`
+}
+
+// Server extracts the server settings from a loaded config map.
+func Server(cfg map[string]any) ServerSettings {
+	var out ServerSettings
+	raw, ok := cfg["server"]
+	if !ok {
+		return out
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return out
+	}
+	_ = json.Unmarshal(b, &out)
+	return out
+}
+
 func systemUsername() string {
 	if u, err := user.Current(); err == nil && u.Username != "" {
 		return u.Username

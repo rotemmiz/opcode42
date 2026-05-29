@@ -15,6 +15,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -43,6 +44,9 @@ type Options struct {
 	Instances *instance.Manager
 	// Global is the process-global event bus backing /global/event (M4).
 	Global *bus.Global
+	// BaseCtx, when set, is cancelled at the start of graceful shutdown so
+	// long-lived SSE/PTY streams unblock and the server can drain (M6).
+	BaseCtx context.Context
 }
 
 // New builds the daemon's HTTP handler.
@@ -72,12 +76,12 @@ func New(opts Options) (http.Handler, error) {
 		registerSessionRoutes(reg, opts.Sessions)
 	}
 	if opts.Instances != nil {
-		reg(http.MethodGet, "/event", instanceEventHandler(opts.Instances))
+		reg(http.MethodGet, "/event", instanceEventHandler(opts.BaseCtx, opts.Instances))
 		registerPtyRoutes(reg, opts.Instances)
-		reg(http.MethodGet, "/pty/{ptyID}/connect", ptyConnectHandler(opts.Instances))
+		reg(http.MethodGet, "/pty/{ptyID}/connect", ptyConnectHandler(opts.BaseCtx, opts.Instances))
 	}
 	if opts.Global != nil {
-		reg(http.MethodGet, "/global/event", globalEventHandler(opts.Global))
+		reg(http.MethodGet, "/global/event", globalEventHandler(opts.BaseCtx, opts.Global))
 	}
 
 	ops, err := spec.Operations()

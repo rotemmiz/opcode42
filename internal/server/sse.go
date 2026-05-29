@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,24 @@ import (
 	"github.com/rotemmiz/forge/internal/bus"
 	"github.com/rotemmiz/forge/internal/instance"
 )
+
+// streamContext derives a context for a long-lived stream that is cancelled when
+// EITHER the client disconnects (r.Context()) OR the server begins shutting down
+// (base). This lets graceful shutdown unblock SSE/PTY handlers promptly so
+// http.Server.Shutdown can drain (plan 01 §9).
+func streamContext(base context.Context, r *http.Request) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(r.Context())
+	if base != nil {
+		go func() {
+			select {
+			case <-base.Done():
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+	}
+	return ctx, cancel
+}
 
 // heartbeatInterval matches opencode's 10s SSE keep-alive (handlers/event.ts:32).
 const heartbeatInterval = 10 * time.Second
@@ -41,7 +60,7 @@ func writeSSE(w http.ResponseWriter, fl http.Flusher, v any) bool {
 // {id,type,properties} events: server.connected first, then live events merged
 // with a 10s heartbeat, terminating on server.instance.disposed
 // (handlers/event.ts).
-func instanceEventHandler(mgr *instance.Manager) http.HandlerFunc {
+func instanceEventHandler(base context.Context, mgr *instance.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fl, ok := w.(http.Flusher)
 		if !ok {
@@ -62,7 +81,8 @@ func instanceEventHandler(mgr *instance.Manager) http.HandlerFunc {
 
 		ticker := time.NewTicker(heartbeatInterval)
 		defer ticker.Stop()
-		ctx := r.Context()
+		ctx, cancel := streamContext(base, r)
+		defer cancel()
 		for {
 			select {
 			case <-ctx.Done():
@@ -89,7 +109,7 @@ func instanceEventHandler(mgr *instance.Manager) http.HandlerFunc {
 // globalEventHandler streams the process-global bus. Unlike the instance
 // stream, each event is wrapped in a {payload,...} envelope (handlers/global.ts;
 // conformance Finding #2).
-func globalEventHandler(global *bus.Global) http.HandlerFunc {
+func globalEventHandler(base context.Context, global *bus.Global) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fl, ok := w.(http.Flusher)
 		if !ok {
@@ -107,7 +127,8 @@ func globalEventHandler(global *bus.Global) http.HandlerFunc {
 
 		ticker := time.NewTicker(heartbeatInterval)
 		defer ticker.Stop()
-		ctx := r.Context()
+		ctx, cancel := streamContext(base, r)
+		defer cancel()
 		for {
 			select {
 			case <-ctx.Done():

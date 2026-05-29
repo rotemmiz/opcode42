@@ -264,6 +264,41 @@ ticket instead).
       yet anywhere (config field only) — wire when config/CORS lands; add to the divergence registry.
 - [ ] NOTED: malformed JSON on POST/PUT /pty is ignored (proceeds with zero-value input) rather than
       400 like opencode. Minor; revisit with request-validation pass.
+
+## Plan-01 M6 (mDNS + graceful shutdown) — 2026-05-29 — COMPLETES PLAN 01
+
+Implemented `internal/mdns` (grandcat/zeroconf publish/withdraw, loopback gating), config→server
+settings wiring (`config.Server`, config-over-flags via `flag.Visit`, mDNS forces 0.0.0.0), a base
+context threaded into SSE/PTY streams so shutdown unblocks them, `instance.Manager.DisposeAll`
+(emits `server.instance.disposed`, kills PTYs, clears cache), and the full graceful-shutdown
+sequence in `cmd/forged` (withdraw mDNS → dispose instances → cancel streams → drain HTTP 10s →
+close DB). New flags: `--mdns`, `--mdns-domain`.
+
+- [x] LIVE E2E verified: `--host 0.0.0.0 --mdns` → `dns-sd -B _http._tcp local.` shows
+      `opencode-4096` (discoverable like opencode). SIGTERM with an OPEN `/event` SSE stream → clean
+      exit code 0 in ~0.1s (base-context cancel unblocks the stream so HTTP drains immediately
+      instead of waiting the 10s timeout). (manual 2026-05-29)
+- [x] Unit/integration tests: mDNS loopback gating; `config.Server` extraction + config-over-flags;
+      `DisposeAll` emits `server.instance.disposed` and clears the cache; SSE stream closes when
+      BaseCtx is cancelled (graceful-shutdown unblock). `go test -race` clean. (automated)
+- [x] CI-mimic + gates GREEN: build/vet/gofmt/golangci-lint(0)/`go test ./...`/gen-diff/spec-drift
+      131-131-0/self-diff(0)/dual(0 blocking, 7 provider-list warnings). (automated)
+- [ ] NOTED divergence: mDNS host A-record — Forge advertises via zeroconf RegisterProxy with host
+      derived from `--mdns-domain` (default "opencode"); opencode's bonjour advertises host
+      "opencode.local". The browse record (instance `opencode-<port>`, `_http._tcp`, txt `path=/`)
+      matches, which is what clients discover; the host target differs cosmetically. Confirm OK, or
+      align the host string if a client resolves it.
+- [ ] NOTED: network settings are read from GLOBAL config only (`config.Load("")`, skipping the
+      project layer), matching opencode's `getGlobal()` for network (cli/network.ts:40). CORS config
+      field is parsed but not yet enforced (no CORS layer — same deferral as the PTY connect-token
+      note above).
+
+## PLAN 01 STATUS — DONE (Phase A core)
+M1 (config) · M2 (session CRUD) · M3 (instance cache) · M4 (SSE bus) · M5 (PTY/WS) · M6 (mDNS +
+graceful shutdown) all merged to main via PRs #1-#? with review gates. M7 (OpenAPI spec emission)
+was satisfied earlier (spec served at /doc, 501 fan-out, spec-drift gate). Remaining open items
+are the `[ ]` notes above (deferred edges) + the deferred live PTY WS conformance capture and the
+`provider-list` divergence (plan 04).
 - [ ] NOTED: for a login-capable shell (sh/bash/zsh/...) Forge appends `-l` to args exactly as
       opencode does (pty/index.ts:191-193), even when an explicit `-c` command is given — matches
       opencode, including the quirk that `-l` then lands after the `-c` script.

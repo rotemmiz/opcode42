@@ -32,9 +32,31 @@ func NewManager(global *bus.Global) *Manager {
 	return &Manager{instances: make(map[string]*Context), global: global}
 }
 
+// DisposeAll tears down every instance on shutdown: it emits
+// server.instance.disposed on each instance bus (which terminates that
+// instance's /event SSE stream — handlers/event.ts:30-31) and shuts down its
+// PTY sessions, then clears the cache (project/instance-store.ts:77-89).
+func (m *Manager) DisposeAll() {
+	m.mu.Lock()
+	contexts := make([]*Context, 0, len(m.instances))
+	for _, c := range m.instances {
+		contexts = append(contexts, c)
+	}
+	m.instances = make(map[string]*Context)
+	m.mu.Unlock()
+
+	for _, c := range contexts {
+		c.Bus.Publish(bus.NewEvent(bus.EventInstanceDisposed, map[string]any{"directory": c.Directory}))
+		if c.Pty != nil {
+			c.Pty.Shutdown()
+		}
+	}
+}
+
 // Get returns the instance for directory, creating it on first use. Creation is
-// trivial today (a fresh bus), so a single lock suffices; when init grows
-// expensive (config/LSP) this becomes the single-flight point (plan 01 §7).
+// trivial today (a fresh bus + PTY manager), so a single lock suffices; when
+// init grows expensive (config/LSP) this becomes the single-flight point
+// (plan 01 §7).
 func (m *Manager) Get(directory string) *Context {
 	m.mu.Lock()
 	defer m.mu.Unlock()

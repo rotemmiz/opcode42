@@ -22,7 +22,7 @@ const wsWriteTimeout = 30 * time.Second
 // it to the PTY session: it replays the buffer, sends the control frame, streams
 // live output as text frames, and writes client input back to the shell
 // (pty/index.ts:301-361; handlers/pty.ts ptyConnectHandlers).
-func ptyConnectHandler(instances *instance.Manager) http.HandlerFunc {
+func ptyConnectHandler(base context.Context, instances *instance.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pid := chi.URLParam(r, "ptyID")
 		mgr := ptyManager(instances, r)
@@ -53,7 +53,8 @@ func ptyConnectHandler(instances *instance.Manager) http.HandlerFunc {
 		}
 		defer sub.Close()
 
-		ctx, cancel := context.WithCancel(r.Context())
+		// Cancelled on client disconnect or server shutdown (base).
+		ctx, cancel := streamContext(base, r)
 		defer cancel()
 
 		// Replay + control frame, in order, before live streaming.
