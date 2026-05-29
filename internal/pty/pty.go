@@ -82,16 +82,17 @@ type subscriber struct {
 }
 
 type session struct {
-	mu      sync.Mutex
-	info    Info
-	ptmx    *os.File
-	cmd     *exec.Cmd
-	buffer  []uint16 // last <=bufferLimit UTF-16 code units of output
-	bufCur  int      // absolute code-unit offset of buffer[0]
-	cursor  int      // total code units ever emitted
-	partial []byte   // trailing incomplete UTF-8 bytes between reads
-	subs    map[int]*subscriber
-	nextSub int
+	mu       sync.Mutex
+	info     Info
+	ptmx     *os.File
+	cmd      *exec.Cmd
+	buffer   []uint16 // last <=bufferLimit UTF-16 code units of output
+	bufCur   int      // absolute code-unit offset of buffer[0]
+	cursor   int      // total code units ever emitted
+	partial  []byte   // trailing incomplete UTF-8 bytes between reads
+	subs     map[int]*subscriber
+	nextSub  int
+	onExited func() // removes this session from its manager (set by Create)
 }
 
 // Manager owns the PTY sessions (and their connect tickets) for one instance.
@@ -156,6 +157,14 @@ func (m *Manager) Create(in CreateInput) (Info, error) {
 		ptmx: ptmx,
 		cmd:  cmd,
 		subs: make(map[int]*subscriber),
+	}
+
+	// On process exit, opencode removes the session (pty/index.ts:264-270); mirror
+	// that so the ptmx fd is reclaimed and exited sessions don't accumulate.
+	s.onExited = func() {
+		m.mu.Lock()
+		delete(m.sessions, ptyID)
+		m.mu.Unlock()
 	}
 
 	m.mu.Lock()
@@ -344,14 +353,24 @@ func (s *session) onData(raw []byte) {
 
 func (s *session) onExit() {
 	s.mu.Lock()
-	if s.info.Status != "exited" {
-		s.info.Status = "exited"
+	if s.info.Status == "exited" {
+		s.mu.Unlock()
+		return
 	}
+	s.info.Status = "exited"
 	for key, sub := range s.subs {
 		delete(s.subs, key)
 		close(sub.ch)
 	}
+	ptmx := s.ptmx
 	s.mu.Unlock()
+
+	if ptmx != nil {
+		_ = ptmx.Close() // reclaim the fd; the process has already exited
+	}
+	if s.onExited != nil {
+		s.onExited()
+	}
 }
 
 func (s *session) kill() {
@@ -389,28 +408,76 @@ func meta(cursor int) []byte {
 	return out
 }
 
-// splitValidUTF8 returns the longest valid-UTF-8 prefix of b as a string plus
-// the trailing bytes of an incomplete final rune (to be prepended to the next
-// read), so multi-byte runes split across reads are never corrupted.
+// splitValidUTF8 decodes a raw read into emit-now text plus the bytes of an
+// incomplete trailing multibyte rune to carry into the next read. It holds back
+// ONLY a genuine incomplete-but-valid trailing prefix (so a rune split across
+// reads is reassembled, never corrupted); every other byte is emitted as valid
+// UTF-8, with U+FFFD substituted for invalid bytes — matching node-pty, which
+// hands opencode an already-decoded string (pty/index.ts:239). This guarantees
+// the text WebSocket frames forge sends are always valid UTF-8 (RFC 6455).
 func splitValidUTF8(b []byte) (string, []byte) {
-	if utf8.Valid(b) {
-		return string(b), nil
+	if len(b) == 0 {
+		return "", nil
 	}
-	// Walk back from the end over the bytes of a possibly-incomplete final rune
-	// (continuation bytes 0x80-0xBF, up to 3, plus one lead byte).
-	for i := 1; i <= utf8.UTFMax && i <= len(b); i++ {
-		if utf8.Valid(b[:len(b)-i]) {
-			r, _ := utf8.DecodeRune(b[len(b)-i:])
-			if r == utf8.RuneError {
-				return string(b[:len(b)-i]), b[len(b)-i:]
-			}
-			// The tail is itself valid (e.g. truly invalid bytes mid-stream);
-			// emit everything and keep nothing.
-			break
+	if hold := incompleteTrailingLen(b); hold > 0 {
+		return decodeValidUTF8(b[:len(b)-hold]), append([]byte(nil), b[len(b)-hold:]...)
+	}
+	return decodeValidUTF8(b), nil
+}
+
+// incompleteTrailingLen returns the number of trailing bytes (1..3) that begin a
+// multibyte rune but are too short to complete it, or 0 if the input does not
+// end on such a partial rune.
+func incompleteTrailingLen(b []byte) int {
+	for back := 1; back <= utf8.UTFMax-1 && back <= len(b); back++ {
+		lead := b[len(b)-back]
+		if isContinuationByte(lead) {
+			continue // still inside the trailing rune; look further back for its lead
+		}
+		need := leadRuneLen(lead)
+		if need > back && allContinuation(b[len(b)-back+1:]) {
+			return back // a valid lead + (back-1) continuations, missing (need-back) more
+		}
+		return 0 // the last rune is complete (or the lead is invalid: not recoverable)
+	}
+	return 0
+}
+
+func isContinuationByte(c byte) bool { return c&0xC0 == 0x80 }
+
+// leadRuneLen returns the total byte length a UTF-8 lead byte announces, or 0 if
+// c is not a valid lead byte.
+func leadRuneLen(c byte) int {
+	switch {
+	case c&0x80 == 0x00:
+		return 1
+	case c&0xE0 == 0xC0:
+		return 2
+	case c&0xF0 == 0xE0:
+		return 3
+	case c&0xF8 == 0xF0:
+		return 4
+	default:
+		return 0
+	}
+}
+
+func allContinuation(b []byte) bool {
+	for _, c := range b {
+		if !isContinuationByte(c) {
+			return false
 		}
 	}
-	// Fallback: emit the valid prefix Go can decode; drop nothing pathological.
-	return string(b), nil
+	return true
+}
+
+// decodeValidUTF8 re-encodes b as valid UTF-8, replacing invalid bytes with
+// U+FFFD (the round-trip []rune does this).
+func decodeValidUTF8(b []byte) string {
+	if utf8.Valid(b) {
+		return string(b)
+	}
+	return string([]rune(string(b)))
 }
 
 func utf16ToString(u []uint16) string {

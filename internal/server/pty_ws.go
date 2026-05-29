@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
@@ -12,6 +13,10 @@ import (
 	"github.com/rotemmiz/forge/internal/instance"
 	"github.com/rotemmiz/forge/internal/pty"
 )
+
+// wsWriteTimeout bounds a single frame write so a client that stops reading
+// (TCP backpressure) cannot block the writer/reader goroutines indefinitely.
+const wsWriteTimeout = 30 * time.Second
 
 // ptyConnectHandler upgrades GET /pty/{ptyID}/connect to a WebSocket and bridges
 // it to the PTY session: it replays the buffer, sends the control frame, streams
@@ -88,14 +93,17 @@ func ptyConnectHandler(instances *instance.Manager) http.HandlerFunc {
 }
 
 // wsWrite sends one frame: binary for the control frame, text for PTY output
-// (pty/index.ts: data chunks are strings, meta is a Uint8Array). Returns false
-// when the connection is gone.
+// (pty/index.ts: data chunks are strings, meta is a Uint8Array). Each write is
+// bounded by wsWriteTimeout so a stalled client cannot block forever. Returns
+// false when the connection is gone (or the write timed out).
 func wsWrite(ctx context.Context, conn *websocket.Conn, f pty.Frame) bool {
 	typ := websocket.MessageText
 	if f.Binary {
 		typ = websocket.MessageBinary
 	}
-	return conn.Write(ctx, typ, f.Data) == nil
+	wctx, cancel := context.WithTimeout(ctx, wsWriteTimeout)
+	defer cancel()
+	return conn.Write(wctx, typ, f.Data) == nil
 }
 
 // parseCursor maps the ?cursor= query to opencode's semantics: -1 = current end,

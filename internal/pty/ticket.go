@@ -48,8 +48,14 @@ func (m *Manager) ConsumeTicket(token, ptyID string) bool {
 	if !ok {
 		return false
 	}
-	delete(m.tickets.entries, token)
-	return e.ptyID == ptyID && time.Now().Before(e.expires)
+	// Only burn the ticket on a successful match (opencode invalidates only when
+	// the predicate matches, ticket.ts:51-53); a wrong-ptyID probe leaves a valid
+	// ticket usable by the legitimate client.
+	if e.ptyID == ptyID && time.Now().Before(e.expires) {
+		delete(m.tickets.entries, token)
+		return true
+	}
+	return false
 }
 
 // purgeLocked drops expired tickets; caller holds the lock.

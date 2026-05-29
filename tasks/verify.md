@@ -249,10 +249,21 @@ ticket instead).
       UTF-16 code units (recorded Finding). `?cursor=-1`=current end, `>=0`=absolute offset,
       missing/invalid=0. A live opencode-vs-forge PTY WS diff is still DEFERRED (harness PTY capture
       not built — no bun; verify.md C2 note). Confirm a live interop before claiming PTY done-done.
-- [ ] NOTED divergence: opencode auto-removes a session on process exit (pty.exited → remove);
-      Forge marks status="exited" and RETAINS it until DELETE (so history/replay survive). Also: pty
-      lifecycle bus events (pty.created/updated/exited/deleted) are NOT yet published to the event
-      bus — wire when the agent engine needs them (plan 02). Confirm both are acceptable for now.
+- [x] FIXED (review): on process exit Forge now closes the ptmx fd AND removes the session from the
+      manager, matching opencode (pty/index.ts:264-270) — no fd/session leak; post-exit GET 404s and
+      LIST omits it. (Earlier draft retained exited sessions; that was a leak and a divergence.)
+- [x] FIXED (review): `splitValidUTF8` now holds back ONLY a genuine incomplete trailing multibyte
+      rune and emits everything else as valid UTF-8 (U+FFFD for invalid bytes), so text WS frames are
+      always valid UTF-8 (RFC 6455) and invalid bytes never stall the stream. Per-write 30s timeout
+      added so a non-reading client can't block the pump goroutines. Ticket consume no longer burns on
+      a ptyID mismatch. (race-clean; new boundary tests added.)
+- [ ] NOTED: pty lifecycle bus events (pty.created/updated/exited/deleted) are NOT yet published to
+      the event bus — wire when the agent engine needs them (plan 02). Confirm acceptable for now.
+- [ ] DEFERRED (pre-existing gap, tracked): no CORS/origin check on connect-token issuance or ticket
+      consume; opencode gates both on validOrigin (handlers/pty.ts:98,146). Forge has no CORS layer
+      yet anywhere (config field only) — wire when config/CORS lands; add to the divergence registry.
+- [ ] NOTED: malformed JSON on POST/PUT /pty is ignored (proceeds with zero-value input) rather than
+      400 like opencode. Minor; revisit with request-validation pass.
 - [ ] NOTED: for a login-capable shell (sh/bash/zsh/...) Forge appends `-l` to args exactly as
       opencode does (pty/index.ts:191-193), even when an explicit `-c` command is given — matches
       opencode, including the quirk that `-l` then lands after the `-c` script.

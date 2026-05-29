@@ -4,7 +4,26 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestExitedSessionIsRemoved(t *testing.T) {
+	m := NewManager(t.TempDir(), "/bin/sh")
+	info, err := m.Create(CreateInput{Command: "/bin/sh", Args: []string{"-c", "exit 0"}})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	// The shell exits immediately; the readLoop should observe EOF and remove it
+	// (matching opencode pty/index.ts:264-270), reclaiming the ptmx fd.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := m.Get(info.ID); err == ErrNotFound {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("exited session %s was not removed", info.ID)
+}
 
 func newSession() *session {
 	return &session{subs: make(map[int]*subscriber)}
@@ -57,6 +76,75 @@ func TestPartialUTF8AcrossReads(t *testing.T) {
 	}
 	if got := utf16ToString(s.buffer); got != "abé" {
 		t.Errorf("buffer = %q, want abé", got)
+	}
+}
+
+func TestInvalidUTF8BecomesReplacementNotHeldBack(t *testing.T) {
+	s := newSession()
+	// A lone invalid byte followed by valid data must NOT stall the stream: the
+	// invalid byte becomes U+FFFD and 'a' is emitted now.
+	s.onData([]byte{0xFF, 'a'})
+	if len(s.partial) != 0 {
+		t.Fatalf("partial = %v, want empty (invalid byte must not be held back)", s.partial)
+	}
+	got := utf16ToString(s.buffer)
+	if got != "�a" {
+		t.Errorf("buffer = %q, want U+FFFD then 'a'", got)
+	}
+}
+
+func TestInvalidByteMidStream(t *testing.T) {
+	s := newSession()
+	s.onData([]byte{'a', 0x80, 'b'}) // lone continuation byte in the middle
+	if len(s.partial) != 0 {
+		t.Fatalf("partial = %v, want empty", s.partial)
+	}
+	if got := utf16ToString(s.buffer); got != "a�b" {
+		t.Errorf("buffer = %q, want a U+FFFD b", got)
+	}
+}
+
+func TestIncompleteTrailingHeldThenCompleted(t *testing.T) {
+	// 4-byte 😀 (F0 9F 98 80) split as 3 + 1 bytes across reads.
+	emoji := []byte("\U0001F600")
+	s := newSession()
+	s.onData(emoji[:3])
+	if s.cursor != 0 {
+		t.Errorf("cursor = %d, want 0 (whole rune held until complete)", s.cursor)
+	}
+	if len(s.partial) != 3 {
+		t.Errorf("partial len = %d, want 3", len(s.partial))
+	}
+	s.onData(emoji[3:])
+	if s.cursor != 2 {
+		t.Errorf("cursor = %d, want 2 (surrogate pair)", s.cursor)
+	}
+	if utf16ToString(s.buffer) != "\U0001F600" {
+		t.Errorf("buffer mismatch: %q", utf16ToString(s.buffer))
+	}
+}
+
+func TestSplitValidUTF8Boundaries(t *testing.T) {
+	cases := []struct {
+		name     string
+		in       []byte
+		wantText string
+		wantHold int
+	}{
+		{"empty", nil, "", 0},
+		{"ascii", []byte("abc"), "abc", 0},
+		{"lone-lead-2byte", []byte{0xC3}, "", 1},
+		{"lead+1-of-3byte", []byte{0xE2, 0x82}, "", 2},
+		{"lead+2-of-4byte", []byte{0xF0, 0x9F, 0x98}, "", 3},
+		{"complete-then-lead", []byte("ab\xc3"), "ab", 1},
+		{"invalid-only", []byte{0xFF}, "�", 0},
+		{"lone-continuation", []byte{0x80}, "�", 0},
+	}
+	for _, c := range cases {
+		text, hold := splitValidUTF8(c.in)
+		if text != c.wantText || len(hold) != c.wantHold {
+			t.Errorf("%s: got (%q, %d held), want (%q, %d held)", c.name, text, len(hold), c.wantText, c.wantHold)
+		}
 	}
 }
 
