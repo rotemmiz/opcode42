@@ -35,9 +35,12 @@ scripted run; the unchecked `[ ]` items need your judgment (decisions, design co
 - [x] DECISION CONFIRMED (2026-05-29): the generated file (~1.26 MB / 36k lines) stays **committed**.
       Golden path completed — CI job `codegen-fresh` regenerates and runs `git diff --exit-code
       internal/api/gen/`, so a stale/hand-edited commit fails CI. Regenerate with `make gen`.
-- [ ] DECISION TO CONFIRM: oapi-codegen can't load OpenAPI 3.1, so `internal/tools/downconvert`
-      produces a derived 3.0 spec for codegen only. The frozen contract stays 3.1. Confirm this
-      derived-spec approach (vs switching codegen tools) is acceptable.
+- [x] DECISION CONFIRMED (2026-05-29): keep oapi-codegen + `downconvert` (derived 3.0 spec for
+      codegen only; frozen contract stays 3.1). Spiked ogen (the only 3.1-native Go generator):
+      it fails on the SAME `exclusiveMinimum` number→bool issue (so a shim is unavoidable for ANY
+      Go generator), and even on the downconverted spec it can't handle opencode's "complex anyOf"
+      (would skip those ops/schemas, dropping the Event union). oapi-codegen handles all 131 ops +
+      unions, so it stays.
 - [ ] The 4 `Event.tui.*` SSE envelope schemas are renamed to `*2` in Go (e.g. `EventTuiCommandExecute2`)
       because opencode ships both dotted and PascalCase variants. Confirm the `*2` names are tolerable
       (they're SSE event types, rarely hand-referenced).
