@@ -81,6 +81,11 @@ func compareHeaders(r *Report, scenario, label string, exp, act map[string]strin
 			r.add(scenario, label, ev, av, fmt.Sprintf("header.%s: %q != %q", k, ev, av))
 		}
 	}
+	for k := range act {
+		if _, ok := exp[k]; !ok {
+			r.add(scenario, label, "(missing)", act[k], fmt.Sprintf("header.%s: missing != present", k))
+		}
+	}
 }
 
 func compareSSE(r *Report, scenario, label string, exp, act []string) {
