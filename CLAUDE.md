@@ -25,6 +25,19 @@
 
   Then B (`02-agent-engine`), C (`03`/`04`), D (`05` plugin-host, `13` remote-ops, `08` TUI).
 
+  ## Git workflow (every feature)
+  Follow this loop for each feature; do not push unreviewed work to `main`.
+  1. **Start fresh:** `git checkout main && git pull`, then branch (`git checkout -b <feature>`).
+  2. **Build the feature**, committing as the work warrants (no `Co-Authored-By`).
+  3. **When done:** commit, `git push -u origin <feature>`, open a PR (`gh pr create`).
+  4. **Local review gate** (hosted CI minutes are exhausted — do NOT rely on GitHub Actions):
+     spin a review subagent locally, apply fixes, re-review, and repeat until the review is
+     **clean** (no blocking/should-fix findings). Mimic CI locally each round: `go build/vet`,
+     `gofmt -l`, `golangci-lint run`, `go test ./...`, `make gen` + `git diff --exit-code
+     internal/api/gen/`, and `scripts/run-conformance.sh self` (+ a dual-run gate for new endpoints).
+  5. **Merge the PR from GitHub** (`gh pr merge`), then `git checkout main && git pull` to switch
+     back to `main` and sync.
+
   ## Non-negotiables
   - **Wire-compat by default.** Match opencode's endpoints, the SSE `{ id, type, properties }` shape, PTY framing (`0x00 + UTF-8 JSON {cursor}`), Basic/`?auth_token=` auth, `x-opencode-directory` routing. Log
   intentional divergences in a known-divergence registry (plan 12).
