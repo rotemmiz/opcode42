@@ -24,6 +24,13 @@ import (
 	"github.com/rotemmiz/forge/internal/auth"
 	"github.com/rotemmiz/forge/internal/bus"
 	"github.com/rotemmiz/forge/internal/config"
+	"github.com/rotemmiz/forge/internal/engine"
+	"github.com/rotemmiz/forge/internal/engine/catalog"
+	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/forge/internal/engine/message"
+	"github.com/rotemmiz/forge/internal/engine/provider/openai"
+	"github.com/rotemmiz/forge/internal/engine/registry"
+	"github.com/rotemmiz/forge/internal/engine/tool"
 	"github.com/rotemmiz/forge/internal/instance"
 	"github.com/rotemmiz/forge/internal/mdns"
 	"github.com/rotemmiz/forge/internal/server"
@@ -132,6 +139,8 @@ func run(opts options) error {
 	baseCtx, cancelBase := context.WithCancel(context.Background())
 	defer cancelBase()
 
+	modelCatalog := loadCatalog(baseCtx)
+
 	handler, err := server.New(server.Options{
 		Version:   version,
 		Auth:      authCfg,
@@ -140,6 +149,10 @@ func run(opts options) error {
 		Instances: instances,
 		Global:    globalBus,
 		BaseCtx:   baseCtx,
+		Messages:  message.NewStore(db),
+		Catalog:   modelCatalog,
+		Registry:  builtinRegistry(),
+		Providers: providerFactory(modelCatalog),
 	})
 	if err != nil {
 		return err
@@ -180,6 +193,61 @@ func run(opts options) error {
 	case <-ctx.Done():
 		return shutdown(srv, instances, mdnsSvc, cancelBase)
 	}
+}
+
+// loadCatalog resolves the models.dev catalog at startup (live, with on-disk
+// cache), falling back to the embedded fixture if the fetch fails so the daemon
+// always starts. Cost accuracy for unknown models degrades gracefully to 0.
+func loadCatalog(ctx context.Context) catalog.Catalog {
+	fetchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cat, err := catalog.NewLive("").Get(fetchCtx)
+	if err != nil {
+		log.Printf("warning: models.dev catalog unavailable (%v); using bundled fixture", err)
+		return catalog.Fixture()
+	}
+	return cat
+}
+
+// builtinRegistry is the agent's built-in tool set. MCP/config tools fill the
+// registry's dynamic slot in plan 03.
+func builtinRegistry() *registry.Registry {
+	return registry.New(
+		tool.Bash{}, tool.Read{}, tool.Write{}, tool.Edit{}, tool.Glob{}, tool.Grep{}, tool.Patch{},
+		tool.WebFetch{}, tool.TodoWrite{Store: tool.NewTodoStore()},
+	)
+}
+
+// providerFactory builds an OpenAI-compatible client for a provider/model,
+// resolving the base URL from the catalog (or FORGE_PROVIDER_BASE_URL) and the
+// API key from the provider's advertised env vars (or FORGE_PROVIDER_API_KEY).
+func providerFactory(cat catalog.Catalog) engine.ProviderFactory {
+	return func(_ context.Context, providerID, modelID string) (llm.Provider, error) {
+		baseURL := os.Getenv("FORGE_PROVIDER_BASE_URL")
+		var apiKey string
+		if prov, ok := cat[providerID]; ok {
+			if baseURL == "" {
+				baseURL = prov.API
+			}
+			apiKey = firstEnv(prov.Env...)
+		}
+		if apiKey == "" {
+			apiKey = os.Getenv("FORGE_PROVIDER_API_KEY")
+		}
+		if baseURL == "" {
+			return nil, fmt.Errorf("no base URL for provider %q (set FORGE_PROVIDER_BASE_URL)", providerID)
+		}
+		return openai.New(openai.Options{BaseURL: baseURL, APIKey: apiKey, Model: modelID}), nil
+	}
+}
+
+func firstEnv(names ...string) string {
+	for _, n := range names {
+		if v := os.Getenv(n); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // startMDNS advertises the service on the actually-bound port when mDNS is

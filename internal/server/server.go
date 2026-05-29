@@ -25,6 +25,10 @@ import (
 	"github.com/rotemmiz/forge/internal/auth"
 	"github.com/rotemmiz/forge/internal/bus"
 	"github.com/rotemmiz/forge/internal/config"
+	"github.com/rotemmiz/forge/internal/engine"
+	"github.com/rotemmiz/forge/internal/engine/catalog"
+	"github.com/rotemmiz/forge/internal/engine/message"
+	"github.com/rotemmiz/forge/internal/engine/registry"
 	"github.com/rotemmiz/forge/internal/instance"
 	"github.com/rotemmiz/forge/internal/session"
 )
@@ -42,6 +46,14 @@ type Options struct {
 	Sessions *session.Store
 	// Instances is the per-directory instance cache backing /event (M3/M4).
 	Instances *instance.Manager
+	// Messages is the message/part store backing the prompt endpoints (plan 02).
+	Messages *message.Store
+	// Catalog is the resolved models.dev catalog (cost/capability).
+	Catalog catalog.Catalog
+	// Registry is the agent tool registry.
+	Registry *registry.Registry
+	// Providers builds a streaming LLM provider for a provider/model pair.
+	Providers engine.ProviderFactory
 	// Global is the process-global event bus backing /global/event (M4).
 	Global *bus.Global
 	// BaseCtx, when set, is cancelled at the start of graceful shutdown so
@@ -74,6 +86,9 @@ func New(opts Options) (http.Handler, error) {
 
 	if opts.Sessions != nil {
 		registerSessionRoutes(reg, opts.Sessions)
+	}
+	if opts.Messages != nil && opts.Instances != nil && opts.Providers != nil {
+		registerPromptRoutes(reg, opts)
 	}
 	if opts.Instances != nil {
 		reg(http.MethodGet, "/event", instanceEventHandler(opts.BaseCtx, opts.Instances))

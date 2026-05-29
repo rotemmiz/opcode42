@@ -4,16 +4,21 @@ import (
 	"sync"
 
 	"github.com/rotemmiz/forge/internal/bus"
+	"github.com/rotemmiz/forge/internal/engine/permission"
+	"github.com/rotemmiz/forge/internal/engine/runstate"
 	"github.com/rotemmiz/forge/internal/pty"
 )
 
 // Context is the per-directory in-memory state for one project instance. It
-// holds the instance event bus and PTY manager; config/LSP attach here in later
-// milestones (plan 01 §7).
+// holds the instance event bus, PTY manager, and the agent engine's
+// per-instance state (the permission manager and the per-session run lock);
+// config/LSP attach here in later milestones (plan 01 §7).
 type Context struct {
-	Directory string
-	Bus       *bus.Bus
-	Pty       *pty.Manager
+	Directory   string
+	Bus         *bus.Bus
+	Pty         *pty.Manager
+	Permissions *permission.Manager
+	RunState    *runstate.RunState
 }
 
 // Manager is the directory→instance cache. Instances are created on first use
@@ -63,12 +68,15 @@ func (m *Manager) Get(directory string) *Context {
 	if c, ok := m.instances[directory]; ok {
 		return c
 	}
+	instBus := bus.NewInstanceBus(directory, m.global)
 	c := &Context{
 		Directory: directory,
-		Bus:       bus.NewInstanceBus(directory, m.global),
+		Bus:       instBus,
 		// configShell is wired from config in a later milestone; PreferredShell
 		// falls back to $SHELL / a platform default until then.
-		Pty: pty.NewManager(directory, ""),
+		Pty:         pty.NewManager(directory, ""),
+		Permissions: permission.NewManager(instBus),
+		RunState:    runstate.New(),
 	}
 	m.instances[directory] = c
 	return c
