@@ -1,0 +1,18 @@
+[
+  {
+    "scenario": "sync-replay",
+    "phase": "A",
+    "reason": "SSE replay via /sync/* not implemented in Phase A",
+    "track": "TODO: file issue"
+  },
+  {
+    "scenario": "experimental-*",
+    "phase": "A-C",
+    "reason": "/experimental/* endpoints best-effort; not gated until Phase D"
+  },
+  {
+    "scenario": "provider-oauth",
+    "phase": "A-B",
+    "reason": "OAuth provider auth flow deferred; /provider/:id/oauth/authorize not implemented"
+  }
+]

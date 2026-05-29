@@ -1,0 +1,9 @@
+# oapi-codegen configuration — generates Forge's server-side API surface
+# (chi ServerInterface + models) from the vendored OpenAPI reference.
+# Regenerate with `make gen`. Do not edit the generated file by hand.
+package: gen
+output: forge.gen.go
+generate:
+  models: true
+  chi-server: true
+  embedded-spec: false

@@ -1,0 +1,57 @@
+name: conformance
+
+# Phase-A conformance gate (plan 12). Two required checks:
+#   spec-drift  — forged's GET /doc must match the frozen reference
+#   self-diff   — opencode-vs-opencode must diff clean (proves the harness/normalizer)
+#
+# The opencode-vs-forge dual-run (scripts/run-conformance.sh dual) is added in
+# Phase B once the agent engine lands; in Phase A forge 501s the endpoints.
+#
+# NOTE: hosted CI is currently usage-limited, so the active gate is a local
+# review subagent run before pushing (see tasks/verify.md). This workflow is the
+# eventual gate.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  OPENCODE_VERSION: "1.15.11" # must match conformance/openapi-reference.provenance.txt
+
+jobs:
+  spec-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: Build forged
+        run: make build
+      - name: Start forged
+        run: |
+          ./bin/forged --port 4096 &
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:4096/global/health && break; sleep 1; done
+      - name: Spec-drift gate
+        run: bash scripts/check-spec-drift.sh http://127.0.0.1:4096
+
+  self-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned opencode
+        run: npm i -g "opencode-ai@${OPENCODE_VERSION}"
+      - name: Conformance self-diff (opencode vs opencode)
+        run: bash scripts/run-conformance.sh self

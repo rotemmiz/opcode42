@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "sse-catalog",
+    "recordedAt": "2026-05-29T07:58:52Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "http://127.0.0.1:4096/global/health",
+        "headers": {
+          "x-opencode-directory": "/tmp/forge-record"
+        },
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"healthy\":true,\"version\":\"1.15.11\"}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "http://127.0.0.1:4096/event",
+        "headers": {
+          "x-opencode-directory": "/tmp/forge-record"
+        },
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"evt_e72be43a8001XyILjvvc8DfKbz\",\"type\":\"server.connected\",\"properties\":{}}\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "http://127.0.0.1:4096/global/event",
+        "headers": {
+          "x-opencode-directory": "/tmp/forge-record"
+        },
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"payload\":{\"id\":\"evt_e72be43b7001Gi0LOrm4Nlei4V\",\"type\":\"server.connected\",\"properties\":{}}}\n\n"
+      }
+    }
+  ]
+}

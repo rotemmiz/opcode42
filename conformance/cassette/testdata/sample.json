@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "sample",
+    "recordedAt": "2026-05-29T00:00:00Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:4096/global/health",
+        "headers": {
+          "accept": "application/json"
+        },
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"healthy\":true,\"version\":\"0.0.1\"}"
+      }
+    },
+    {
+      "transport": "websocket",
+      "open": {
+        "url": "ws://localhost:4096/pty/abc/connect?cursor=0",
+        "headers": {}
+      },
+      "client": [
+        {
+          "kind": "text",
+          "body": "ls\n"
+        }
+      ],
+      "server": [
+        {
+          "kind": "binary",
+          "body": "AHsiY3Vyc29yIjowfQ==",
+          "bodyEncoding": "base64"
+        }
+      ]
+    }
+  ]
+}
