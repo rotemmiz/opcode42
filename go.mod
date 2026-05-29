@@ -5,6 +5,7 @@ go 1.26.3
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
 require (
+	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/coder/websocket v1.8.14
 	github.com/creack/pty v1.1.24
 	github.com/go-chi/chi/v5 v5.3.0

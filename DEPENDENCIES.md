@@ -25,6 +25,7 @@ The one exception is the build tool, which is pinned now (needed in S3):
 | Migrations | `github.com/golang-migrate/migrate/v4` | §5, M2 | Embedded SQL migrations (embed.FS), run on startup. |
 | mDNS | `github.com/grandcat/zeroconf` | §9, M6 | Pure Go; richer TXT support than hashicorp/mdns. |
 | PTY spawn | `github.com/creack/pty` | §3, M5 | Standard Go PTY allocation. |
+| Glob matching | `github.com/bmatcuk/doublestar/v4` | plan 02 M5 | Pure-Go `**` glob support for the `glob`/`grep` built-in tools; `filepath.Glob` lacks `**`. |
 
 ## Notes
 
