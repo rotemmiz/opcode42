@@ -302,3 +302,17 @@ are the `[ ]` notes above (deferred edges) + the deferred live PTY WS conformanc
 - [ ] NOTED: for a login-capable shell (sh/bash/zsh/...) Forge appends `-l` to args exactly as
       opencode does (pty/index.ts:191-193), even when an explicit `-c` command is given — matches
       opencode, including the quirk that `-l` then lands after the `-c` script.
+
+## M1 (plan 02) — message/part model + storage + serializers
+
+- [x] `go test -race ./internal/engine/...` green; `golangci-lint run` 0 issues; `gofmt -l` clean. (automated 2026-05-29)
+- [x] `make gen` byte-stable (M1 touched no endpoints). (automated 2026-05-29)
+- [x] `toModelMessages` + `filterCompacted`/`latest` ported from opencode's message-v2.test.ts;
+      a local review subagent confirmed 1:1 fidelity (no blocking findings). (automated 2026-05-29)
+- [ ] DESIGN CONFIRM: the provider-neutral `llm.ModelMessage` shape (vs mirroring the AI SDK's
+      ModelMessage exactly). Forge produces its own neutral form; the OpenAI/Anthropic *wire* JSON
+      is rendered from it in M2. Confirm this is the intended boundary.
+- [ ] DIVERGENCE CONFIRM (serialize.go header): (a) tool-result media is uniformly promoted to a
+      trailing user message; (b) `providerExecuted` tools are not yet modeled (deferred to the
+      Anthropic/server-tool path). Both are documented; confirm they belong in the plan-12
+      known-divergence registry.

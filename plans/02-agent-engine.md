@@ -978,3 +978,33 @@ The conformance harness replays a scripted prompt against both opencode and Forg
 - **Plan 04 (ecosystem-resources):** provides `AgentInfo`, `CommandDef`, `SkillDef`, `ProviderDef` loaders that feed `compileToolMap`, `buildSystem`, and `resolveAgent`.
 - **Plan 06 (sdk-generation):** Go SDK generated from `packages/sdk/openapi.json`; the agent engine's REST endpoints must match the spec exactly so generated clients work.
 - **Plan 12 (test-compatibility):** conformance harness that validates the agent engine's SSE output and DB state against real opencode. All claims in the "Verification" section above are checked by plan 12 scenarios.
+
+---
+
+## Addendum — Build-order refinements (2026-05-29, user-approved)
+
+This refines (does not contradict) the milestone order above; recorded per CLAUDE.md's
+"update a plan only if it contradicts reality, and say so explicitly" rule.
+
+**Decisions locked with the user:**
+1. **Provider order swapped.** Build **OpenAI + OpenAI-compatible first** (was M3) because the
+   OpenAI-compatible path reaches many free-tier providers (Groq, Cerebras, OpenRouter free
+   models, local Ollama) and needs no Anthropic key. **Anthropic (was M2) is deferred to a new
+   milestone after M9.** The system-prompt variant routing scaffold (`gpt`/`gemini`/`claude`/
+   default) still lands at M8 so Anthropic is drop-in later; the Anthropic-specific extended-thinking
+   signed-reasoning handling (`message-v2.ts:765-768`) rides along with that deferred milestone.
+2. **LLM transport is hand-rolled.** No vendored provider SDK — a thin HTTP+SSE client POSTs to the
+   provider and parses the stream directly into `LLMEvent`. Lighter binary, full control of event
+   mapping, and a perfect fit for the deterministic mock-LLM test gate (we own the whole transport).
+3. **Proof bar = deterministic mock LLM.** An `httptest` server replays scripted provider SSE;
+   unit + integration tests assert the exact `LLMEvent → SSE → DB` sequence. No API key, no cost,
+   CI-reproducible. Live dual-run vs real opencode (plan 12) is stood up but runs opportunistically
+   (needs a real opencode + a shared deterministic provider).
+4. **Model catalog = live models.dev fetch** with an on-disk cache (mirrors opencode) and a
+   last-good offline fallback; tests inject a **checked-in JSON fixture** via a `catalog.Source`
+   interface so they never touch the network.
+5. **Integration suite is a living deliverable**, scaffolded at M1 (`internal/engine/enginetest`,
+   with the deterministic mock provider) and grown each milestone, not a one-shot M11 step.
+
+**Effective milestone order:** M1 → **M2 (OpenAI/OpenAI-compatible + catalog)** → M4 → M5 → M6 →
+M7 → M8 → **M9 (loop wiring; first end-to-end green)** → **M3′ (Anthropic, deferred)** → M10 → M11.
