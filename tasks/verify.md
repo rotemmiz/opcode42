@@ -20,7 +20,7 @@ scripted run; the unchecked `[ ]` items need your judgment (decisions, design co
 ## S2 — Vetted dependencies
 
 - [x] `go tool oapi-codegen --version` prints `v2.7.0` (pinned via `tool` directive in go.mod). (automated 2026-05-29)
-- [ ] `DEPENDENCIES.md` lists the vetted runtime libs; confirm the choices still match plan 01.
+- [x] `DEPENDENCIES.md` lists the vetted runtime libs; confirm the choices still match plan 01.
       Runtime libs are intentionally NOT in go.mod yet (Go prunes unused requires) — they land on
       first import in plan 01.
 
@@ -108,3 +108,12 @@ scripted run; the unchecked `[ ]` items need your judgment (decisions, design co
       follow-up within Phase A.
 - [ ] CI workflow `.github/workflows/conformance.yml` authored (spec-drift + self-diff, opencode
       pinned to 1.15.11) but NOT run (hosted CI usage-limited). Local gate before push: review subagent.
+
+## Interop demonstration (2026-05-29) — SUCCESS, both directions
+
+- [x] Forge-authored client (the conformance suite) drives **real opencode**: all 7 agent-free
+      scenarios run green. (automated 2026-05-29)
+- [x] opencode's **own** `@opencode-ai/sdk` against `forged`: `session.list()` → `HTTP 501`
+      `{"_tag":"NotImplemented",...}` (wire contract present; behavior is Phase B). The identical SDK
+      call against real opencode → `HTTP 200` + session array. Same client, same request, two daemons
+      — only "implemented vs 501" differs. (automated 2026-05-29)
