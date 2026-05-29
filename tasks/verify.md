@@ -228,3 +228,31 @@ fan-out, non-blocking drop, publish forwards to global wrapped {payload,director
       ready-channel) + dispose/`server.instance.disposed` emission land when init grows
       (config/LSP/PTY) or instances are torn down — heartbeat + dispose-termination are wired in the
       stream but no disposal is triggered yet (no TTL; matches opencode keeping instances for life).
+
+## Plan-01 M5 (PTY over WebSocket) — 2026-05-29
+
+Implemented `internal/pty` (spawn via creack/pty, UTF-16-code-unit ring buffer + cursor, subscribers,
+connect/replay, single-use connect tickets, shell helpers) and the server endpoints:
+GET /pty/shells, GET /pty, POST /pty, GET/PUT/DELETE /pty/{ptyID}, POST /pty/{ptyID}/connect-token,
+and the WebSocket GET /pty/{ptyID}/connect (coder/websocket). A per-instance `pty.Manager` hangs off
+`instance.Context`. Auth middleware skips Basic for `/pty/{id}/connect?ticket=` (the handler burns the
+ticket instead).
+
+- [x] Validated by UNIT tests (cursor counts UTF-16 code units incl. a 😀 surrogate pair; partial
+      UTF-8 held across reads; 2MB ring trim advances bufCur; replay offset/`-1`/chunking; control
+      frame `0x00`+`{cursor}`) and an END-TO-END WebSocket test (real shell → replay text frames +
+      binary control frame; ticket mint → ticketed WS bypasses Basic auth; single-use ticket
+      rejected on reuse). `go test -race ./internal/pty ./internal/server` clean. (automated)
+- [x] spec-drift 131/131 0 breaking; dual gate still 0 blocking (PTY has no scenario yet). (automated)
+- [ ] WIRE FORMAT (source-grounded, not yet live-diffed): data = TEXT frames, control = BINARY
+      `0x00`+UTF-8 `{"cursor":n}` (pty/index.ts:44-51 string-vs-Uint8Array send). cursor/buffer are
+      UTF-16 code units (recorded Finding). `?cursor=-1`=current end, `>=0`=absolute offset,
+      missing/invalid=0. A live opencode-vs-forge PTY WS diff is still DEFERRED (harness PTY capture
+      not built — no bun; verify.md C2 note). Confirm a live interop before claiming PTY done-done.
+- [ ] NOTED divergence: opencode auto-removes a session on process exit (pty.exited → remove);
+      Forge marks status="exited" and RETAINS it until DELETE (so history/replay survive). Also: pty
+      lifecycle bus events (pty.created/updated/exited/deleted) are NOT yet published to the event
+      bus — wire when the agent engine needs them (plan 02). Confirm both are acceptable for now.
+- [ ] NOTED: for a login-capable shell (sh/bash/zsh/...) Forge appends `-l` to args exactly as
+      opencode does (pty/index.ts:191-193), even when an explicit `-c` command is given — matches
+      opencode, including the quirk that `-l` then lands after the `-c` script.

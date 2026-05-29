@@ -4,14 +4,16 @@ import (
 	"sync"
 
 	"github.com/rotemmiz/forge/internal/bus"
+	"github.com/rotemmiz/forge/internal/pty"
 )
 
-// Context is the per-directory in-memory state for one project instance. For
-// now it holds the instance event bus; config/PTY/LSP attach here in later
+// Context is the per-directory in-memory state for one project instance. It
+// holds the instance event bus and PTY manager; config/LSP attach here in later
 // milestones (plan 01 §7).
 type Context struct {
 	Directory string
 	Bus       *bus.Bus
+	Pty       *pty.Manager
 }
 
 // Manager is the directory→instance cache. Instances are created on first use
@@ -42,6 +44,9 @@ func (m *Manager) Get(directory string) *Context {
 	c := &Context{
 		Directory: directory,
 		Bus:       bus.NewInstanceBus(directory, m.global),
+		// configShell is wired from config in a later milestone; PreferredShell
+		// falls back to $SHELL / a platform default until then.
+		Pty: pty.NewManager(directory, ""),
 	}
 	m.instances[directory] = c
 	return c

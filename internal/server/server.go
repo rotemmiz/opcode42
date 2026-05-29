@@ -73,6 +73,8 @@ func New(opts Options) (http.Handler, error) {
 	}
 	if opts.Instances != nil {
 		reg(http.MethodGet, "/event", instanceEventHandler(opts.Instances))
+		registerPtyRoutes(reg, opts.Instances)
+		reg(http.MethodGet, "/pty/{ptyID}/connect", ptyConnectHandler(opts.Instances))
 	}
 	if opts.Global != nil {
 		reg(http.MethodGet, "/global/event", globalEventHandler(opts.Global))

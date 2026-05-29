@@ -18,6 +18,15 @@ const (
 
 var basicRe = regexp.MustCompile(`(?i)^Basic\s+(.+)$`)
 
+// ptyConnectPathRe matches the PTY connect WebSocket path (pty-ticket.ts:5).
+var ptyConnectPathRe = regexp.MustCompile(`^/pty/[^/]+/connect$`)
+
+// hasPtyConnectTicket reports whether r is a PTY connect request carrying a
+// ?ticket=, in which case Basic auth is skipped (pty-ticket.ts:16-18).
+func hasPtyConnectTicket(r *http.Request) bool {
+	return ptyConnectPathRe.MatchString(r.URL.Path) && r.URL.Query().Get("ticket") != ""
+}
+
 // Config holds the resolved auth settings for the daemon.
 type Config struct {
 	Username string
@@ -46,6 +55,14 @@ func (c Config) Middleware(next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A PTY connect WebSocket carrying a ?ticket= bypasses Basic auth; the
+		// connect handler validates the single-use ticket instead
+		// (server/shared/pty-ticket.ts:5-18). This lets browsers, which cannot
+		// set Authorization on a WebSocket, attach with a minted ticket.
+		if hasPtyConnectTicket(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		user, pass := credentialFromRequest(r)
 		if user != c.Username || pass != c.Password {
 			w.Header().Set("WWW-Authenticate", wwwAuthenticate)
