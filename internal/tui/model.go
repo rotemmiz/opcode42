@@ -114,18 +114,18 @@ func New(cfg Config) Model {
 	ta.BlurredStyle.CursorLine = lipgloss.NewStyle()
 	ta.Focus()
 	m := Model{
-		cfg:       cfg,
-		styles:    theme.DefaultStyles(),
-		screen:    ScreenSplash,
-		conn:      Connecting,
-		status:    "connecting to " + cfg.URL,
-		ctx:       ctx,
-		cancel:    cancel,
-		store:     newStore(),
-		input:     ta,
-		model:     promptModel{Provider: cfg.Provider, Model: cfg.Model},
-		themeName: theme.Palettes()[0].Name, // forge-dark
+		cfg:    cfg,
+		screen: ScreenSplash,
+		conn:   Connecting,
+		status: "connecting to " + cfg.URL,
+		ctx:    ctx,
+		cancel: cancel,
+		store:  newStore(),
+		input:  ta,
+		model:  promptModel{Provider: cfg.Provider, Model: cfg.Model},
 	}
+	def := theme.Palettes()[0] // forge-dark; keeps themeName + styles + composer in sync
+	m = m.applyTheme(def.Name, def.Palette)
 	c, err := forgeclient.New(cfg.URL, forgeclient.Options{
 		Directory: cfg.Directory, Username: cfg.Username, Password: cfg.Password,
 	})
@@ -134,6 +134,20 @@ func New(cfg Config) Model {
 		return m
 	}
 	m.client = c
+	return m
+}
+
+// applyTheme switches the active palette: the shared styles AND the textarea's
+// own text/placeholder colors (lipgloss leaves those terminal-default, which is
+// unreadable after a light/mono switch). View() paints the palette background
+// behind everything so foreground-only renderers stay legible on any terminal.
+func (m Model) applyTheme(name string, p theme.Palette) Model {
+	m.themeName = name
+	m.styles = theme.New(p)
+	txt := lipgloss.NewStyle().Foreground(p.Fg)
+	ph := lipgloss.NewStyle().Foreground(p.FgGhost)
+	m.input.FocusedStyle.Text, m.input.FocusedStyle.Placeholder = txt, ph
+	m.input.BlurredStyle.Text, m.input.BlurredStyle.Placeholder = txt, ph
 	return m
 }
 
@@ -275,6 +289,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.agents = msg.items
+		if m.agent != "" { // drop a selection the (re)connected daemon no longer offers
+			found := false
+			for _, a := range m.agents {
+				if a.name == m.agent {
+					found = true
+					break
+				}
+			}
+			if !found {
+				m.agent = ""
+			}
+		}
 		if m.modal == modalAgents { // re-highlight the active agent now the list is in
 			m.modalSel = m.agentSelIndex()
 		}
@@ -463,17 +489,23 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	return m, promptCmd(m.ctx, m.client, m.cfg.SessionID, text, m.model, m.agent)
 }
 
-// View renders the active screen (or the command overlay when one is open).
+// View renders the active screen (or the command overlay when one is open),
+// painted on the theme's background so foreground-only renderers stay legible
+// regardless of the terminal's native background.
 func (m Model) View() string {
-	if m.modal != modalNone {
-		return m.modalView()
-	}
-	switch m.screen {
-	case ScreenSession:
-		return m.viewSession()
+	var body string
+	switch {
+	case m.modal != modalNone:
+		body = m.modalView()
+	case m.screen == ScreenSession:
+		body = m.viewSession()
 	default:
-		return m.viewSplash()
+		body = m.viewSplash()
 	}
+	if m.width == 0 || m.height == 0 {
+		return body
+	}
+	return lipgloss.NewStyle().Background(m.styles.P.Bg).Width(m.width).Height(m.height).Render(body)
 }
 
 // viewSplash renders the wordmark, the composer, and the connection status.

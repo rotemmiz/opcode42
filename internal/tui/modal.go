@@ -208,8 +208,7 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 	case modalThemes:
 		m.modal = modalNone
 		if ps := theme.Palettes(); m.modalSel < len(ps) {
-			m.themeName = ps[m.modalSel].Name
-			m.styles = theme.New(ps[m.modalSel].Palette)
+			m = m.applyTheme(ps[m.modalSel].Name, ps[m.modalSel].Palette)
 			m.status = "theme · " + m.themeName
 		}
 	}

@@ -29,6 +29,37 @@ func TestThemeModal_SelectChangesStyles(t *testing.T) {
 	}
 }
 
+func TestThemeSwitch_RestylesComposer(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	darkText := m.input.FocusedStyle.Text.GetForeground()
+	if darkText == nil {
+		t.Fatal("composer text color should be set from the theme at startup, not terminal-default")
+	}
+
+	m.modal, m.modalSel = modalThemes, 1 // forge-light
+	next, _ := m.modalSelect()
+	nm := next.(Model)
+	if nm.input.FocusedStyle.Text.GetForeground() == darkText {
+		t.Fatal("composer text color should follow the theme switch")
+	}
+}
+
+func TestAgentsLoaded_DropsStaleSelection(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m.agent = "plan"
+	// reconnect to a daemon that no longer offers "plan"
+	m, _ = step(t, m, agentsLoadedMsg{items: []agentItem{{name: "build", mode: "primary"}}})
+	if m.agent != "" {
+		t.Fatalf("a no-longer-present agent should be cleared, got %q", m.agent)
+	}
+	// a still-present selection survives
+	m.agent = "build"
+	m, _ = step(t, m, agentsLoadedMsg{items: []agentItem{{name: "build"}}})
+	if m.agent != "build" {
+		t.Fatal("a still-present agent should be kept")
+	}
+}
+
 func TestAgentModal_SelectSetsAgent(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.agents = []agentItem{{name: "build", mode: "primary"}, {name: "plan", mode: "primary"}}
