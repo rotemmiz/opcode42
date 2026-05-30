@@ -52,6 +52,56 @@ func Default() Palette {
 	}
 }
 
+// Light is a paper-on-charcoal inversion of the design palette for light
+// terminals — same semantic roles, readable contrast.
+func Light() Palette {
+	return Palette{
+		Bg: "#f5f6f7", BgPanel: "#eceef0", BgElev: "#e4e7ea", BgSel: "#d8dde2",
+		Border: "#c4cad0", BorderSoft: "#d8dde2",
+		Fg: "#1c2126", FgDim: "#5a626b", FgFaint: "#8b929a", FgGhost: "#b4bbc2",
+		Blue: "#2f6fb0", Green: "#3f8c2f", Red: "#c0392b", Amber: "#b06f1a",
+		Purple: "#7a4fb0", Cyan: "#2f8a99", Yellow: "#9a8420",
+		SelBg: "#b06f1a", SelFg: "#fdf6ec",
+	}
+}
+
+// Mono is a grayscale theme: neutral semantics, errors kept bright so they read.
+func Mono() Palette {
+	return Palette{
+		Bg: "#0e0e0e", BgPanel: "#161616", BgElev: "#1c1c1c", BgSel: "#242424",
+		Border: "#303030", BorderSoft: "#262626",
+		Fg: "#e4e4e4", FgDim: "#9a9a9a", FgFaint: "#5e5e5e", FgGhost: "#3a3a3a",
+		Blue: "#cfcfcf", Green: "#bdbdbd", Red: "#ededed", Amber: "#d0d0d0",
+		Purple: "#c4c4c4", Cyan: "#cfcfcf", Yellow: "#bdbdbd",
+		SelBg: "#d0d0d0", SelFg: "#0e0e0e",
+	}
+}
+
+// Named pairs a theme name with its palette (the theme picker's list).
+type Named struct {
+	Name    string
+	Palette Palette
+}
+
+// Palettes is the ordered theme registry; the first is the default.
+func Palettes() []Named {
+	return []Named{
+		{"forge-dark", Default()},
+		{"forge-light", Light()},
+		{"monochrome", Mono()},
+	}
+}
+
+// ByName returns a palette by theme name (Default + false when unknown).
+func ByName(name string) (Palette, bool) {
+	for _, n := range Palettes() {
+		if n.Name == name {
+			return n.Palette, true
+		}
+	}
+	return Default(), false
+}
+
 // Styles are the canonical reusable Lipgloss styles the design defines. Screen
 // renderers compose these rather than re-deriving colors.
 type Styles struct {

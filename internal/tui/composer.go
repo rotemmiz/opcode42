@@ -40,6 +40,7 @@ type (
 // promptBody is the POST /session/:id/message request body.
 type promptBody struct {
 	Model promptModelWire `json:"model"`
+	Agent string          `json:"agent,omitempty"`
 	Parts []partInput     `json:"parts"`
 }
 
@@ -68,11 +69,12 @@ func loadConfigCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
 	}
 }
 
-// promptCmd submits a prompt to an existing session.
-func promptCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID, text string, pm promptModel) tea.Cmd {
+// promptCmd submits a prompt to an existing session (under the given agent).
+func promptCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID, text string, pm promptModel, agent string) tea.Cmd {
 	return func() tea.Msg {
 		body := promptBody{
 			Model: promptModelWire{ProviderID: pm.Provider, ModelID: pm.Model},
+			Agent: agent,
 			Parts: []partInput{{Type: "text", Text: text}},
 		}
 		err := c.PostJSON(ctx, "/session/"+sessionID+"/message", body, nil)

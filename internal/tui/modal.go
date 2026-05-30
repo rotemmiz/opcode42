@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/rotemmiz/forge/internal/tui/theme"
 	forgeclient "github.com/rotemmiz/forge/sdk/go"
 )
 
@@ -17,10 +18,37 @@ const (
 	modalPalette
 	modalSessions
 	modalModels
+	modalAgents
+	modalThemes
 )
 
-// paletteItems are the command palette actions (dispatch by index in modalSelect).
-var paletteItems = []string{"New session", "Switch session", "Switch model", "Refresh sessions"}
+// paletteAction identifies a command-palette entry (dispatched by id, not index,
+// so the list order can change without remapping).
+type paletteAction int
+
+const (
+	paNewSession paletteAction = iota
+	paSwitchSession
+	paSwitchModel
+	paSwitchAgent
+	paSwitchTheme
+	paRefresh
+)
+
+type paletteCmd struct {
+	label  string
+	action paletteAction
+}
+
+// paletteItems are the command-palette entries, in display order.
+var paletteItems = []paletteCmd{
+	{"New session", paNewSession},
+	{"Switch session", paSwitchSession},
+	{"Switch model", paSwitchModel},
+	{"Switch agent", paSwitchAgent},
+	{"Switch theme", paSwitchTheme},
+	{"Refresh sessions", paRefresh},
+}
 
 // Modal action results.
 type (
@@ -64,7 +92,10 @@ func (m Model) orderedSessions() []Session {
 func (m Model) modalItems() (title string, rows []string, footer string) {
 	switch m.modal {
 	case modalPalette:
-		return "Commands", paletteItems, "↑↓ move · enter select · esc close"
+		for _, it := range paletteItems {
+			rows = append(rows, it.label)
+		}
+		return "Commands", rows, "↑↓ move · enter select · esc close"
 	case modalSessions:
 		for _, s := range m.orderedSessions() {
 			rows = append(rows, sessionRowLabel(s))
@@ -85,6 +116,31 @@ func (m Model) modalItems() (title string, rows []string, footer string) {
 			rows = []string{"(no connected providers — set a provider API key)"}
 		}
 		return "Models", rows, "enter select · esc close"
+	case modalAgents:
+		for _, a := range m.agents {
+			mark := "  "
+			if a.name == m.agent {
+				mark = "● " // the active agent
+			}
+			row := mark + a.name
+			if a.mode != "" {
+				row += "  " + a.mode
+			}
+			rows = append(rows, row)
+		}
+		if len(rows) == 0 {
+			rows = []string{"(no agents)"}
+		}
+		return "Agents", rows, "enter select · esc close"
+	case modalThemes:
+		for _, n := range theme.Palettes() {
+			mark := "  "
+			if n.Name == m.themeName {
+				mark = "● " // the active theme
+			}
+			rows = append(rows, mark+n.Name)
+		}
+		return "Themes", rows, "enter select · esc close"
 	default:
 		return "", nil, ""
 	}
@@ -108,16 +164,25 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 	switch m.modal {
 	case modalPalette:
 		m.modal = modalNone
-		switch m.modalSel {
-		case 0: // New session
+		if m.modalSel >= len(paletteItems) {
+			return m, nil
+		}
+		switch paletteItems[m.modalSel].action {
+		case paNewSession:
 			return m, newSessionCmd(m.ctx, m.client)
-		case 1: // Switch session
+		case paSwitchSession:
 			m.modal, m.modalSel = modalSessions, 0
 			return m, loadSessionsCmd(m.ctx, m.client)
-		case 2: // Switch model — open pre-highlighted on the active model, refresh
+		case paSwitchModel: // open pre-highlighted on the active model, refresh
 			m.modal, m.modalSel = modalModels, m.modelSelIndex()
 			return m, loadProvidersCmd(m.ctx, m.client)
-		case 3: // Refresh sessions
+		case paSwitchAgent:
+			m.modal, m.modalSel = modalAgents, m.agentSelIndex()
+			return m, loadAgentsCmd(m.ctx, m.client)
+		case paSwitchTheme:
+			m.modal, m.modalSel = modalThemes, m.themeSelIndex()
+			return m, nil
+		case paRefresh:
 			return m, loadSessionsCmd(m.ctx, m.client)
 		}
 	case modalSessions:
@@ -133,6 +198,18 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 		if m.modalSel < len(m.choices) {
 			m.model = promptModel(m.choices[m.modalSel])
 			m.status = "model · " + m.model.label()
+		}
+	case modalAgents:
+		m.modal = modalNone
+		if m.modalSel < len(m.agents) {
+			m.agent = m.agents[m.modalSel].name
+			m.status = "agent · " + m.agent
+		}
+	case modalThemes:
+		m.modal = modalNone
+		if ps := theme.Palettes(); m.modalSel < len(ps) {
+			m = m.applyTheme(ps[m.modalSel].Name, ps[m.modalSel].Palette)
+			m.status = "theme · " + m.themeName
 		}
 	}
 	return m, nil

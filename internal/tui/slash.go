@@ -33,6 +33,8 @@ var builtinCommands = []slashItem{
 	{name: "/new", desc: "Start a new session", kind: slashBuiltin},
 	{name: "/sessions", desc: "Switch session", kind: slashBuiltin},
 	{name: "/models", desc: "Switch model", kind: slashBuiltin},
+	{name: "/agents", desc: "Switch agent", kind: slashBuiltin},
+	{name: "/themes", desc: "Switch theme", kind: slashBuiltin},
 }
 
 // autocomplete is the composer's slash/command popup state (value type — copied
@@ -210,6 +212,12 @@ func (m Model) acceptSlash() (tea.Model, tea.Cmd) {
 		case "/models":
 			m.modal, m.modalSel = modalModels, m.modelSelIndex()
 			return m, loadProvidersCmd(m.ctx, m.client)
+		case "/agents":
+			m.modal, m.modalSel = modalAgents, m.agentSelIndex()
+			return m, loadAgentsCmd(m.ctx, m.client)
+		case "/themes":
+			m.modal, m.modalSel = modalThemes, m.themeSelIndex()
+			return m, nil
 		}
 		return m, nil
 	}
