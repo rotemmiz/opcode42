@@ -355,27 +355,45 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 const maxComposerRows = 8
 
 // resizeComposer sets the composer's width to the content column and grows its
-// height to fit the current text (clamped to [1, maxComposerRows]).
-//
-// Height tracks LineCount, which is logical (newline-separated) lines, not
-// wrapped visual rows — so a single very long line stays one row and scrolls
-// inside the box rather than growing. Explicit newlines (the common multi-line
-// case) grow it as expected. True wrapped-height auto-grow is a follow-up.
+// height to fit the current text (clamped to [1, maxComposerRows]). Height is
+// the number of WRAPPED visual rows, so a long line with no newline grows the
+// box just like explicit newlines do.
 func (m Model) resizeComposer() Model {
-	w := m.barWidth() - 1 // inside the accent bar: barWidth less its left padding
-	if w < 1 {
-		w = 1
+	cols := m.barWidth() - 1 // inside the accent bar: barWidth less its left padding
+	if cols < 1 {
+		cols = 1
 	}
-	m.input.SetWidth(w)
-	h := m.input.LineCount()
-	if h < 1 {
-		h = 1
-	}
+	m.input.SetWidth(cols)
+	h := visualRows(m.input.Value(), cols)
 	if h > maxComposerRows {
 		h = maxComposerRows
 	}
 	m.input.SetHeight(h)
 	return m
+}
+
+// visualRows estimates how many rows text occupies once soft-wrapped at cols
+// columns: the sum over logical (newline-separated) lines of ceil(width/cols),
+// each line at least one row. Display width (not byte length) so wide runes
+// count correctly. Char-wrap vs the textarea's word-wrap means this only ever
+// UNDERestimates (by a row for word boundaries, exact-fit lines, or tabs) —
+// never over — so the box is at worst one row short, never padded with blanks.
+func visualRows(text string, cols int) int {
+	if cols < 1 {
+		cols = 1
+	}
+	rows := 0
+	for _, line := range strings.Split(text, "\n") {
+		n := 1
+		if w := lipgloss.Width(line); w > cols {
+			n = (w + cols - 1) / cols
+		}
+		rows += n
+	}
+	if rows < 1 {
+		rows = 1
+	}
+	return rows
 }
 
 // submit sends the composer's text: it creates a session first if none is open,

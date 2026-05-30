@@ -51,6 +51,38 @@ func TestComposer_CtrlJNewline_EnterSubmits(t *testing.T) {
 	}
 }
 
+func TestComposer_GrowsOnWrap(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 40, Height: 24}) // composer ~38 cols
+	for _, r := range strings.Repeat("x", 120) {                // one long line, no newline
+		m, _ = step(t, m, key(string(r)))
+	}
+	if h := m.input.Height(); h < 3 {
+		t.Fatalf("a long wrapped line (no newline) should grow the box to >=3 rows, got %d", h)
+	}
+}
+
+// visualRows is the wrap-height estimator the composer uses; pin its arithmetic.
+func TestVisualRows(t *testing.T) {
+	cases := []struct {
+		text string
+		cols int
+		want int
+	}{
+		{"", 10, 1},
+		{"abc", 10, 1},
+		{"a\nb\nc", 10, 3},
+		{strings.Repeat("x", 25), 10, 3}, // ceil(25/10)
+		{"x\n" + strings.Repeat("y", 20), 10, 3},
+		{"hello\n", 10, 2}, // trailing newline = an empty next row
+	}
+	for _, c := range cases {
+		if got := visualRows(c.text, c.cols); got != c.want {
+			t.Errorf("visualRows(%q, %d) = %d, want %d", c.text, c.cols, got, c.want)
+		}
+	}
+}
+
 func TestComposer_AutoGrowClampsAtMax(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 40})
