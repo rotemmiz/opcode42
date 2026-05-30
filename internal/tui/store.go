@@ -72,11 +72,21 @@ type Part struct {
 	State     json.RawMessage `json:"state,omitempty"`
 }
 
+// Permission is a pending permission request (permission.asked) awaiting a reply.
+type Permission struct {
+	ID         string          `json:"id"`
+	SessionID  string          `json:"sessionID"`
+	Permission string          `json:"permission"` // the action (e.g. "bash", "edit")
+	Metadata   json.RawMessage `json:"metadata"`   // tool-specific detail (command, path, …)
+	Tool       json.RawMessage `json:"tool"`
+}
+
 // store holds the mirrored, sorted view-state.
 type store struct {
-	sessions []Session            // sorted by id
-	messages map[string][]Message // sessionID -> sorted by id
-	parts    map[string][]Part    // messageID -> sorted by id
+	sessions    []Session            // sorted by id
+	messages    map[string][]Message // sessionID -> sorted by id
+	parts       map[string][]Part    // messageID -> sorted by id
+	permissions []Permission         // pending permission requests (FIFO)
 }
 
 func newStore() store {
@@ -150,6 +160,18 @@ func (s store) Reduce(ev forgeclient.SSEEvent) store {
 		}
 		if decode(ev.Properties, &p) {
 			s.parts[p.MessageID] = removeByID(s.parts[p.MessageID], p.PartID, func(pt Part) string { return pt.ID })
+		}
+	case "permission.asked":
+		var p Permission
+		if decode(ev.Properties, &p) && p.ID != "" {
+			s.permissions = upsertByID(s.permissions, p, func(q Permission) string { return q.ID })
+		}
+	case "permission.replied":
+		var p struct {
+			RequestID string `json:"requestID"`
+		}
+		if decode(ev.Properties, &p) {
+			s.permissions = removeByID(s.permissions, p.RequestID, func(q Permission) string { return q.ID })
 		}
 	}
 	return s

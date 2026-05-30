@@ -80,8 +80,10 @@ type Model struct {
 	model promptModel
 
 	// Command overlay.
-	modal    modalKind
-	modalSel int
+	modal        modalKind
+	modalSel     int
+	permSel      int  // selected choice in the permission overlay
+	permReplying bool // a permission reply is in flight (overlay stays up until it resolves)
 
 	// choices is the connected provider/model catalog (model switcher).
 	choices []modelChoice
@@ -189,6 +191,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cancel() // cancel any in-flight health/open cmd + SDK work
 			}
 			return m, tea.Quit
+		}
+		// A pending permission blocks everything until answered.
+		if m.pendingPermission() != nil {
+			return m.handlePermissionKey(msg)
 		}
 		// A modal captures navigation/selection keys.
 		if m.modal != modalNone {
@@ -342,6 +348,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.status = "reverted"
 		}
+		return m, nil
+
+	case permissionRepliedMsg:
+		m.permReplying = false
+		if msg.err != nil {
+			// Keep the request so the user can retry — the daemon is still blocked.
+			m.status = "permission reply failed (try again): " + msg.err.Error()
+			return m, nil
+		}
+		m.permSel = 0
+		m.store.permissions = removeByID(m.store.permissions, msg.id, func(q Permission) string { return q.ID })
 		return m, nil
 
 	case filesFoundMsg:
@@ -553,6 +570,8 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	var body string
 	switch {
+	case m.pendingPermission() != nil:
+		body = m.permissionView()
 	case m.modal != modalNone:
 		body = m.modalView()
 	case m.screen == ScreenSession:
