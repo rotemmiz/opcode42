@@ -1,6 +1,7 @@
 package forgeclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -130,6 +131,43 @@ func (c *ForgeClient) GetJSON(ctx context.Context, path string, dst any) error {
 		return fmt.Errorf("GET %s: status %d", path, resp.StatusCode)
 	}
 	return json.NewDecoder(resp.Body).Decode(dst)
+}
+
+// PostJSON performs an authed POST of a JSON body to a path and, if dst is
+// non-nil and the response carries a body, decodes the JSON response into it.
+// Empty/204 responses are tolerated.
+func (c *ForgeClient) PostJSON(ctx context.Context, path string, body, dst any) error {
+	var rdr io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		rdr = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, rdr)
+	if err != nil {
+		return err
+	}
+	_ = c.injectHeaders(ctx, req)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.rest.Do(req)
+	if err != nil {
+		return fmt.Errorf("POST %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("POST %s: status %d", path, resp.StatusCode)
+	}
+	if dst == nil || resp.StatusCode == http.StatusNoContent {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return nil
+	}
+	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil && err != io.EOF {
+		return err
+	}
+	return nil
 }
 
 // BaseURL returns the daemon base URL.

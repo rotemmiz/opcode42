@@ -22,11 +22,14 @@ func main() {
 	session := flag.String("session", "", "session id to open on start")
 	username := flag.String("username", "", "Basic auth username")
 	password := flag.String("password", "", "Basic auth password")
+	provider := flag.String("provider", "", "prompt model provider id (else resolved from /config)")
+	modelID := flag.String("model", "", "prompt model id")
 	flag.Parse()
 
 	model := tui.New(tui.Config{
 		URL: *url, Directory: *dir, SessionID: *session,
 		Username: *username, Password: *password,
+		Provider: *provider, Model: *modelID,
 	})
 
 	if _, err := tea.NewProgram(model, tea.WithAltScreen()).Run(); err != nil {

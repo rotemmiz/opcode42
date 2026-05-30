@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -155,5 +156,36 @@ func TestGetJSON_DecodesAndSendsHeaders(t *testing.T) {
 	}
 	if gotAuth == "" || gotDir != "%2Fd" || gotAccept != "application/json" {
 		t.Fatalf("headers wrong: auth=%q dir=%q accept=%q", gotAuth, gotDir, gotAccept)
+	}
+}
+
+func TestPostJSON_SendsBodyDecodesResponse(t *testing.T) {
+	var gotBody, gotCT string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody, gotCT = string(b), r.Header.Get("Content-Type")
+		_, _ = io.WriteString(w, `{"id":"ses_new"}`)
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, Options{HTTPClient: srv.Client()})
+	var out struct {
+		ID string `json:"id"`
+	}
+	if err := c.PostJSON(context.Background(), "/session", map[string]any{"x": 1}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.ID != "ses_new" || gotCT != "application/json" || !strings.Contains(gotBody, `"x":1`) {
+		t.Fatalf("post wrong: out=%+v ct=%q body=%q", out, gotCT, gotBody)
+	}
+}
+
+func TestPostJSON_Tolerates204(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, Options{HTTPClient: srv.Client()})
+	if err := c.PostJSON(context.Background(), "/x", map[string]any{}, nil); err != nil {
+		t.Fatalf("204 should be tolerated: %v", err)
 	}
 }

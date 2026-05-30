@@ -39,3 +39,4 @@ The one exception is the build tool, which is pinned now (needed in S3):
 |---------|--------|----------|-----------|
 | TUI framework | `github.com/charmbracelet/bubbletea` | plan 08 | Elm-style model/update/view; the stack opencode's TUI uses. |
 | TUI styling | `github.com/charmbracelet/lipgloss` | plan 08 U1 | Truecolor styles with graceful 256/16-color degrade; renders the design tokens. |
+| TUI widgets | `github.com/charmbracelet/bubbles` | plan 08 U6 | textinput (composer) + future viewport/list; the charm widget set. |

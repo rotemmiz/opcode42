@@ -125,17 +125,35 @@ func (m Model) contentWidth() int {
 
 // frame trims body to the tail that fits the viewport (auto-scroll to newest)
 // and pins the status line at the bottom.
+// composerView renders the prompt input with the design's blue left accent bar.
+func (m Model) composerView() string {
+	bar := lipgloss.NewStyle().
+		Border(lipgloss.ThickBorder(), false, false, false, true).
+		BorderForeground(m.styles.P.Blue).
+		PaddingLeft(1).
+		Width(m.contentWidth())
+	return bar.Render(m.input.View())
+}
+
+// statusLine is the bottom status: connection state plus the active model.
+func (m Model) statusLine() string {
+	return m.status + " · " + m.model.label()
+}
+
 func (m Model) frame(body string) string {
-	status := m.styles.Faint.Render(m.status)
+	footer := m.composerView() + "\n" + m.styles.Faint.Render(m.statusLine())
 	if m.height <= 0 {
-		return body + "\n" + status
+		return body + "\n" + footer
 	}
-	avail := m.height - 1
+	avail := m.height - lipgloss.Height(footer)
+	if avail < 1 {
+		avail = 1
+	}
 	lines := strings.Split(body, "\n")
 	if len(lines) > avail {
 		lines = lines[len(lines)-avail:]
 	}
-	return strings.Join(lines, "\n") + "\n" + status
+	return strings.Join(lines, "\n") + "\n" + footer
 }
 
 func firstLine(s string) string {
