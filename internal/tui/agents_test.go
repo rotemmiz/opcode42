@@ -102,7 +102,7 @@ func TestPalette_SwitchAgentOpensAgentsModal(t *testing.T) {
 func TestSlash_AgentsAndThemesBuiltins(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.input.SetValue("/agents")
-	m = m.refreshAutocomplete()
+	m, _ = m.refreshAutocomplete()
 	next, cmd := m.acceptSlash()
 	if next.(Model).modal != modalAgents || cmd == nil {
 		t.Fatal("/agents should open the agents modal + load")
@@ -110,7 +110,7 @@ func TestSlash_AgentsAndThemesBuiltins(t *testing.T) {
 
 	m2 := New(Config{URL: "http://x"})
 	m2.input.SetValue("/themes")
-	m2 = m2.refreshAutocomplete()
+	m2, _ = m2.refreshAutocomplete()
 	if next2, _ := m2.acceptSlash(); next2.(Model).modal != modalThemes {
 		t.Fatal("/themes should open the themes modal")
 	}

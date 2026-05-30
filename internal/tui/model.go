@@ -96,6 +96,7 @@ type Model struct {
 	themeName     string      // active theme name (theme switcher)
 	sidebarHidden bool        // right sidebar visibility (toggle: ctrl+x b)
 	streamWidth   int         // transient: stream column width when the sidebar is shown
+	leader        bool        // ctrl+x leader pressed, awaiting the chord key
 }
 
 // New builds the initial Model, constructing the SDK client.
@@ -193,6 +194,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.modal != modalNone {
 			return m.handleModalKey(msg)
 		}
+		// ctrl+x leader: the next key is a chord (design app.jsx:227-237).
+		if m.leader {
+			m.leader = false
+			return m.handleLeaderKey(msg)
+		}
+		if msg.String() == "ctrl+x" {
+			m.leader = true
+			m.status = "ctrl+x — l sessions · n new · m model · a agent · g timeline · s status · b sidebar"
+			return m, nil
+		}
 		// The slash popup captures nav/accept/dismiss keys; other keys fall
 		// through so typing keeps filtering it.
 		if m.ac.open {
@@ -208,11 +219,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.submit()
 		}
 		// Everything else goes to the composer (shift+enter / ctrl+j add a newline).
-		var cmd tea.Cmd
+		var cmd, acCmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
-		m = m.resizeComposer()      // auto-grow to fit the new content
-		m = m.refreshAutocomplete() // open/refresh the "/" popup
-		return m, cmd
+		m = m.resizeComposer()             // auto-grow to fit the new content
+		m, acCmd = m.refreshAutocomplete() // open/refresh the "/" or "@" popup
+		return m, tea.Batch(cmd, acCmd)
 
 	case sessionOpenedMsg:
 		if msg.err != nil {
@@ -330,6 +341,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "revert failed: " + msg.err.Error()
 		} else {
 			m.status = "reverted"
+		}
+		return m, nil
+
+	case filesFoundMsg:
+		// Apply only if it still matches the active mention query (drop stale
+		// results); open only when there's something to show.
+		if q, ok := mentionQuery(m.input.Value()); ok && q == msg.query {
+			m.ac = autocomplete{open: len(msg.files) > 0, mode: acMention, files: msg.files, sel: clampSel(m.ac.sel, len(msg.files))}
 		}
 		return m, nil
 
@@ -476,6 +495,37 @@ func visualRows(text string, cols int) int {
 		rows = 1
 	}
 	return rows
+}
+
+// handleLeaderKey dispatches a ctrl+x chord to the matching modal/action (design
+// app.jsx:231-232). An unmapped key is a no-op (the leader is already cleared).
+func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "l":
+		m.modal, m.modalSel = modalSessions, 0
+		return m, loadSessionsCmd(m.ctx, m.client)
+	case "n":
+		return m, newSessionCmd(m.ctx, m.client)
+	case "m":
+		m.modal, m.modalSel = modalModels, m.modelSelIndex()
+		return m, loadProvidersCmd(m.ctx, m.client)
+	case "a":
+		m.modal, m.modalSel = modalAgents, m.agentSelIndex()
+		return m, loadAgentsCmd(m.ctx, m.client)
+	case "g":
+		m.modal, m.modalSel = modalTimeline, 0
+		return m, nil
+	case "s":
+		m.modal, m.modalSel = modalStatus, 0
+		return m, nil
+	case "p":
+		m.modal, m.modalSel = modalPalette, 0
+		return m, nil
+	case "b":
+		m.sidebarHidden = !m.sidebarHidden
+		return m.resizeComposer(), nil // width changed → re-fit the composer
+	}
+	return m, nil
 }
 
 // submit sends the composer's text: it creates a session first if none is open,

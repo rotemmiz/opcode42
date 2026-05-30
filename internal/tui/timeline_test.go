@@ -63,14 +63,14 @@ func TestStatusModal_EnterCloses(t *testing.T) {
 func TestSlash_TimelineAndStatusBuiltins(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.input.SetValue("/timeline")
-	m = m.refreshAutocomplete()
+	m, _ = m.refreshAutocomplete()
 	if n, _ := m.acceptSlash(); n.(Model).modal != modalTimeline {
 		t.Fatal("/timeline should open the timeline modal")
 	}
 
 	m2 := New(Config{URL: "http://x"})
 	m2.input.SetValue("/status")
-	m2 = m2.refreshAutocomplete()
+	m2, _ = m2.refreshAutocomplete()
 	if n, _ := m2.acceptSlash(); n.(Model).modal != modalStatus {
 		t.Fatal("/status should open the status modal")
 	}

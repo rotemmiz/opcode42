@@ -41,26 +41,26 @@ func TestRefreshAutocomplete_OpenFilterClose(t *testing.T) {
 	m.commands = []slashItem{{name: "/init", desc: "setup", kind: slashDaemon}}
 
 	m.input.SetValue("/")
-	m = m.refreshAutocomplete()
+	m, _ = m.refreshAutocomplete()
 	if !m.ac.open || len(m.ac.items) == 0 {
 		t.Fatal("typing / should open the popup with all commands")
 	}
 
 	m.input.SetValue("/mod")
-	m = m.refreshAutocomplete()
+	m, _ = m.refreshAutocomplete()
 	if !m.ac.open || m.ac.items[0].name != "/models" {
 		t.Fatalf("/mod should filter to /models, got %+v", m.ac.items)
 	}
 
 	m.input.SetValue("hello")
-	m = m.refreshAutocomplete()
+	m, _ = m.refreshAutocomplete()
 	if m.ac.open {
 		t.Fatal("non-slash text should close the popup")
 	}
 
 	// Arguments after the command word keep the popup on that command.
 	m.input.SetValue("/init now")
-	m = m.refreshAutocomplete()
+	m, _ = m.refreshAutocomplete()
 	if !m.ac.open || m.ac.items[0].name != "/init" {
 		t.Fatalf("/init now should still match /init, got %+v", m.ac.items)
 	}
@@ -93,7 +93,7 @@ func TestSlash_EnterRunsBuiltinModels(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.input.SetValue("/models")
-	m = m.refreshAutocomplete()
+	m, _ = m.refreshAutocomplete()
 	next, cmd := step(t, m, key("enter"))
 	if next.modal != modalModels || cmd == nil {
 		t.Fatalf("/models enter should open the model switcher, modal=%v cmd=%v", next.modal, cmd != nil)
@@ -108,7 +108,7 @@ func TestSlash_EnterRunsDaemonCommand(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.commands = []slashItem{{name: "/review", kind: slashDaemon}}
 	m.input.SetValue("/review pr")
-	m = m.refreshAutocomplete()
+	m, _ = m.refreshAutocomplete()
 	next, cmd := m.acceptSlash()
 	if cmd == nil {
 		t.Fatal("accepting a daemon command with a session should dispatch the run")
@@ -121,7 +121,7 @@ func TestSlash_EnterRunsDaemonCommand(t *testing.T) {
 	m2 := New(Config{URL: "http://x"})
 	m2.commands = []slashItem{{name: "/review", kind: slashDaemon}}
 	m2.input.SetValue("/review")
-	m2 = m2.refreshAutocomplete()
+	m2, _ = m2.refreshAutocomplete()
 	if _, cmd := m2.acceptSlash(); cmd == nil {
 		t.Fatal("a daemon command with no session should create one then run")
 	}
@@ -133,7 +133,7 @@ func TestAutocompleteView_EmptyWhenClosed(t *testing.T) {
 		t.Fatal("popup view should be empty when closed")
 	}
 	m.input.SetValue("/")
-	m = m.refreshAutocomplete()
+	m, _ = m.refreshAutocomplete()
 	if m.autocompleteView() == "" {
 		t.Fatal("popup view should render when open")
 	}

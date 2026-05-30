@@ -39,15 +39,36 @@ var builtinCommands = []slashItem{
 	{name: "/status", desc: "Connection status", kind: slashBuiltin},
 }
 
-// autocomplete is the composer's slash/command popup state (value type — copied
-// with the Model, no shared pointer to alias across Bubble Tea updates).
+// acMode is what the composer popup is completing.
+type acMode int
+
+const (
+	acSlash   acMode = iota // "/" commands (slash items)
+	acMention               // "@" file references (file paths)
+)
+
+// autocomplete is the composer's slash/@-mention popup state (value type —
+// copied with the Model, no shared pointer to alias across Bubble Tea updates).
 type autocomplete struct {
 	open  bool
-	items []slashItem
+	mode  acMode
+	items []slashItem // acSlash
+	files []string    // acMention
 	sel   int
 }
 
-const maxSlashRows = 8
+// count is the number of selectable rows in the active mode.
+func (a autocomplete) count() int {
+	if a.mode == acMention {
+		return len(a.files)
+	}
+	return len(a.items)
+}
+
+const (
+	maxSlashRows   = 8
+	maxMentionRows = 8
+)
 
 // commandsLoadedMsg carries the daemon command list (GET /command).
 type commandsLoadedMsg struct {
@@ -124,10 +145,13 @@ func slashArguments(text string) string {
 	return ""
 }
 
-// refreshAutocomplete recomputes the popup from the composer text: open with the
-// matching commands when the text is a single "/…" token, else closed.
-func (m Model) refreshAutocomplete() Model {
+// refreshAutocomplete recomputes the popup from the composer text: a single "/…"
+// token opens the (synchronous) slash list; a trailing "@token" opens the
+// (asynchronous) file picker by dispatching a search; otherwise it closes.
+func (m Model) refreshAutocomplete() (Model, tea.Cmd) {
 	v := m.input.Value()
+
+	// Slash: the whole value is one "/command" token.
 	if strings.HasPrefix(v, "/") && !strings.ContainsAny(v, "\n") {
 		q := v[1:]
 		if i := strings.IndexAny(q, " \t"); i >= 0 {
@@ -137,19 +161,32 @@ func (m Model) refreshAutocomplete() Model {
 			if len(items) > maxSlashRows {
 				items = items[:maxSlashRows]
 			}
-			sel := m.ac.sel
-			if sel >= len(items) {
-				sel = len(items) - 1
-			}
-			if sel < 0 {
-				sel = 0
-			}
-			m.ac = autocomplete{open: true, items: items, sel: sel}
-			return m
+			m.ac = autocomplete{open: true, mode: acSlash, items: items, sel: clampSel(m.ac.sel, len(items))}
+			return m, nil
 		}
 	}
+
+	// Mention: a trailing "@token" anywhere in the text → async file search. Stay
+	// open only while we have results to show (no invisible key-capturing popup);
+	// filesFoundMsg opens/closes it when the search returns.
+	if q, ok := mentionQuery(v); ok {
+		m.ac = autocomplete{open: m.ac.mode == acMention && len(m.ac.files) > 0, mode: acMention, files: m.ac.files, sel: clampSel(m.ac.sel, len(m.ac.files))}
+		return m, findFilesCmd(m.ctx, m.client, q)
+	}
+
 	m.ac = autocomplete{}
-	return m
+	return m, nil
+}
+
+// clampSel keeps a selection index within [0, n-1] (0 when empty).
+func clampSel(sel, n int) int {
+	if sel >= n {
+		sel = n - 1
+	}
+	if sel < 0 {
+		sel = 0
+	}
+	return sel
 }
 
 // handleAutocompleteKey consumes navigation/accept/dismiss keys while the popup
@@ -162,7 +199,7 @@ func (m Model) handleAutocompleteKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) 
 		}
 		return true, m, nil
 	case "down", "ctrl+n":
-		if m.ac.sel < len(m.ac.items)-1 {
+		if m.ac.sel < m.ac.count()-1 {
 			m.ac.sel++
 		}
 		return true, m, nil
@@ -170,8 +207,14 @@ func (m Model) handleAutocompleteKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) 
 		m.ac = autocomplete{}
 		return true, m, nil
 	case "tab":
+		if m.ac.mode == acMention {
+			return true, m.acceptMention(), nil
+		}
 		return true, m.completeSlash(), nil
 	case "enter":
+		if m.ac.mode == acMention {
+			return true, m.acceptMention(), nil
+		}
 		nm, cmd := m.acceptSlash()
 		return true, nm, cmd
 	}
@@ -238,20 +281,40 @@ func (m Model) acceptSlash() (tea.Model, tea.Cmd) {
 }
 
 // autocompleteView renders the popup as a left-aligned panel above the composer
-// (empty string when closed).
+// (empty string when closed/empty).
 func (m Model) autocompleteView() string {
-	if !m.ac.open || len(m.ac.items) == 0 {
+	if !m.ac.open {
 		return ""
 	}
 	s := m.styles
 	var lines []string
-	for i, it := range m.ac.items {
-		if i == m.ac.sel {
-			lines = append(lines, s.Selection.Render(" "+it.name)+"  "+s.Faint.Render(it.desc))
-		} else {
-			lines = append(lines, "  "+s.Dim.Render(it.name)+"  "+s.Faint.Render(it.desc))
+
+	switch m.ac.mode {
+	case acMention:
+		if len(m.ac.files) == 0 {
+			return "" // nothing matched (or still searching) — no panel
+		}
+		for i, f := range m.ac.files {
+			label := truncate(f, 52)
+			if i == m.ac.sel {
+				lines = append(lines, s.Selection.Render(" "+label))
+			} else {
+				lines = append(lines, "  "+s.Dim.Render(label))
+			}
+		}
+	default: // acSlash
+		if len(m.ac.items) == 0 {
+			return ""
+		}
+		for i, it := range m.ac.items {
+			if i == m.ac.sel {
+				lines = append(lines, s.Selection.Render(" "+it.name)+"  "+s.Faint.Render(it.desc))
+			} else {
+				lines = append(lines, "  "+s.Dim.Render(it.name)+"  "+s.Faint.Render(it.desc))
+			}
 		}
 	}
+
 	return lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(s.P.Border).
