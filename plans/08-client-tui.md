@@ -424,5 +424,13 @@ reality, and say so explicitly" rule.
 - **Phase 3 — interactive + board:** `U10` permission + question overlays (reply endpoints) ·
   `U11` tasks board dock (reads `tasks.md`/issues) · `U12` (stretch) PTY pane · `U13` conformance
   parity: identical scenario vs opencode and Forge.
+  - **Status (2026-05-31): Phase 3 done.** `U10` permission overlay (#24) + question overlay (#25);
+    `U11` tasks dock (#26); `U12` — the WS-PTY *transport* (SDK client, #27) is built + live-smoked,
+    the interactive in-TUI VT pane is the remaining stretch (needs a VT emulator dep); `U13` —
+    extended the plan-12 conformance suite with the TUI's read surface (`/agent`, `/session/:id/todo`,
+    `/session/:id/message`), all recording deterministically. `GET /command` is excluded (opencode
+    returns it in non-deterministic order). Full TUI↔Forge dual-run parity is gated on the parallel
+    Forge gap-closing track implementing those endpoints (Forge currently 501s `/agent`, `/provider`,
+    permission/question replies, `/find/file`, `/pty`).
 - **Parallel — Forge gap-closing:** wire the four endpoint families above so the TUI flips from
   opencode to Forge cleanly (each small; the engine managers already exist).

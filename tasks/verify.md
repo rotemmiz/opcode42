@@ -387,3 +387,23 @@ Eyeball these against a daemon (`pnpm --filter @forge/tui start` or the forge-tu
 - [ ] No-confirm revert matches opencode but a UI `unrevert`/undo affordance would be safer (Phase 3).
 - [ ] @-mention has no debounce (one GET /find/file per keystroke) — fine for local daemon, revisit for remote.
 - [ ] Sidebar has no context-% bar / LSP block yet (needs model context limits wired).
+
+## Phase 3 complete — interactive + board (2026-05-31, PRs #24–#27 + conformance)
+- [ ] PERMISSION (#24): run a tool that needs approval against opencode → a centered card blocks
+      with allow-once/always/reject (a/s/r/↑↓+enter); the agent proceeds/halts accordingly. A failed
+      reply keeps the card (retry), not a silent hang.
+- [ ] QUESTION (#25): trigger an AskUserQuestion → step through single/multi-select; answers reach
+      the agent. Free-text-only questions show "press r to reject".
+- [ ] TASKS (#26): `ctrl+x t` shows the session todos; they update live as the agent runs todowrite.
+- [ ] PTY (#27, transport only): SDK client create/connect/echo is live-smoked; the interactive
+      in-TUI VT pane is deferred stretch (needs a VT emulator dependency).
+- [ ] CONFORMANCE (#U13): `scripts/run-conformance.sh self` now covers agent-list / session-todo /
+      session-message-list (deterministic). `GET /command` excluded (opencode order non-deterministic).
+      Dual-run TUI parity vs Forge is blocked until Forge implements /agent, /provider,
+      permission/question replies, /find/file, /pty (gap-closing track).
+
+## Pre-existing conformance note (NOT Phase 3)
+- [ ] `session-create-list` still self-diffs (GET /session returns a project-scoped, accumulating
+      session list — len differs between two fresh runs because sessions persist in the repo's
+      storage, not isolated by the fresh HOME). Orthogonal to the TUI work; needs the runner to
+      isolate per-run project storage or the normalizer to count rather than compare the list.

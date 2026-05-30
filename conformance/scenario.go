@@ -23,6 +23,13 @@ var Scenarios = []Scenario{
 	{Name: "session-fork-children", Run: scenarioSessionForkChildren},
 	{Name: "config-get", Run: scenarioConfigGet},
 	{Name: "provider-list", Run: scenarioProviderList},
+	{Name: "agent-list", Run: scenarioAgentList},
+	// NOTE: GET /command is intentionally NOT a conformance scenario — opencode
+	// returns the command list in a non-deterministic order (it varies between two
+	// fresh runs), so it can't serve as a parity gate. The TUI sorts commands
+	// client-side, so order doesn't matter there.
+	{Name: "session-todo-empty", Run: scenarioSessionTodo},
+	{Name: "session-message-list", Run: scenarioSessionMessageList},
 	{Name: "sse-instance-connected", Run: scenarioSSEInstanceConnected},
 	{Name: "sse-global-connected", Run: scenarioSSEGlobalConnected},
 	{Name: "auth-basic-ok", Run: scenarioAuthBasicOK},
@@ -109,6 +116,50 @@ func scenarioProviderList(c *Client) ([]result.Step, error) {
 		return nil, err
 	}
 	return []result.Step{s}, nil
+}
+
+// The TUI reads these to populate the agent/command switchers; cover them so the
+// parity gate includes the TUI's read surface (plan 08 U8/U9).
+func scenarioAgentList(c *Client) ([]result.Step, error) {
+	s, err := c.Do("agent", http.MethodGet, "/agent", nil)
+	if err != nil {
+		return nil, err
+	}
+	return []result.Step{s}, nil
+}
+
+// scenarioSessionTodo creates a session and reads its (empty) todo list — the
+// tasks dock source (plan 08 U11).
+func scenarioSessionTodo(c *Client) ([]result.Step, error) {
+	var steps []result.Step
+	if err := do(c, &steps, "create", http.MethodPost, "/session", map[string]any{}); err != nil {
+		return steps, err
+	}
+	var cs createdSession
+	if err := c.LastJSON(&cs); err != nil {
+		return steps, err
+	}
+	if err := do(c, &steps, "todo", http.MethodGet, "/session/"+cs.ID+"/todo", nil); err != nil {
+		return steps, err
+	}
+	return steps, nil
+}
+
+// scenarioSessionMessageList creates a session and reads its (empty) message
+// history — the conversation stream's bootstrap (plan 08 U3).
+func scenarioSessionMessageList(c *Client) ([]result.Step, error) {
+	var steps []result.Step
+	if err := do(c, &steps, "create", http.MethodPost, "/session", map[string]any{}); err != nil {
+		return steps, err
+	}
+	var cs createdSession
+	if err := c.LastJSON(&cs); err != nil {
+		return steps, err
+	}
+	if err := do(c, &steps, "messages", http.MethodGet, "/session/"+cs.ID+"/message", nil); err != nil {
+		return steps, err
+	}
+	return steps, nil
 }
 
 // scenarioSSEInstanceConnected captures the first event from the instance SSE
