@@ -15,10 +15,25 @@ import (
 
 // Session is a session list entry.
 type Session struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	Directory string `json:"directory"`
+	ID        string        `json:"id"`
+	Title     string        `json:"title"`
+	Directory string        `json:"directory"`
+	Cost      float64       `json:"cost"`
+	Tokens    SessionTokens `json:"tokens"`
 }
+
+// SessionTokens is the running token accounting carried on a session.
+type SessionTokens struct {
+	Input  int `json:"input"`
+	Output int `json:"output"`
+	Cache  struct {
+		Read  int `json:"read"`
+		Write int `json:"write"`
+	} `json:"cache"`
+}
+
+// Total is all tokens attributed to the session (prompt + completion + cache).
+func (t SessionTokens) Total() int { return t.Input + t.Output + t.Cache.Read + t.Cache.Write }
 
 // Message is one turn (user/assistant) in a session.
 type Message struct {

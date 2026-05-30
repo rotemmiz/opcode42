@@ -89,6 +89,11 @@ type Model struct {
 	// Slash commands.
 	commands []slashItem  // daemon commands (GET /command)
 	ac       autocomplete // composer "/" popup state
+
+	// Chrome.
+	agent         string // active agent (status bar "mode"); empty → default
+	sidebarHidden bool   // right sidebar visibility (toggle: ctrl+x b)
+	streamWidth   int    // transient: stream column width when the sidebar is shown
 }
 
 // New builds the initial Model, constructing the SDK client.
@@ -145,6 +150,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else {
 		m.input.Placeholder = "Ask anything…"
 	}
+	// Keep the composer sized to the current left column: a screen change
+	// (splash→session) or sidebar toggle alters the available width even when no
+	// key was pressed. WindowSizeMsg re-runs this after updating m.width.
+	m = m.resizeComposer()
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -381,7 +390,8 @@ const maxComposerRows = 8
 // the number of WRAPPED visual rows, so a long line with no newline grows the
 // box just like explicit newlines do.
 func (m Model) resizeComposer() Model {
-	cols := m.barWidth() - 1 // inside the accent bar: barWidth less its left padding
+	m.streamWidth = m.leftColumnWidth() // size to the left column (sidebar-aware)
+	cols := m.barWidth() - 1            // inside the accent bar: barWidth less its left padding
 	if cols < 1 {
 		cols = 1
 	}

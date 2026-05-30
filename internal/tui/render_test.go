@@ -63,9 +63,9 @@ func TestToolRow_ErrorIsRedWithMessage(t *testing.T) {
 
 func TestFrame_TailScrollsToNewest(t *testing.T) {
 	m := New(Config{URL: "http://x"})
-	m.height = 4 // 3 body lines + status
+	m.height = 4 // 3 body lines + a 1-line footer
 	body := "l1\nl2\nl3\nl4\nl5"
-	out := m.frame(body)
+	out := m.frame(body, "status")
 	if strings.Contains(out, "l1") || !strings.Contains(out, "l5") {
 		t.Fatalf("frame should show the tail, got:\n%s", out)
 	}

@@ -15,10 +15,22 @@ const maxContentWidth = 100
 // and the status line, scrolled to the newest content.
 func (m Model) renderSession() string {
 	s := m.styles
+
+	// Optional right sidebar; the stream + composer take the remaining width.
+	sidebar := ""
+	leftW := m.leftColumnWidth()
+	if m.sidebarVisible() {
+		sidebar = m.sidebarView() // width == sidebarWidth (pinned by a test)
+	}
+	m.streamWidth = leftW // narrows the stream/composer wrap to the left column
+
+	footer := m.composerView() + "\n" + m.statusBarView(leftW)
+	if ac := m.autocompleteView(); ac != "" {
+		footer = ac + "\n" + footer // popup sits just above the composer
+	}
+
 	sid := m.cfg.SessionID
-
 	header := s.Section.Render(m.sessionTitle(sid))
-
 	var blocks []string
 	for _, msg := range m.store.messages[sid] {
 		if b := m.renderMessage(msg, m.store.parts[msg.ID]); b != "" {
@@ -26,7 +38,12 @@ func (m Model) renderSession() string {
 		}
 	}
 	body := header + "\n\n" + strings.Join(blocks, "\n\n")
-	return m.frame(body)
+
+	left := m.frame(body, footer)
+	if sidebar == "" {
+		return left
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, sidebar)
 }
 
 func (m Model) sessionTitle(sid string) string {
@@ -90,10 +107,11 @@ func (m Model) prose(text string) string {
 	return lipgloss.NewStyle().Width(m.contentWidth()).Render(m.styles.Base.Render(text))
 }
 
-// thinking renders the design's "+ Thought" line.
+// thinking renders the design's "+ Thought" line (truncated to the column).
 func (m Model) thinking(text string) string {
-	head := lipgloss.NewStyle().Foreground(m.styles.P.Amber).Render("+ Thought ")
-	return head + m.styles.Faint.Render(firstLine(text))
+	head := "+ Thought "
+	body := truncate(firstLine(text), m.contentWidth()-lipgloss.Width(head))
+	return lipgloss.NewStyle().Foreground(m.styles.P.Amber).Render(head) + m.styles.Faint.Render(body)
 }
 
 // toolRow renders a terse tool one-liner colored by status (design tool grammar).
@@ -119,15 +137,22 @@ func (m Model) toolRow(p Part) string {
 	if detail == "" {
 		detail = st.Status
 	}
-	row := gstyle.Render(glyph) + " " + label + " " + s.Faint.Render(detail)
+	// Bound the row to the column: the prefix (glyph + tool) is short, so trim the
+	// detail to whatever space is left.
+	avail := m.contentWidth() - lipgloss.Width(glyph) - 1 - lipgloss.Width(p.Tool) - 1
+	row := gstyle.Render(glyph) + " " + label + " " + s.Faint.Render(truncate(detail, avail))
 	if st.Status == "error" && st.Error != "" {
-		row += "\n  " + lipgloss.NewStyle().Foreground(s.P.Red).Render(firstLine(st.Error))
+		errLine := truncate(firstLine(st.Error), m.contentWidth()-2)
+		row += "\n  " + lipgloss.NewStyle().Foreground(s.P.Red).Render(errLine)
 	}
 	return row
 }
 
 func (m Model) contentWidth() int {
-	w := m.width
+	w := m.streamWidth // set when a sidebar narrows the stream column
+	if w == 0 {
+		w = m.width
+	}
 	if w == 0 || w > maxContentWidth {
 		w = maxContentWidth
 	}
@@ -161,11 +186,9 @@ func (m Model) statusLine() string {
 	return m.status + " · " + m.model.label()
 }
 
-func (m Model) frame(body string) string {
-	footer := m.composerView() + "\n" + m.styles.Faint.Render(m.statusLine())
-	if ac := m.autocompleteView(); ac != "" {
-		footer = ac + "\n" + footer // popup sits just above the composer
-	}
+// frame tail-scrolls body to the lines that fit above footer and pins footer to
+// the bottom (padding a short body so the composer/status bar stay anchored).
+func (m Model) frame(body, footer string) string {
 	if m.height <= 0 {
 		return body + "\n" + footer
 	}
@@ -176,6 +199,10 @@ func (m Model) frame(body string) string {
 	lines := strings.Split(body, "\n")
 	if len(lines) > avail {
 		lines = lines[len(lines)-avail:]
+	} else {
+		for len(lines) < avail { // pad so footer sits at the bottom
+			lines = append(lines, "")
+		}
 	}
 	return strings.Join(lines, "\n") + "\n" + footer
 }
