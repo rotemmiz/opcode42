@@ -30,7 +30,7 @@ func TestNew_InjectsAuthAndDirectory(t *testing.T) {
 	if gotAuth != wantAuth {
 		t.Fatalf("auth header = %q, want %q", gotAuth, wantAuth)
 	}
-	if gotDir != "%2Fproj+dir" { // url.QueryEscape("/proj dir")
+	if gotDir != "%2Fproj%20dir" { // url.PathEscape("/proj dir") — space as %20 so it round-trips
 		t.Fatalf("directory header = %q", gotDir)
 	}
 }

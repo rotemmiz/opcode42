@@ -17,8 +17,11 @@ type SSEEvent struct {
 	ID         string          `json:"id"`
 	Type       string          `json:"type"`
 	Properties json.RawMessage `json:"properties"`
-	// Directory is set only on the /global/event stream (the global envelope).
+	// Directory/Project/Workspace are set only on the /global/event stream (the
+	// global envelope's routing origin).
 	Directory string `json:"-"`
+	Project   string `json:"-"`
+	Workspace string `json:"-"`
 }
 
 // EventStream is a live SSE subscription. Read from Events; Errc delivers the
@@ -67,7 +70,7 @@ func (c *ForgeClient) stream(ctx context.Context, path string, wrapped bool) (*E
 	_ = c.injectHeaders(streamCtx, req)
 	req.Header.Set("Accept", "text/event-stream")
 
-	resp, err := c.http.Do(req)
+	resp, err := c.sse.Do(req)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("sse %s: %w", path, err)
@@ -87,6 +90,8 @@ func (c *ForgeClient) stream(ctx context.Context, path string, wrapped bool) (*E
 type globalEnvelope struct {
 	Payload   SSEEvent `json:"payload"`
 	Directory string   `json:"directory"`
+	Project   string   `json:"project"`
+	Workspace string   `json:"workspace"`
 }
 
 // consume parses the SSE body, emitting one SSEEvent per "data:" block.
@@ -120,7 +125,8 @@ func (s *EventStream) consume(ctx context.Context, body interface{ Read([]byte) 
 			if data.Len() > 0 {
 				data.WriteByte('\n')
 			}
-			data.WriteString(strings.TrimSpace(trimmed[len("data:"):]))
+			// SSE: strip exactly one optional leading space after the colon.
+			data.WriteString(strings.TrimPrefix(trimmed[len("data:"):], " "))
 		case trimmed == "": // blank line terminates an event
 			if !flush() {
 				return
@@ -141,7 +147,7 @@ func decodeEvent(raw string, wrapped bool) (SSEEvent, bool) {
 			return SSEEvent{}, false
 		}
 		ev := env.Payload
-		ev.Directory = env.Directory
+		ev.Directory, ev.Project, ev.Workspace = env.Directory, env.Project, env.Workspace
 		return ev, true
 	}
 	var ev SSEEvent

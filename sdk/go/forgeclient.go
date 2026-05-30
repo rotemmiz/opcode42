@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/rotemmiz/forge/sdk/go/gen"
 )
@@ -24,7 +25,8 @@ type ForgeClient struct {
 	baseURL   string
 	directory string
 	auth      string // "Basic <b64>" or ""
-	http      *http.Client
+	rest      *http.Client
+	sse       *http.Client
 }
 
 // Options configures a ForgeClient.
@@ -50,14 +52,18 @@ func New(baseURL string, opts Options) (*ForgeClient, error) {
 	case opts.Username != "":
 		auth = "Basic " + base64.StdEncoding.EncodeToString([]byte(opts.Username+":"+opts.Password))
 	}
-	hc := opts.HTTPClient
-	if hc == nil {
-		hc = &http.Client{}
+	// REST gets a default request timeout; SSE must NOT (it's a long-lived
+	// stream). A caller-supplied HTTPClient is used for REST as-is; the SSE
+	// client reuses its transport with the timeout cleared.
+	rest := opts.HTTPClient
+	if rest == nil {
+		rest = &http.Client{Timeout: 30 * time.Second}
 	}
-	c := &ForgeClient{baseURL: trimURL(baseURL), directory: opts.Directory, auth: auth, http: hc}
+	sse := &http.Client{Transport: rest.Transport}
+	c := &ForgeClient{baseURL: trimURL(baseURL), directory: opts.Directory, auth: auth, rest: rest, sse: sse}
 
 	api, err := gen.NewClientWithResponses(c.baseURL,
-		gen.WithHTTPClient(hc),
+		gen.WithHTTPClient(rest),
 		gen.WithRequestEditorFn(c.injectHeaders),
 	)
 	if err != nil {
@@ -73,7 +79,10 @@ func (c *ForgeClient) injectHeaders(_ context.Context, req *http.Request) error 
 		req.Header.Set("Authorization", c.auth)
 	}
 	if c.directory != "" {
-		req.Header.Set("X-Opencode-Directory", url.QueryEscape(c.directory))
+		// PathEscape (not QueryEscape): opencode decodes this header with JS
+		// decodeURIComponent, which turns '+' into a literal '+', not a space.
+		// PathEscape encodes space as %20 so directories with spaces route right.
+		req.Header.Set("X-Opencode-Directory", url.PathEscape(c.directory))
 	}
 	return nil
 }
@@ -85,7 +94,7 @@ func (c *ForgeClient) Health(ctx context.Context) error {
 		return err
 	}
 	_ = c.injectHeaders(ctx, req)
-	resp, err := c.http.Do(req)
+	resp, err := c.rest.Do(req)
 	if err != nil {
 		return fmt.Errorf("health: %w", err)
 	}

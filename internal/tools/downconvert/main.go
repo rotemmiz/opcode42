@@ -138,6 +138,11 @@ func operationIDs(doc map[string]any) []string {
 // "Response"). oapi-codegen would otherwise redeclare the type. Only the wire Go
 // identifier changes; $ref keys (and thus the JSON shape) are untouched.
 func (c *converter) disambiguateResponseCollisions(schemas map[string]any, opIDs []string) {
+	// Assumption: oapi-codegen derives the client wrapper name from the raw
+	// operationId without Go-initialism casing, so goApprox(operationId)+"Response"
+	// predicts it; schema component names DO get initialism casing, so goApprox
+	// (which preserves existing casing) won't false-collide for ids like "tool.ids"
+	// (wrapper ToolIdsResponse vs schema ToolIDs). Holds for the frozen contract.
 	wrappers := make(map[string]bool, len(opIDs))
 	for _, id := range opIDs {
 		wrappers[goApprox(id)+"Response"] = true
