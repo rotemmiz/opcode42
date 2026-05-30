@@ -46,10 +46,13 @@ func TestUpdate_ConnectionLifecycle(t *testing.T) {
 		t.Fatal("reconnect should issue an open command")
 	}
 
-	// stream open ok → connected, listening
+	// stream open ok → connected, listening, backoff reset
 	m, cmd = step(t, m, streamOpenedMsg{stream: &forgeclient.EventStream{}})
 	if m.conn != Connected || m.stream == nil || cmd == nil {
 		t.Fatalf("after open ok: conn=%v stream=%v", m.conn, m.stream != nil)
+	}
+	if m.attempt != 0 {
+		t.Fatalf("attempt should reset to 0 on successful reopen, got %d", m.attempt)
 	}
 
 	// an event increments the counter and keeps listening

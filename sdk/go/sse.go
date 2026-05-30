@@ -39,9 +39,12 @@ func (s *EventStream) Events() <-chan SSEEvent { return s.events }
 // Err returns the channel that delivers the stream's terminal error (one value).
 func (s *EventStream) Err() <-chan error { return s.errc }
 
-// Close terminates the stream and releases the connection.
+// Close terminates the stream and releases the connection. Safe to call on a
+// zero-value stream and idempotent (cancel + body.Close are idempotent).
 func (s *EventStream) Close() {
-	s.cancel()
+	if s.cancel != nil {
+		s.cancel()
+	}
 	if s.body != nil {
 		_ = s.body.Close()
 	}

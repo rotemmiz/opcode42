@@ -63,6 +63,7 @@ type Model struct {
 	// Connection.
 	client     *forgeclient.ForgeClient
 	ctx        context.Context
+	cancel     context.CancelFunc
 	stream     *forgeclient.EventStream
 	attempt    int // reconnect backoff attempt
 	eventCount int // events seen this connection (placeholder until the U4 store)
@@ -70,13 +71,15 @@ type Model struct {
 
 // New builds the initial Model, constructing the SDK client.
 func New(cfg Config) Model {
+	ctx, cancel := context.WithCancel(context.Background())
 	m := Model{
 		cfg:    cfg,
 		styles: theme.DefaultStyles(),
 		screen: ScreenSplash,
 		conn:   Connecting,
 		status: "connecting to " + cfg.URL,
-		ctx:    context.Background(),
+		ctx:    ctx,
+		cancel: cancel,
 	}
 	c, err := forgeclient.New(cfg.URL, forgeclient.Options{
 		Directory: cfg.Directory, Username: cfg.Username, Password: cfg.Password,
@@ -110,6 +113,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.stream != nil {
 				m.stream.Close()
 			}
+			if m.cancel != nil {
+				m.cancel() // cancel any in-flight health/open cmd + SDK work
+			}
 			return m, tea.Quit
 		}
 
@@ -129,8 +135,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.attempt++
 			return m, cmd
 		}
+		if m.stream != nil {
+			m.stream.Close() // close any prior stream before replacing it
+		}
 		m.stream = msg.stream
 		m.conn = Connected
+		m.attempt = 0 // a successful reopen resets the backoff
 		return m, listenCmd(m.stream)
 
 	case sseEventMsg:
@@ -140,6 +150,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, listenCmd(m.stream)
 
 	case sseClosedMsg:
+		if m.stream != nil {
+			m.stream.Close() // release the closed stream's conn + context
+		}
 		m.stream = nil
 		m.conn = Reconnecting
 		m.status = "reconnecting…"

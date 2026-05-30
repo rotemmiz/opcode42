@@ -59,10 +59,15 @@ func listenCmd(s *forgeclient.EventStream) tea.Cmd {
 	}
 }
 
-// backoffCmd schedules a reconnect after an exponential delay.
+// backoffCmd schedules a reconnect after an exponential delay (clamped to
+// reconnectMax). attempt is bounded before the shift so it can't overflow.
 func backoffCmd(attempt int) tea.Cmd {
+	const maxShift = 5 // reconnectBase<<5 = 32s already exceeds reconnectMax (30s)
+	if attempt > maxShift {
+		attempt = maxShift
+	}
 	delay := reconnectBase << attempt
-	if delay > reconnectMax || delay <= 0 {
+	if delay > reconnectMax {
 		delay = reconnectMax
 	}
 	return tea.Tick(delay, func(time.Time) tea.Msg { return reconnectMsg{} })
