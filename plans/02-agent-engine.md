@@ -1007,4 +1007,9 @@ This refines (does not contradict) the milestone order above; recorded per CLAUD
    with the deterministic mock provider) and grown each milestone, not a one-shot M11 step.
 
 **Effective milestone order:** M1 → **M2 (OpenAI/OpenAI-compatible + catalog)** → M4 → M5 → M6 →
-M7 → M8 → **M9 (loop wiring; first end-to-end green)** → **M3′ (Anthropic, deferred)** → M10 → M11.
+M7 → M8 → **M9 (loop wiring; first end-to-end green)** → M10 → **M3′ (Anthropic)** → M11.
+
+**Post-M9 status (2026-05-30):** M9 shipped (#5). Follow-ups merged: HTTP prompt endpoint (#6),
+M10 compaction (#7). M3′ Anthropic provider landed as a hand-rolled /v1/messages client (llm.Event
++ extended-thinking signature passthrough); the provider factory routes Anthropic-native providers
+to it and everything else to the OpenAI-compatible client.

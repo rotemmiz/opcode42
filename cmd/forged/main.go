@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/rotemmiz/forge/internal/engine/catalog"
 	"github.com/rotemmiz/forge/internal/engine/llm"
 	"github.com/rotemmiz/forge/internal/engine/message"
+	"github.com/rotemmiz/forge/internal/engine/provider/anthropic"
 	"github.com/rotemmiz/forge/internal/engine/provider/openai"
 	"github.com/rotemmiz/forge/internal/engine/registry"
 	"github.com/rotemmiz/forge/internal/engine/tool"
@@ -218,18 +220,21 @@ func builtinRegistry() *registry.Registry {
 	)
 }
 
-// providerFactory builds an OpenAI-compatible client for a provider/model,
-// resolving the base URL from the catalog (or FORGE_PROVIDER_BASE_URL) and the
-// API key from the provider's advertised env vars (or FORGE_PROVIDER_API_KEY).
+// providerFactory builds a streaming client for a provider/model. It routes to
+// the Anthropic client for Anthropic-native providers (by id or catalog npm) and
+// the OpenAI-compatible client otherwise, resolving the base URL from the catalog
+// (or FORGE_PROVIDER_BASE_URL) and the API key from the provider's advertised env
+// vars (or FORGE_PROVIDER_API_KEY).
 func providerFactory(cat catalog.Catalog) engine.ProviderFactory {
 	return func(_ context.Context, providerID, modelID string) (llm.Provider, error) {
 		baseURL := os.Getenv("FORGE_PROVIDER_BASE_URL")
-		var apiKey string
+		var apiKey, npm string
 		if prov, ok := cat[providerID]; ok {
 			if baseURL == "" {
 				baseURL = prov.API
 			}
 			apiKey = firstEnv(prov.Env...)
+			npm = prov.NPM
 		}
 		if apiKey == "" {
 			apiKey = os.Getenv("FORGE_PROVIDER_API_KEY")
@@ -237,8 +242,22 @@ func providerFactory(cat catalog.Catalog) engine.ProviderFactory {
 		if baseURL == "" {
 			return nil, fmt.Errorf("no base URL for provider %q (set FORGE_PROVIDER_BASE_URL)", providerID)
 		}
+		if isAnthropic(providerID, npm) {
+			return anthropic.New(anthropic.Options{BaseURL: baseURL, APIKey: apiKey, Model: modelID}), nil
+		}
 		return openai.New(openai.Options{BaseURL: baseURL, APIKey: apiKey, Model: modelID}), nil
 	}
+}
+
+// isAnthropic reports whether a provider speaks the Anthropic Messages API
+// natively. Bedrock/Vertex host Anthropic models but over different wire formats
+// and auth (SigV4 / GCP OAuth, not x-api-key), so they are deliberately excluded
+// — they'd need their own clients.
+func isAnthropic(providerID, npm string) bool {
+	if strings.Contains(providerID, "bedrock") || strings.Contains(providerID, "vertex") {
+		return false
+	}
+	return providerID == "anthropic" || strings.Contains(npm, "anthropic")
 }
 
 func firstEnv(names ...string) string {
