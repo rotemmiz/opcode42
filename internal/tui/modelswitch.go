@@ -11,10 +11,8 @@ import (
 
 // modelChoice is one selectable provider/model pair in the model switcher.
 type modelChoice struct {
-	Provider     string // provider id (e.g. "anthropic")
-	ProviderName string // human name (e.g. "Anthropic")
-	Model        string // model id (e.g. "claude-sonnet-4")
-	ModelName    string // human name (e.g. "Claude Sonnet 4")
+	Provider string // provider id (e.g. "anthropic")
+	Model    string // model id (e.g. "claude-sonnet-4")
 }
 
 // label is the row text: "provider / model".
@@ -58,8 +56,8 @@ func (r providerResp) choices() []modelChoice {
 		if !connected[p.ID] {
 			continue
 		}
-		for id, md := range p.Models {
-			out = append(out, modelChoice{Provider: p.ID, ProviderName: p.Name, Model: id, ModelName: md.Name})
+		for id := range p.Models {
+			out = append(out, modelChoice{Provider: p.ID, Model: id})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
