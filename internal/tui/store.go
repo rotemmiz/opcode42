@@ -81,12 +81,35 @@ type Permission struct {
 	Tool       json.RawMessage `json:"tool"`
 }
 
+// Question is a pending question request (question.asked) awaiting answers.
+type Question struct {
+	ID        string         `json:"id"`
+	SessionID string         `json:"sessionID"`
+	Questions []QuestionInfo `json:"questions"`
+}
+
+// QuestionInfo is one question within a request.
+type QuestionInfo struct {
+	Question string           `json:"question"`
+	Header   string           `json:"header"`
+	Options  []QuestionOption `json:"options"`
+	Multiple bool             `json:"multiple"`
+	Custom   bool             `json:"custom"`
+}
+
+// QuestionOption is one selectable answer.
+type QuestionOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
 // store holds the mirrored, sorted view-state.
 type store struct {
 	sessions    []Session            // sorted by id
 	messages    map[string][]Message // sessionID -> sorted by id
 	parts       map[string][]Part    // messageID -> sorted by id
 	permissions []Permission         // pending permission requests (FIFO)
+	questions   []Question           // pending question requests (FIFO)
 }
 
 func newStore() store {
@@ -172,6 +195,18 @@ func (s store) Reduce(ev forgeclient.SSEEvent) store {
 		}
 		if decode(ev.Properties, &p) {
 			s.permissions = removeByID(s.permissions, p.RequestID, func(q Permission) string { return q.ID })
+		}
+	case "question.asked":
+		var q Question
+		if decode(ev.Properties, &q) && q.ID != "" {
+			s.questions = upsertByID(s.questions, q, func(x Question) string { return x.ID })
+		}
+	case "question.replied", "question.rejected":
+		var p struct {
+			RequestID string `json:"requestID"`
+		}
+		if decode(ev.Properties, &p) {
+			s.questions = removeByID(s.questions, p.RequestID, func(x Question) string { return x.ID })
 		}
 	}
 	return s

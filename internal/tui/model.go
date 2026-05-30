@@ -85,6 +85,13 @@ type Model struct {
 	permSel      int  // selected choice in the permission overlay
 	permReplying bool // a permission reply is in flight (overlay stays up until it resolves)
 
+	// Question overlay (steps through a request's questions).
+	qIdx      int        // current question index
+	qSel      int        // option cursor
+	qChecked  []bool     // multi-select toggles for the current question
+	qAnswers  [][]string // accumulated answers (one []label per answered question)
+	qReplying bool       // a question reply/reject is in flight
+
 	// choices is the connected provider/model catalog (model switcher).
 	choices []modelChoice
 
@@ -195,6 +202,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A pending permission blocks everything until answered.
 		if m.pendingPermission() != nil {
 			return m.handlePermissionKey(msg)
+		}
+		// A pending question likewise blocks until answered/rejected.
+		if m.pendingQuestion() != nil {
+			return m.handleQuestionKey(msg)
 		}
 		// A modal captures navigation/selection keys.
 		if m.modal != modalNone {
@@ -361,6 +372,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.store.permissions = removeByID(m.store.permissions, msg.id, func(q Permission) string { return q.ID })
 		return m, nil
 
+	case questionRepliedMsg:
+		m.qReplying = false
+		if msg.err != nil {
+			m.status = "question reply failed (try again): " + msg.err.Error()
+			return m, nil
+		}
+		m.store.questions = removeByID(m.store.questions, msg.id, func(x Question) string { return x.ID })
+		return m.resetQuestion(), nil
+
 	case filesFoundMsg:
 		// Apply only if it still matches the active mention query (drop stale
 		// results); open only when there's something to show.
@@ -414,7 +434,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case sseEventMsg:
 		m.eventCount++
+		prevQ := questionID(m.pendingQuestion())
 		m.store = m.store.Reduce(msg.ev)
+		if questionID(m.pendingQuestion()) != prevQ { // active question cleared/replaced
+			m = m.resetQuestion()
+		}
 		m.status = fmt.Sprintf("connected · %d events · %d sessions", m.eventCount, len(m.store.sessions))
 		return m, listenCmd(m.stream)
 
@@ -572,6 +596,8 @@ func (m Model) View() string {
 	switch {
 	case m.pendingPermission() != nil:
 		body = m.permissionView()
+	case m.pendingQuestion() != nil:
+		body = m.questionView()
 	case m.modal != modalNone:
 		body = m.modalView()
 	case m.screen == ScreenSession:
