@@ -4,10 +4,14 @@
 package tui
 
 import (
+	"context"
+	"fmt"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/rotemmiz/forge/internal/tui/theme"
+	forgeclient "github.com/rotemmiz/forge/sdk/go"
 )
 
 // Screen is the active top-level view.
@@ -55,21 +59,43 @@ type Model struct {
 	conn   ConnState
 	status string // human-readable connection status
 	err    error
+
+	// Connection.
+	client     *forgeclient.ForgeClient
+	ctx        context.Context
+	stream     *forgeclient.EventStream
+	attempt    int // reconnect backoff attempt
+	eventCount int // events seen this connection (placeholder until the U4 store)
 }
 
-// New builds the initial Model.
+// New builds the initial Model, constructing the SDK client.
 func New(cfg Config) Model {
-	return Model{
+	m := Model{
 		cfg:    cfg,
 		styles: theme.DefaultStyles(),
 		screen: ScreenSplash,
 		conn:   Connecting,
 		status: "connecting to " + cfg.URL,
+		ctx:    context.Background(),
 	}
+	c, err := forgeclient.New(cfg.URL, forgeclient.Options{
+		Directory: cfg.Directory, Username: cfg.Username, Password: cfg.Password,
+	})
+	if err != nil {
+		m.conn, m.err = ConnError, err
+		return m
+	}
+	m.client = c
+	return m
 }
 
-// Init is the first command. Daemon connection + SSE land in U2.
-func (m Model) Init() tea.Cmd { return nil }
+// Init kicks off the daemon health check.
+func (m Model) Init() tea.Cmd {
+	if m.client == nil {
+		return nil
+	}
+	return healthCmd(m.ctx, m.client)
+}
 
 // Update handles messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -77,11 +103,52 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
+			if m.stream != nil {
+				m.stream.Close()
+			}
 			return m, tea.Quit
 		}
+
+	case connectedMsg:
+		m.conn, m.status, m.attempt = Connected, "connected", 0
+		return m, openSSECmd(m.ctx, m.client)
+
+	case connErrMsg:
+		m.conn, m.err = ConnError, msg.err
+		return m, nil
+
+	case streamOpenedMsg:
+		if msg.err != nil {
+			m.conn = Reconnecting
+			m.status = "reconnecting…"
+			cmd := backoffCmd(m.attempt)
+			m.attempt++
+			return m, cmd
+		}
+		m.stream = msg.stream
+		m.conn = Connected
+		return m, listenCmd(m.stream)
+
+	case sseEventMsg:
+		m.eventCount++
+		m.status = fmt.Sprintf("connected · %d events", m.eventCount)
+		// U4 will reduce msg.ev into the store; for now just keep listening.
+		return m, listenCmd(m.stream)
+
+	case sseClosedMsg:
+		m.stream = nil
+		m.conn = Reconnecting
+		m.status = "reconnecting…"
+		cmd := backoffCmd(m.attempt)
+		m.attempt++
+		return m, cmd
+
+	case reconnectMsg:
+		return m, openSSECmd(m.ctx, m.client)
 	}
 	return m, nil
 }

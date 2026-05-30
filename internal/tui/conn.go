@@ -1,0 +1,69 @@
+package tui
+
+import (
+	"context"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	forgeclient "github.com/rotemmiz/forge/sdk/go"
+)
+
+// Connection lifecycle messages.
+type (
+	connectedMsg    struct{}            // health check passed
+	connErrMsg      struct{ err error } // terminal connect/auth failure
+	streamOpenedMsg struct {            // SSE subscription opened (or failed)
+		stream *forgeclient.EventStream
+		err    error
+	}
+	sseEventMsg  struct{ ev forgeclient.SSEEvent } // one streamed event
+	sseClosedMsg struct{}                          // the stream ended; reconnect
+	reconnectMsg struct{}                          // backoff elapsed; reopen
+)
+
+// reconnectBase / reconnectMax bound the exponential backoff (mirrors plan 08 /
+// opencode sdk.tsx: 1s..30s).
+const (
+	reconnectBase = time.Second
+	reconnectMax  = 30 * time.Second
+)
+
+// healthCmd checks the daemon is reachable+authorized.
+func healthCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
+	return func() tea.Msg {
+		if err := c.Health(ctx); err != nil {
+			return connErrMsg{err: err}
+		}
+		return connectedMsg{}
+	}
+}
+
+// openSSECmd opens the global event stream.
+func openSSECmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
+	return func() tea.Msg {
+		s, err := c.GlobalEvents(ctx)
+		return streamOpenedMsg{stream: s, err: err}
+	}
+}
+
+// listenCmd waits for the next event on a stream (re-issued after each event so
+// the Bubble Tea loop pulls events one at a time).
+func listenCmd(s *forgeclient.EventStream) tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-s.Events()
+		if !ok {
+			return sseClosedMsg{}
+		}
+		return sseEventMsg{ev: ev}
+	}
+}
+
+// backoffCmd schedules a reconnect after an exponential delay.
+func backoffCmd(attempt int) tea.Cmd {
+	delay := reconnectBase << attempt
+	if delay > reconnectMax || delay <= 0 {
+		delay = reconnectMax
+	}
+	return tea.Tick(delay, func(time.Time) tea.Msg { return reconnectMsg{} })
+}

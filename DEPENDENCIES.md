@@ -32,3 +32,10 @@ The one exception is the build tool, which is pinned now (needed in S3):
 - A Go-native OpenAPI differ for the spec-drift gate (C0) may reuse
   `github.com/getkin/kin-openapi` / `oasdiff`, which are already in the indirect
   set via oapi-codegen — avoids the `npx openapi-diff` Node dependency.
+
+## TUI client (added plan 08, on first import)
+
+| Concern | Module | Plan ref | Rationale |
+|---------|--------|----------|-----------|
+| TUI framework | `github.com/charmbracelet/bubbletea` | plan 08 | Elm-style model/update/view; the stack opencode's TUI uses. |
+| TUI styling | `github.com/charmbracelet/lipgloss` | plan 08 U1 | Truecolor styles with graceful 256/16-color degrade; renders the design tokens. |
