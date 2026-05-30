@@ -82,6 +82,9 @@ type Model struct {
 	// Command overlay.
 	modal    modalKind
 	modalSel int
+
+	// choices is the connected provider/model catalog (model switcher).
+	choices []modelChoice
 }
 
 // New builds the initial Model, constructing the SDK client.
@@ -193,12 +196,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case connectedMsg:
 		m.conn, m.status, m.attempt = Connected, "connected", 0
-		// Subscribe to events, bootstrap the session list, resolve the model.
-		return m, tea.Batch(openSSECmd(m.ctx, m.client), loadSessionsCmd(m.ctx, m.client), loadConfigCmd(m.ctx, m.client))
+		// Subscribe to events, bootstrap the session list, resolve the model, and
+		// preload the provider catalog so the model switcher opens populated.
+		return m, tea.Batch(openSSECmd(m.ctx, m.client), loadSessionsCmd(m.ctx, m.client), loadConfigCmd(m.ctx, m.client), loadProvidersCmd(m.ctx, m.client))
 
 	case configLoadedMsg:
 		if !m.model.ok() {
 			m.model = promptModel{Provider: msg.provider, Model: msg.model}
+		}
+		return m, nil
+
+	case providersLoadedMsg:
+		if msg.err != nil {
+			if m.modal == modalModels {
+				m.status = "providers: " + msg.err.Error()
+			}
+			return m, nil
+		}
+		m.choices = msg.choices
+		if m.modal == modalModels { // re-highlight the active model now the list is in
+			m.modalSel = m.modelSelIndex()
 		}
 		return m, nil
 

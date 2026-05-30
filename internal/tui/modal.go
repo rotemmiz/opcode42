@@ -16,10 +16,11 @@ const (
 	modalNone modalKind = iota
 	modalPalette
 	modalSessions
+	modalModels
 )
 
 // paletteItems are the command palette actions (dispatch by index in modalSelect).
-var paletteItems = []string{"New session", "Switch session", "Refresh sessions"}
+var paletteItems = []string{"New session", "Switch session", "Switch model", "Refresh sessions"}
 
 // Modal action results.
 type (
@@ -72,6 +73,18 @@ func (m Model) modalItems() (title string, rows []string, footer string) {
 			rows = []string{"(no sessions — ctrl+n to create)"}
 		}
 		return "Sessions", rows, "enter open · ctrl+n new · ctrl+d delete · esc close"
+	case modalModels:
+		for _, ch := range m.choices {
+			mark := "  "
+			if ch.Provider == m.model.Provider && ch.Model == m.model.Model {
+				mark = "● " // the active model
+			}
+			rows = append(rows, mark+ch.label())
+		}
+		if len(rows) == 0 {
+			rows = []string{"(no connected providers — set a provider API key)"}
+		}
+		return "Models", rows, "enter select · esc close"
 	default:
 		return "", nil, ""
 	}
@@ -101,7 +114,10 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 		case 1: // Switch session
 			m.modal, m.modalSel = modalSessions, 0
 			return m, loadSessionsCmd(m.ctx, m.client)
-		case 2: // Refresh
+		case 2: // Switch model — open pre-highlighted on the active model, refresh
+			m.modal, m.modalSel = modalModels, m.modelSelIndex()
+			return m, loadProvidersCmd(m.ctx, m.client)
+		case 3: // Refresh sessions
 			return m, loadSessionsCmd(m.ctx, m.client)
 		}
 	case modalSessions:
@@ -111,6 +127,12 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 			m.cfg.SessionID = ss[m.modalSel].ID
 			m.screen = ScreenSession
 			return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
+		}
+	case modalModels:
+		m.modal = modalNone
+		if m.modalSel < len(m.choices) {
+			m.model = promptModel(m.choices[m.modalSel])
+			m.status = "model · " + m.model.label()
 		}
 	}
 	return m, nil
@@ -122,14 +144,40 @@ func (m Model) modalView() string {
 	title, rows, footer := m.modalItems()
 
 	width := 56
+
+	// Window long lists around the selection so a provider with hundreds of
+	// models (or many sessions) can't overflow the panel. Scroll is Phase 3;
+	// this keeps the modal bounded until then.
+	const maxRows = 12
+	start := 0
+	if len(rows) > maxRows {
+		start = m.modalSel - maxRows/2
+		if start < 0 {
+			start = 0
+		}
+		if hi := len(rows) - maxRows; start > hi {
+			start = hi
+		}
+	}
+	end := start + maxRows
+	if end > len(rows) {
+		end = len(rows)
+	}
+
 	var lines []string
 	lines = append(lines, s.Section.Render(title), "")
-	for i, row := range rows {
+	if start > 0 {
+		lines = append(lines, s.Faint.Render("  ↑ more"))
+	}
+	for i := start; i < end; i++ {
 		if i == m.modalSel {
-			lines = append(lines, s.Selection.Width(width-2).Render(" "+row))
+			lines = append(lines, s.Selection.Width(width-2).Render(" "+rows[i]))
 		} else {
-			lines = append(lines, s.Base.Render("  "+row))
+			lines = append(lines, s.Base.Render("  "+rows[i]))
 		}
+	}
+	if end < len(rows) {
+		lines = append(lines, s.Faint.Render("  ↓ more"))
 	}
 	lines = append(lines, "", s.Faint.Render(footer))
 
