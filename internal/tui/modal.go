@@ -131,8 +131,7 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 	case modalModels:
 		m.modal = modalNone
 		if m.modalSel < len(m.choices) {
-			ch := m.choices[m.modalSel]
-			m.model = promptModel{Provider: ch.Provider, Model: ch.Model}
+			m.model = promptModel(m.choices[m.modalSel])
 			m.status = "model · " + m.model.label()
 		}
 	}
