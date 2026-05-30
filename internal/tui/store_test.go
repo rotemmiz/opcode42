@@ -82,3 +82,15 @@ func TestReduce_RemovalEvents(t *testing.T) {
 		t.Fatalf("message not removed: msgs=%+v parts=%+v", s.messages["ses_1"], s.parts["msg_1"])
 	}
 }
+
+func TestReduce_DecodesAssistantError(t *testing.T) {
+	s := newStore()
+	s = s.Reduce(ev("message.updated", map[string]any{"info": map[string]any{
+		"id": "msg_1", "sessionID": "ses_1", "role": "assistant",
+		"error": map[string]any{"name": "ContextOverflowError", "data": map[string]any{"message": "too large"}},
+	}}))
+	msgs := s.messages["ses_1"]
+	if len(msgs) != 1 || msgs[0].Error == nil || msgs[0].Error.Name != "ContextOverflowError" || msgs[0].Error.text() != "too large" {
+		t.Fatalf("error not decoded: %+v", msgs)
+	}
+}

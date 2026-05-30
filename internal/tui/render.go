@@ -62,7 +62,18 @@ func (m Model) renderMessage(msg Message, parts []Part) string {
 			out = append(out, m.toolRow(p))
 		}
 	}
+	// Surface an assistant turn's error (auth, overflow, rate limit, …) — never
+	// swallow it; an errored turn often has no text parts at all.
+	if msg.Error != nil {
+		out = append(out, m.errorLine(msg.Error))
+	}
 	return strings.Join(out, "\n")
+}
+
+// errorLine renders an assistant error in red.
+func (m Model) errorLine(e *MsgError) string {
+	return lipgloss.NewStyle().Foreground(m.styles.P.Red).Width(m.contentWidth()).
+		Render("⚠ " + e.Name + ": " + e.text())
 }
 
 // userTurn renders a user prompt with the design's blue left accent bar.

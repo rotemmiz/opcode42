@@ -22,9 +22,26 @@ type Session struct {
 
 // Message is one turn (user/assistant) in a session.
 type Message struct {
-	ID        string `json:"id"`
-	SessionID string `json:"sessionID"`
-	Role      string `json:"role"`
+	ID        string    `json:"id"`
+	SessionID string    `json:"sessionID"`
+	Role      string    `json:"role"`
+	Error     *MsgError `json:"error,omitempty"`
+}
+
+// MsgError is an assistant turn's error (NamedError shape {name, data:{message}}).
+type MsgError struct {
+	Name string `json:"name"`
+	Data struct {
+		Message string `json:"message"`
+	} `json:"data"`
+}
+
+// text returns the human-facing error string.
+func (e *MsgError) text() string {
+	if e.Data.Message != "" {
+		return e.Data.Message
+	}
+	return e.Name
 }
 
 // Part is one piece of a message's content. Type discriminates; only the

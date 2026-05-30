@@ -81,3 +81,19 @@ func TestIngestHistory_PopulatesStore(t *testing.T) {
 		t.Fatalf("history not ingested: %+v", s)
 	}
 }
+
+func TestRenderSession_SurfacesAssistantError(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	m.screen = ScreenSession
+	m.width, m.height = 100, 40
+	a := Message{ID: "msg_1", SessionID: "ses_1", Role: "assistant"}
+	a.Error = &MsgError{Name: "ProviderAuthError"}
+	a.Error.Data.Message = "Google Generative AI API key is missing."
+	m.store.messages["ses_1"] = []Message{a}
+	out := m.View()
+	for _, want := range []string{"ProviderAuthError", "API key is missing"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("assistant error not surfaced (%q) in:\n%s", want, out)
+		}
+	}
+}
