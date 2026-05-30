@@ -82,6 +82,7 @@ type Model struct {
 	// Command overlay.
 	modal    modalKind
 	modalSel int
+	permSel  int // selected choice in the permission overlay
 
 	// choices is the connected provider/model catalog (model switcher).
 	choices []modelChoice
@@ -189,6 +190,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cancel() // cancel any in-flight health/open cmd + SDK work
 			}
 			return m, tea.Quit
+		}
+		// A pending permission blocks everything until answered.
+		if m.pendingPermission() != nil {
+			return m.handlePermissionKey(msg)
 		}
 		// A modal captures navigation/selection keys.
 		if m.modal != modalNone {
@@ -341,6 +346,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "revert failed: " + msg.err.Error()
 		} else {
 			m.status = "reverted"
+		}
+		return m, nil
+
+	case permissionRepliedMsg:
+		if msg.err != nil {
+			m.status = "permission reply failed: " + msg.err.Error()
 		}
 		return m, nil
 
@@ -553,6 +564,8 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	var body string
 	switch {
+	case m.pendingPermission() != nil:
+		body = m.permissionView()
 	case m.modal != modalNone:
 		body = m.modalView()
 	case m.screen == ScreenSession:
