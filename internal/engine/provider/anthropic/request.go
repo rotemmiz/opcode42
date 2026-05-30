@@ -139,14 +139,28 @@ func renderMessage(m llm.ModelMessage) antMessage {
 }
 
 // imageBlock renders a media file part as an Anthropic image block (base64 data
-// URI → base64 source; otherwise a url source).
+// URI → base64 source; otherwise a url source). Anthropic requires media_type on
+// a base64 source, so it falls back to the MIME embedded in the data URI.
 func imageBlock(p llm.ContentPart) antBlock {
 	if strings.HasPrefix(p.URL, "data:") {
 		if i := strings.Index(p.URL, ","); i >= 0 {
-			return antBlock{Type: "image", Source: &antSource{Type: "base64", MediaType: p.MediaType, Data: p.URL[i+1:]}}
+			mediaType := p.MediaType
+			if mediaType == "" {
+				mediaType = mimeFromDataURI(p.URL)
+			}
+			return antBlock{Type: "image", Source: &antSource{Type: "base64", MediaType: mediaType, Data: p.URL[i+1:]}}
 		}
 	}
 	return antBlock{Type: "image", Source: &antSource{Type: "url", URL: p.URL}}
+}
+
+// mimeFromDataURI extracts the MIME type from a "data:<mime>[;base64],..." URI.
+func mimeFromDataURI(uri string) string {
+	rest := strings.TrimPrefix(uri, "data:")
+	if i := strings.IndexAny(rest, ";,"); i >= 0 {
+		return rest[:i]
+	}
+	return ""
 }
 
 func toolChoice(tc llm.ToolChoice) map[string]any {

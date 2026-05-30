@@ -173,6 +173,49 @@ func TestStream_ToolUse(t *testing.T) {
 	}
 }
 
+const interleavedSSE = `data: {"type":"message_start","message":{"usage":{"input_tokens":8}}}
+
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking"}}
+
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hmm"}}
+
+data: {"type":"content_block_stop","index":0}
+
+data: {"type":"content_block_start","index":1,"content_block":{"type":"text"}}
+
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"let me check"}}
+
+data: {"type":"content_block_stop","index":1}
+
+data: {"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_9","name":"ls"}}
+
+data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{}"}}
+
+data: {"type":"content_block_stop","index":2}
+
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":6}}
+
+data: {"type":"message_stop"}
+
+`
+
+func TestStream_InterleavedThinkingTextTool(t *testing.T) {
+	srv := sseServer(t, interleavedSSE, nil)
+	defer srv.Close()
+	c := New(Options{BaseURL: srv.URL, Model: "claude-opus-4-8", HTTPClient: srv.Client()})
+
+	want := []llm.EventType{
+		llm.EventStepStart,
+		llm.EventReasoningStart, llm.EventReasoningDelta, llm.EventReasoningEnd,
+		llm.EventTextStart, llm.EventTextDelta, llm.EventTextEnd,
+		llm.EventToolInputStart, llm.EventToolInputDelta, llm.EventToolInputEnd, llm.EventToolCall,
+		llm.EventStepFinish, llm.EventFinish,
+	}
+	if got := types(collect(t, c, &llm.Request{})); !reflect.DeepEqual(got, want) {
+		t.Fatalf("interleaved event types = %v, want %v", got, want)
+	}
+}
+
 func TestStream_ProviderError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)

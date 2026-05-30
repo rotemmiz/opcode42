@@ -249,8 +249,14 @@ func providerFactory(cat catalog.Catalog) engine.ProviderFactory {
 	}
 }
 
-// isAnthropic reports whether a provider speaks the Anthropic Messages API.
+// isAnthropic reports whether a provider speaks the Anthropic Messages API
+// natively. Bedrock/Vertex host Anthropic models but over different wire formats
+// and auth (SigV4 / GCP OAuth, not x-api-key), so they are deliberately excluded
+// — they'd need their own clients.
 func isAnthropic(providerID, npm string) bool {
+	if strings.Contains(providerID, "bedrock") || strings.Contains(providerID, "vertex") {
+		return false
+	}
 	return providerID == "anthropic" || strings.Contains(npm, "anthropic")
 }
 

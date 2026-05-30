@@ -179,7 +179,8 @@ func (c *Client) handleEvent(ctx context.Context, ch chan<- llm.Event, ev stream
 		if ev.Error != nil {
 			msg = ev.Error.Message
 		}
-		return emit(ctx, ch, llm.Event{Type: llm.EventProviderError, Message: msg})
+		emit(ctx, ch, llm.Event{Type: llm.EventProviderError, Message: msg})
+		return false // stop consuming: an errored stream must not also report a clean step-finish
 	}
 	return true
 }
@@ -246,6 +247,9 @@ func (c *Client) stopBlock(ctx context.Context, ch chan<- llm.Event, ev streamEv
 	return true
 }
 
+// applyUsage merges a usage block. The >0 guard is intentional and safe:
+// input_tokens arrives only in message_start and output_tokens only in
+// message_delta, so the two blocks are disjoint and never overwrite each other.
 func applyUsage(u *llm.TokenUsage, a *antUsage) {
 	if a.InputTokens > 0 {
 		u.Input = a.InputTokens
