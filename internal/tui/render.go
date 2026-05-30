@@ -82,7 +82,7 @@ func (m Model) userTurn(text string) string {
 		Border(lipgloss.ThickBorder(), false, false, false, true).
 		BorderForeground(m.styles.P.Blue).
 		PaddingLeft(1).
-		Width(m.contentWidth())
+		Width(m.barWidth()) // -1: the left border renders outside Width
 	return bar.Render(m.styles.Base.Render(text))
 }
 
@@ -134,6 +134,16 @@ func (m Model) contentWidth() int {
 	return w
 }
 
+// barWidth is the content width an accent-bar block (left ThickBorder) should
+// use so the bar+content fit exactly in contentWidth — lipgloss renders the
+// border outside the style's Width, so reserve its one column here.
+func (m Model) barWidth() int {
+	if w := m.contentWidth() - 1; w > 0 {
+		return w
+	}
+	return 1
+}
+
 // frame trims body to the tail that fits the viewport (auto-scroll to newest)
 // and pins the status line at the bottom.
 // composerView renders the prompt input with the design's blue left accent bar.
@@ -142,7 +152,7 @@ func (m Model) composerView() string {
 		Border(lipgloss.ThickBorder(), false, false, false, true).
 		BorderForeground(m.styles.P.Blue).
 		PaddingLeft(1).
-		Width(m.contentWidth())
+		Width(m.barWidth()) // -1: the left border renders outside Width
 	return bar.Render(m.input.View())
 }
 

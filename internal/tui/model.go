@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -76,7 +76,7 @@ type Model struct {
 	store store
 
 	// Composer.
-	input textinput.Model
+	input textarea.Model
 	model promptModel
 
 	// Command overlay.
@@ -90,10 +90,18 @@ type Model struct {
 // New builds the initial Model, constructing the SDK client.
 func New(cfg Config) Model {
 	ctx, cancel := context.WithCancel(context.Background())
-	ti := textinput.New()
-	ti.Placeholder = "Ask anything…"
-	ti.Prompt = ""
-	ti.Focus()
+	ta := textarea.New()
+	ta.Placeholder = "Ask anything…"
+	ta.Prompt = ""                                           // we draw our own blue accent bar (composerView)
+	ta.ShowLineNumbers = false                               //
+	ta.CharLimit = 0                                         // no limit — prompts can be long
+	ta.SetHeight(1)                                          // grows with content up to maxComposerRows
+	ta.KeyMap.InsertNewline.SetKeys("shift+enter", "ctrl+j") // Enter submits; these add a newline
+	// Drop the focused cursor-line highlight + base frame to keep the minimal look.
+	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	ta.FocusedStyle.Base = lipgloss.NewStyle()
+	ta.BlurredStyle.CursorLine = lipgloss.NewStyle()
+	ta.Focus()
 	m := Model{
 		cfg:    cfg,
 		styles: theme.DefaultStyles(),
@@ -103,7 +111,7 @@ func New(cfg Config) Model {
 		ctx:    ctx,
 		cancel: cancel,
 		store:  newStore(),
-		input:  ti,
+		input:  ta,
 		model:  promptModel{Provider: cfg.Provider, Model: cfg.Model},
 	}
 	c, err := forgeclient.New(cfg.URL, forgeclient.Options{
@@ -127,9 +135,17 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The composer placeholder follows the screen (design app.jsx:355).
+	if m.screen == ScreenSession {
+		m.input.Placeholder = "Reply, or / for commands"
+	} else {
+		m.input.Placeholder = "Ask anything…"
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m = m.resizeComposer()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -154,9 +170,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			return m.submit()
 		}
-		// Everything else goes to the composer.
+		// Everything else goes to the composer (shift+enter / ctrl+j add a newline).
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
+		m = m.resizeComposer() // auto-grow to fit the new content
 		return m, cmd
 
 	case sessionOpenedMsg:
@@ -334,6 +351,33 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// maxComposerRows caps the auto-growing composer; beyond it the textarea scrolls.
+const maxComposerRows = 8
+
+// resizeComposer sets the composer's width to the content column and grows its
+// height to fit the current text (clamped to [1, maxComposerRows]).
+//
+// Height tracks LineCount, which is logical (newline-separated) lines, not
+// wrapped visual rows — so a single very long line stays one row and scrolls
+// inside the box rather than growing. Explicit newlines (the common multi-line
+// case) grow it as expected. True wrapped-height auto-grow is a follow-up.
+func (m Model) resizeComposer() Model {
+	w := m.barWidth() - 1 // inside the accent bar: barWidth less its left padding
+	if w < 1 {
+		w = 1
+	}
+	m.input.SetWidth(w)
+	h := m.input.LineCount()
+	if h < 1 {
+		h = 1
+	}
+	if h > maxComposerRows {
+		h = maxComposerRows
+	}
+	m.input.SetHeight(h)
+	return m
+}
+
 // submit sends the composer's text: it creates a session first if none is open,
 // then prompts. Requires a resolved model.
 func (m Model) submit() (tea.Model, tea.Cmd) {
@@ -346,6 +390,7 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.input.SetValue("")
+	m = m.resizeComposer() // collapse back to one row
 	if m.cfg.SessionID == "" {
 		return m, createSessionCmd(m.ctx, m.client, text)
 	}
@@ -374,7 +419,7 @@ func (m Model) viewSplash() string {
 	if m.err != nil {
 		status = lipgloss.NewStyle().Foreground(s.P.Red).Render(m.err.Error())
 	}
-	hint := s.Faint.Render("enter send · ctrl+c quit")
+	hint := s.Faint.Render("enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit")
 
 	body := lipgloss.JoinVertical(lipgloss.Center, wordmark, "", composer, "", hint, "", status)
 	if m.width == 0 || m.height == 0 {

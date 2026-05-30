@@ -353,3 +353,19 @@ are the `[ ]` notes above (deferred edges) + the deferred live PTY WS conformanc
       (The engine-level TestLive already proves the model wire; this proves the HTTP surface.)
 - [ ] DESIGN CONFIRM: HTTP default permission policy is allow-all until plan-04 config/agent rules;
       the prompt loop runs on context.WithoutCancel(request) so a disconnect doesn't abort (only /abort does).
+
+## TUI: model switcher + multi-line composer (2026-05-30)
+- [ ] EYEBALL (model switcher, PR #15): `ctrl+p` → Switch model opens pre-highlighted (●) on the
+      current model, lists only connected providers' models, windows with `↑/↓ more` when long
+      (~80 in the live opencode catalog). Pick another → status line shows `model · <prov>/<model>`
+      and the next prompt runs on it. No `--provider/--model` flags needed.
+- [ ] EYEBALL (composer): the input is now a real multi-line editor. `ctrl+j` (and `shift+enter`
+      in terminals that distinguish it) inserts a newline; `enter` submits; the box auto-grows with
+      content (cap 8 rows) and collapses after sending. Long lines wrap to the content column.
+      Placeholder reads "Ask anything…" on splash, "Reply, or / for commands" in a session.
+
+## Pre-existing (NOT from this work) — flagged
+- [ ] BUG: `scripts/run-conformance.sh self` fails on `session-create-list` step 2
+      (`body.(root): len 22 != len 25`) — recorded fixtures are stale vs the current Forge session
+      JSON (3 extra fields). Present on `main` before the TUI work. Re-record the session fixtures
+      to make the self-conformance gate green.
