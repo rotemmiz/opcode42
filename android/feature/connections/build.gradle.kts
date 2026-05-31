@@ -25,6 +25,7 @@ dependencies {
     api(project(":core:sdk"))
     implementation(libs.security.crypto)
     implementation(libs.android.lifecycle.viewmodel.compose)
+    implementation(libs.android.lifecycle.runtime.compose)
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
     kapt(libs.hilt.android.compiler)
@@ -33,4 +34,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

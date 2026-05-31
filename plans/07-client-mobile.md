@@ -285,6 +285,101 @@ All API calls include `x-opencode-directory: <base64(path)>` (v2 format) per the
 contract. The Kotlin SDK (plan 06) handles this transparently via a request factory that accepts
 `directory: String?`.
 
+### mDNS / LAN auto-discovery (zero-config connect)
+
+**Goal.** Let a user connect to a daemon on the same Wi-Fi **without typing an address**. The app
+browses the local network for advertised daemons and offers them as one-tap "suggested
+connections" that feed the existing `ServerConnectionManager.add(...)` flow above. Manual entry
+stays as the fallback.
+
+**Service type.** Browse for **`_opencode._tcp.`** (preferred — distinguishes a real daemon from
+any other HTTP service); optionally also `_http._tcp.` as a secondary. TXT-record keys read when
+present:
+
+| TXT key     | Meaning                                           |
+|-------------|---------------------------------------------------|
+| `path`      | base path (default `/`)                           |
+| `directory` | suggested `x-opencode-directory`                  |
+| `version`   | daemon version (display + compat hint)            |
+| `auth`      | `basic` / `token` / `none` (drives the auth form) |
+
+A resolved record yields `scheme://host:port` → run through `normalizeServerUrl` (same path as
+manual add) → probe with `GET /app` before showing it as "found on your network".
+
+#### Android implementation
+
+Use the platform **`android.net.nsd.NsdManager`** — no third-party dependency:
+
+```kotlin
+// :feature:connections — DiscoveryManager.kt
+class DiscoveryManager(private val nsd: NsdManager, private val wifi: WifiManager) {
+    private var lock: WifiManager.MulticastLock? = null
+    private val listener = object : NsdManager.DiscoveryListener { /* onServiceFound -> resolve */ }
+
+    fun start(serviceType: String = "_opencode._tcp.") {
+        lock = wifi.createMulticastLock("forge-mdns").apply { setReferenceCounted(true); acquire() }
+        nsd.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, listener)
+    }
+    fun stop() { runCatching { nsd.stopServiceDiscovery(listener) }; lock?.release(); lock = null }
+}
+```
+
+- **Resolve serially.** Pre-API-34, `NsdManager.resolveService` can throw if called concurrently —
+  queue resolves, or use `registerServiceInfoCallback` on API 34+.
+- **Lifecycle.** Browse only while the connections / add-server screen is `STARTED`; `stop()` on
+  `onStop` to drop the multicast lock and save battery.
+- **De-dupe** by `host:port` and merge with already-saved connections (mark "added" vs "new").
+
+**Manifest.** `INTERNET` is already declared; add multicast reception:
+
+```xml
+<uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+```
+
+**UI.** A "Servers on your network" section at the top of the Add-Server screen: a live list of
+discovered daemons (name, host:port, version), each tappable to prefill the form and — if
+`auth=none` — add immediately. Spinner while browsing; empty-state explains "make sure you're on
+the same Wi-Fi."
+
+#### Bonjour on top of opencode (for testing — no opencode code changes)
+
+opencode does **not** advertise itself over mDNS today, so during development we run a tiny
+**sidecar publisher** next to the daemon. This needs **zero changes to opencode** and lets us
+build/test the Android discovery path immediately. Ship these as `scripts/mdns-advertise.*`.
+
+- **macOS (built-in Bonjour):**
+  ```bash
+  dns-sd -R "opencode" _opencode._tcp local 4096 path=/ version=dev
+  # keep running; advertises only while alive
+  ```
+- **Linux (avahi static service — survives reboot, no process to babysit):**
+  ```xml
+  <!-- /etc/avahi/services/opencode.service -->
+  <service-group>
+    <name>opencode</name>
+    <service><type>_opencode._tcp</type><port>4096</port>
+      <txt-record>path=/</txt-record></service>
+  </service-group>
+  ```
+  or one-shot: `avahi-publish-service "opencode" _opencode._tcp 4096 path=/`
+- **Cross-platform sidecar:** a ~15-line Python (`zeroconf`) or Go script registering the same
+  record — for CI/containers where `dns-sd`/`avahi` aren't present.
+
+> **Later (native):** when the Forge daemon matures it should advertise `_opencode._tcp` itself at
+> startup (track in plan 01 / 13). The sidecar is a testing scaffold, not the long-term answer.
+
+#### Testing notes & gotchas
+
+- **Use a physical device** on the same Wi-Fi for end-to-end testing. The Android **emulator** sits
+  behind a virtual NAT and generally **cannot see host-LAN mDNS**, so emulator + host `dns-sd`
+  won't discover each other reliably.
+- Unit-test `DiscoveryManager` against a **fake `NsdManager`** (start/stop, multicast lock
+  acquire/release, serial resolve, de-dupe). Manual matrix: device finds sidecar, TXT parsing,
+  auth-required prompt, two daemons on the LAN, Wi-Fi off → graceful empty state.
+- **Build order:** (1) sidecar script + manifest perms, (2) `DiscoveryManager` + fake-based tests,
+  (3) Add-Server "found on network" UI wired to `add(...)`, (4) device E2E.
+
 ---
 
 ## SSE lifecycle on Android (the hard part)
@@ -521,6 +616,7 @@ Phase A complete = a usable mobile coding assistant against real opencode.
 - Push notifications (plan 13).
 - File attachment in prompt input.
 - Session forking, archiving.
+- mDNS / LAN auto-discovery: browse `_opencode._tcp` so users connect without typing an address (see "mDNS / LAN auto-discovery" under Connection and auth). Includes a Bonjour sidecar to advertise opencode for testing.
 - Diff viewer for `session.diff` events.
 - KMP extraction of `:core:network` and `:core:store` for future iOS port.
 
