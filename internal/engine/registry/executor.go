@@ -28,6 +28,8 @@ type Executor struct {
 	// Questioner is the per-instance question manager passed to the `question`
 	// tool via tool.Context (nil when no client can answer).
 	Questioner tool.Asker
+	// Subagent runs nested agent tasks for the `task` tool (nil to disable).
+	Subagent tool.SubagentRunner
 }
 
 var _ processor.ToolExecutor = (*Executor)(nil)
@@ -53,7 +55,7 @@ func (e *Executor) Execute(ctx context.Context, call processor.ToolCall) (proces
 	}
 	res, err := t.Run(ctx, call.Input, tool.Context{
 		SessionID: call.SessionID, MessageID: call.MessageID, CallID: call.CallID,
-		Directory: e.Directory, Questioner: e.Questioner,
+		Directory: e.Directory, Questioner: e.Questioner, Subagent: e.Subagent,
 	})
 	if err != nil {
 		return processor.ToolResult{}, err

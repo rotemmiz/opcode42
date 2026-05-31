@@ -114,6 +114,29 @@ func (s *Store) Create(ctx context.Context, dir string) (Info, error) {
 	return info, nil
 }
 
+// CreateChild makes a session like Create but linked to a parent (the subagent
+// task tool spawns these; GET /children returns them). opencode's subagent
+// sessions set parentID (session/session.ts).
+func (s *Store) CreateChild(ctx context.Context, dir, parentID string) (Info, error) {
+	now := time.Now().UnixMilli()
+	root := worktree.Root(dir)
+	info := Info{
+		ID:        id.Descending(id.Session),
+		ParentID:  parentID,
+		Slug:      randomSlug(),
+		ProjectID: projectID(root),
+		Directory: dir,
+		Path:      worktree.RelPath(root, dir),
+		Title:     titlePrefix + time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+		Version:   s.CompatVersion,
+		Time:      Time{Created: now, Updated: now},
+	}
+	if err := s.insert(ctx, info, root); err != nil {
+		return Info{}, err
+	}
+	return info, nil
+}
+
 // Fork creates a new session derived from an existing one: same directory,
 // path, and project, a new id, and a "(fork #N)" title. It deliberately does
 // NOT set parentID — matching opencode 1.15.x's observed behavior, where forked

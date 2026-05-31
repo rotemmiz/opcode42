@@ -78,6 +78,7 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 		if e.cfg.Questions != nil {
 			executor.Questioner = e.cfg.Questions
 		}
+		executor.Subagent = e.cfg.Subagent
 		proc := processor.New(processor.Config{
 			Store: e.cfg.Store, Bus: e.cfg.Bus, Catalog: e.cfg.Catalog,
 			Executor: executor, Asker: e.cfg.Permissions, SessionID: sessionID,

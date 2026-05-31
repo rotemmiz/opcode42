@@ -166,8 +166,9 @@ type SubagentRunner interface {
 	Run(ctx context.Context, req TaskRequest) (string, error)
 }
 
-// Task spawns a subagent session via an injected runner.
-type Task struct{ Runner SubagentRunner }
+// Task spawns a subagent session. Its runner is injected at execution time via
+// tool.Context.Subagent (per-instance, like the question manager).
+type Task struct{}
 
 // Info describes the task tool.
 func (Task) Info() Info {
@@ -190,14 +191,14 @@ type taskParams struct {
 
 // Run delegates to the injected runner.
 func (t Task) Run(ctx context.Context, input map[string]any, tctx Context) (Result, error) {
-	if t.Runner == nil {
+	if tctx.Subagent == nil {
 		return Result{}, fmt.Errorf("task: not available")
 	}
 	var p taskParams
 	if err := decode(input, &p); err != nil {
 		return Result{}, err
 	}
-	out, err := t.Runner.Run(ctx, TaskRequest{Description: p.Description, Prompt: p.Prompt,
+	out, err := tctx.Subagent.Run(ctx, TaskRequest{Description: p.Description, Prompt: p.Prompt,
 		Agent: p.Agent, ParentSessionID: tctx.SessionID})
 	if err != nil {
 		return Result{}, err

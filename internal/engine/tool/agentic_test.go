@@ -99,8 +99,10 @@ type fakeRunner struct{ out string }
 func (f fakeRunner) Run(context.Context, TaskRequest) (string, error) { return f.out, nil }
 
 func TestTask_UsesRunner(t *testing.T) {
-	res, err := Task{Runner: fakeRunner{out: "done"}}.Run(context.Background(),
-		map[string]any{"description": "d", "prompt": "p", "agent": "build"}, tctx("ses_1"))
+	ctx := tctx("ses_1")
+	ctx.Subagent = fakeRunner{out: "done"}
+	res, err := Task{}.Run(context.Background(),
+		map[string]any{"description": "d", "prompt": "p", "agent": "build"}, ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

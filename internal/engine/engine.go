@@ -18,6 +18,7 @@ import (
 	"github.com/rotemmiz/forge/internal/engine/question"
 	"github.com/rotemmiz/forge/internal/engine/registry"
 	"github.com/rotemmiz/forge/internal/engine/runstate"
+	"github.com/rotemmiz/forge/internal/engine/tool"
 	"github.com/rotemmiz/forge/internal/id"
 )
 
@@ -38,9 +39,12 @@ type Config struct {
 	Providers   ProviderFactory
 	Permissions *permission.Manager
 	Questions   *question.Manager
-	Bus         *bus.Bus
-	RunState    *runstate.RunState
-	Directory   string
+	// Subagent runs nested agent tasks for the `task` tool. It is set only on
+	// top-level prompts (nil inside a subagent) to bound recursion.
+	Subagent  tool.SubagentRunner
+	Bus       *bus.Bus
+	RunState  *runstate.RunState
+	Directory string
 	// Rulesets are the merged agent/config permission rules for tool gating.
 	Rulesets []permission.Ruleset
 	Flags    registry.Flags

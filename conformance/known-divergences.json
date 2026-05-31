@@ -38,5 +38,11 @@
     "phase": "B",
     "reason": "GET /find/file approximates opencode two ways, so it is not gated by a parity scenario: (1) ignore semantics — opencode delegates to `rg --files` (full .gitignore); Forge uses a fixed ignore set (.git/node_modules/vendor/.forge + hidden), so results may include files .gitignore would exclude. (2) ranking — opencode uses fuzzysort; Forge uses its own subsequence scorer, so result ORDER differs (membership is comparable, order is not). The missing-query 400 body is Forge's {_tag,message} rather than opencode's Effect Query error.",
     "track": "TODO: optional — vendor a .gitignore-aware walker for exact membership parity (plan 04)"
+  },
+  {
+    "scenario": "task-tool-subagent",
+    "phase": "B",
+    "reason": "The `task` subagent tool is wired (child session linked to parent, nested agent loop, last-text result wrapped in opencode's <task>/<task_result> envelope). One parity gap: opencode also disables `todowrite` on the child unless the agent's permission grants it (tool/task.ts:194); Forge only disables `task` (nil subagent → bounded recursion). Honoring per-message tool disables needs PromptInput.Tools wired into the registry filter (not yet consumed), so it is deferred. Child session titles also use the generic timestamp rather than opencode's '<desc> (@agent subagent)'.",
+    "track": "TODO: wire per-message Tools gating + descriptive child titles (plan 02 follow-up)"
   }
 ]

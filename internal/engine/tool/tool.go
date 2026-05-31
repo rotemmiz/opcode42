@@ -25,6 +25,9 @@ type Context struct {
 	// Questioner is the per-instance question manager the `question` tool uses
 	// to ask the user and block for answers; nil when no client can answer.
 	Questioner Asker
+	// Subagent runs a nested agent task for the `task` tool; nil when subagent
+	// spawning is unavailable (e.g. inside a subagent, to bound recursion).
+	Subagent SubagentRunner
 }
 
 // Result is a tool's output. Output is the model-facing text; Title is a short

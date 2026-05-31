@@ -11,6 +11,7 @@ import (
 	"github.com/rotemmiz/forge/internal/engine"
 	"github.com/rotemmiz/forge/internal/engine/permission"
 	"github.com/rotemmiz/forge/internal/engine/runstate"
+	"github.com/rotemmiz/forge/internal/engine/tool"
 	"github.com/rotemmiz/forge/internal/instance"
 	"github.com/rotemmiz/forge/internal/resource"
 	"github.com/rotemmiz/forge/internal/session"
@@ -69,7 +70,7 @@ func (b promptBody) toInput(sessionID string) engine.PromptInput {
 // the resolved agent's permission rules (the executor evaluates tool calls
 // against them; an unmatched call defaults to "ask" and blocks on a
 // permission.asked event).
-func buildEngine(opts Options, inst *instance.Context, directory string, rulesets []permission.Ruleset) *engine.Engine {
+func buildEngine(opts Options, inst *instance.Context, directory string, rulesets []permission.Ruleset, subagent tool.SubagentRunner) *engine.Engine {
 	return engine.New(engine.Config{
 		Store:       opts.Messages,
 		Catalog:     opts.Catalog,
@@ -77,6 +78,7 @@ func buildEngine(opts Options, inst *instance.Context, directory string, ruleset
 		Providers:   opts.Providers,
 		Permissions: inst.Permissions,
 		Questions:   inst.Questions,
+		Subagent:    subagent,
 		Bus:         inst.Bus,
 		RunState:    inst.RunState,
 		Directory:   directory,
@@ -144,7 +146,9 @@ func promptHandler(opts Options, async bool) http.HandlerFunc {
 		}
 
 		inst := opts.Instances.Get(directory)
-		eng := buildEngine(opts, inst, directory, agentRulesets(agent))
+		runner := subagentRunner{opts: opts, inst: inst, directory: directory,
+			provider: body.Model.ProviderID, model: body.Model.ModelID}
+		eng := buildEngine(opts, inst, directory, agentRulesets(agent), runner)
 
 		// Detach from the request context: a client disconnect must NOT abort the
 		// run — only POST /abort cancels it (via the run lock), matching opencode.
