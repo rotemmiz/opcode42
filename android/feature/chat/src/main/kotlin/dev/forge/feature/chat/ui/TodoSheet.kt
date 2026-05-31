@@ -1,6 +1,13 @@
 package dev.forge.feature.chat.ui
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateValue
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,6 +35,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -91,14 +101,17 @@ fun TodoSheet(
             )
         }
 
+        val topShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .height(with(density) { height.value.toDp() })
-                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                .shadow(elevation = 12.dp, shape = topShape, clip = false)
+                .clip(topShape)
                 .background(SurfaceContainerHigh),
         ) {
+            HorizontalDivider(color = Hairline) // 1px hairline top (mock)
             HandleAndPeekRow(
                 todos = todos,
                 open = open,
@@ -229,7 +242,31 @@ private fun TodoRow(todo: TodoItem) {
             },
             modifier = Modifier.weight(1f),
         )
+        if (doing) BrailleSpinner()
     }
+}
+
+/** Braille frame spinner (mock: ⠋⠙⠹… at the in-progress row's end), amber. */
+@Composable
+private fun BrailleSpinner() {
+    val frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    val transition = rememberInfiniteTransition(label = "spinner")
+    val index by transition.animateValue(
+        initialValue = 0,
+        targetValue = frames.length,
+        typeConverter = Int.VectorConverter,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = frames.length * 90, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "frame",
+    )
+    Text(
+        text = frames[index % frames.length].toString(),
+        fontFamily = FontFamily.Monospace,
+        fontSize = 13.sp,
+        color = Secondary,
+    )
 }
 
 @Composable
@@ -242,14 +279,13 @@ internal fun TodoStatusGlyph(doing: Boolean, done: Boolean) {
             Icon(Icons.Default.Check, contentDescription = null, tint = OnPrimary, modifier = Modifier.size(13.dp))
         }
         doing -> Box(
+            // 2dp amber inset ring + 7dp center dot (mock: box-shadow inset 2px)
             Modifier
                 .size(20.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(Secondary.copy(alpha = 0.18f))
-                .padding(2.dp),
+                .border(2.dp, Secondary, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Box(Modifier.size(7.dp).clip(RoundedCornerShape(4.dp)).background(Secondary))
+            Box(Modifier.size(7.dp).clip(CircleShape).background(Secondary))
         }
         else -> Box(
             Modifier
