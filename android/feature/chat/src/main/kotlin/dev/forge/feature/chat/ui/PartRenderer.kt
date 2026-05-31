@@ -232,46 +232,40 @@ private val DiffHunkBg = Color(0x1AB08CD4)
  *  possible inside the scrolling stream), so a huge snapshot would ANR. */
 private const val MAX_DIFF_LINES = 400
 
+/** Git/patch metadata lines the design's clean unified diff omits (it starts at
+ *  `--- file`). We keep only `---`/`+++`/`@@`/content rows. */
+private fun isDiffNoise(line: String): Boolean =
+    line.startsWith("diff --git") || line.startsWith("index ") ||
+        line.startsWith("Index:") || line.startsWith("===") ||
+        line.startsWith("new file mode") || line.startsWith("deleted file mode") ||
+        line.startsWith("old mode") || line.startsWith("new mode") ||
+        line.startsWith("similarity index") || line.startsWith("rename ") ||
+        line.startsWith("copy ") || line.startsWith("\\ No newline")
+
 @Composable
 fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier) {
-    val totalLines = diffs.sumOf { it.patch?.lines()?.size ?: 0 }
+    // Strip git-diff cruft so the body reads like the design's unified diff.
+    val perFile = diffs.map { it.patch?.lines().orEmpty().filterNot(::isDiffNoise) }
+    val totalLines = perFile.sumOf { it.size }
     var budget = MAX_DIFF_LINES
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(SurfaceContainerLowest),
     ) {
-        diffs.forEach { diff ->
-            if (budget <= 0) return@forEach
-            // File header — redundant for a single-file card (the card header
-            // already names it), so only shown when several files are bundled.
-            if (diffs.size > 1) {
-                Text(
-                    text = diff.file ?: "",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = OnSurfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(SurfaceContainerHigh)
-                        .padding(horizontal = 12.dp, vertical = 5.dp),
-                )
-            }
-            // Patch lines — design DiffRow grammar: a 1-char gutter sign column
-            // (colored) + body text in onSurface; whole-line tint for add/del,
-            // purple hunks, red/cyan ---/+++ headers (design §2).
-            val lines = diff.patch?.lines().orEmpty()
-            if (lines.isNotEmpty()) {
-                val shown = lines.take(budget)
-                budget -= shown.size
-                val scrollState = rememberScrollState()
-                Box(modifier = Modifier.horizontalScroll(scrollState)) {
-                    // IntrinsicSize.Max → all rows share the widest line's width,
-                    // so add/del tints span the full row (design DiffRow look).
-                    Column(modifier = Modifier.width(IntrinsicSize.Max).padding(vertical = 8.dp)) {
-                        shown.forEach { line -> DiffLine(line) }
-                    }
+        perFile.forEach { lines ->
+            if (budget <= 0 || lines.isEmpty()) return@forEach
+            // Design DiffRow grammar: a 1-char gutter sign column (colored) + body
+            // in onSurface; whole-line tint for add/del, purple hunks, red/cyan
+            // ---/+++ headers (which name the file — no separate header bar). §2
+            val shown = lines.take(budget)
+            budget -= shown.size
+            val scrollState = rememberScrollState()
+            Box(modifier = Modifier.horizontalScroll(scrollState)) {
+                // IntrinsicSize.Max → all rows share the widest line's width,
+                // so add/del tints span the full row (design DiffRow look).
+                Column(modifier = Modifier.width(IntrinsicSize.Max).padding(vertical = 8.dp)) {
+                    shown.forEach { line -> DiffLine(line) }
                 }
             }
         }
