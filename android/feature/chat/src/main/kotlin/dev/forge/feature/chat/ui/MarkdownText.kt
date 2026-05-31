@@ -238,8 +238,8 @@ private fun CodeBlockView(block: MdBlock.CodeBlock) {
         modifier = Modifier
             .padding(horizontal = 14.dp, vertical = 4.dp)
             .fillMaxWidth()
-            .background(SurfaceContainerLowest, RoundedCornerShape(6.dp))
-            .border(1.dp, Hairline, RoundedCornerShape(6.dp)),
+            .background(SurfaceContainerLowest, RoundedCornerShape(4.dp))
+            .border(1.dp, Hairline, RoundedCornerShape(4.dp)),
     ) {
         Text(
             text = block.lines.joinToString("\n"),
