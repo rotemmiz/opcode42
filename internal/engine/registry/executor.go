@@ -30,6 +30,8 @@ type Executor struct {
 	Questioner tool.Asker
 	// Subagent runs nested agent tasks for the `task` tool (nil to disable).
 	Subagent tool.SubagentRunner
+	// Skiller loads named skills for the `skill` tool (nil to disable).
+	Skiller tool.SkillSource
 }
 
 var _ processor.ToolExecutor = (*Executor)(nil)
@@ -55,7 +57,7 @@ func (e *Executor) Execute(ctx context.Context, call processor.ToolCall) (proces
 	}
 	res, err := t.Run(ctx, call.Input, tool.Context{
 		SessionID: call.SessionID, MessageID: call.MessageID, CallID: call.CallID,
-		Directory: e.Directory, Questioner: e.Questioner, Subagent: e.Subagent,
+		Directory: e.Directory, Questioner: e.Questioner, Subagent: e.Subagent, Skiller: e.Skiller,
 	})
 	if err != nil {
 		return processor.ToolResult{}, err

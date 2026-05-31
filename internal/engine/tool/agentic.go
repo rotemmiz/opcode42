@@ -125,8 +125,9 @@ type SkillSource interface {
 	Load(name string) (string, error)
 }
 
-// Skill loads a named skill's instructions into the conversation.
-type Skill struct{ Source SkillSource }
+// Skill loads a named skill's instructions into the conversation. Its source is
+// injected at execution time via tool.Context.Skiller (per-instance).
+type Skill struct{}
 
 // Info describes the skill tool.
 func (Skill) Info() Info {
@@ -138,15 +139,15 @@ func (Skill) Info() Info {
 }
 
 // Run loads the skill via the injected source.
-func (s Skill) Run(_ context.Context, input map[string]any, _ Context) (Result, error) {
-	if s.Source == nil {
+func (s Skill) Run(_ context.Context, input map[string]any, tctx Context) (Result, error) {
+	if tctx.Skiller == nil {
 		return Result{}, fmt.Errorf("skill: not available")
 	}
 	name, _ := input["name"].(string)
 	if name == "" {
 		return Result{}, fmt.Errorf("skill: name is required")
 	}
-	body, err := s.Source.Load(name)
+	body, err := tctx.Skiller.Load(name)
 	if err != nil {
 		return Result{}, err
 	}

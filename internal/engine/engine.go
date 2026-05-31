@@ -41,7 +41,9 @@ type Config struct {
 	Questions   *question.Manager
 	// Subagent runs nested agent tasks for the `task` tool. It is set only on
 	// top-level prompts (nil inside a subagent) to bound recursion.
-	Subagent  tool.SubagentRunner
+	Subagent tool.SubagentRunner
+	// Skills loads named skills for the `skill` tool.
+	Skills    tool.SkillSource
 	Bus       *bus.Bus
 	RunState  *runstate.RunState
 	Directory string

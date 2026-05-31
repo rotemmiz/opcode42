@@ -219,7 +219,7 @@ func loadCatalog(ctx context.Context) catalog.Catalog {
 func builtinRegistry(todos *tool.TodoStore) *registry.Registry {
 	return registry.New(
 		tool.Bash{}, tool.Read{}, tool.Write{}, tool.Edit{}, tool.Glob{}, tool.Grep{}, tool.Patch{},
-		tool.WebFetch{}, tool.TodoWrite{Store: todos}, tool.Question{}, tool.Task{},
+		tool.WebFetch{}, tool.TodoWrite{Store: todos}, tool.Question{}, tool.Task{}, tool.Skill{},
 	)
 }
 

@@ -50,5 +50,11 @@
     "phase": "C",
     "reason": "System instructions from AGENTS.md/CLAUDE.md/CONTEXT.md (project upward-walk + global ~/.config/opencode + ~/.claude) and local config `instructions[]` are resolved into the system prompt. http(s) URLs in `instructions[]` are NOT fetched (opencode fetches them; instruction.ts:154-159) — remote instruction fetch is deferred. The `disable_claude_code_prompt` flag is also not honored yet (CLAUDE.md is always a candidate).",
     "track": "TODO: fetch remote instruction URLs + honor disable_claude_code_prompt (plan 04)"
+  },
+  {
+    "scenario": "skill-list",
+    "phase": "C",
+    "reason": "GET /skill loads {skill,skills}/**/SKILL.md from the .opencode config dirs (project + ~/.config/opencode), name from frontmatter (no-name skipped), content = body, dedup by name. Two gaps vs opencode: (1) Forge ships no built-in skills (opencode bundles e.g. customize-opencode, location '<built-in>'); (2) Forge does not scan the .claude/.agents external `skills/**/SKILL.md` dirs. So /skill is a subset of opencode's; not gated by a parity scenario.",
+    "track": "TODO: embed built-in skills + scan .claude/.agents skill dirs (plan 04 M6)"
   }
 ]

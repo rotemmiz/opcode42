@@ -14,6 +14,20 @@ func registerResourceRoutes(reg func(method, path string, h http.HandlerFunc), c
 	reg(http.MethodGet, "/agent", agentListHandler())
 	reg(http.MethodGet, "/command", commandListHandler())
 	reg(http.MethodGet, "/provider", providerListHandler(cat))
+	reg(http.MethodGet, "/skill", skillListHandler())
+}
+
+// skillListHandler serves the .opencode/{skill,skills} skills for the request
+// directory (GET /skill).
+func skillListHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		dir := DirectoryFromContext(r.Context())
+		skills := resource.LoadSkills(dir)
+		if skills == nil {
+			skills = []resource.Skill{}
+		}
+		writeJSON(w, http.StatusOK, skills)
+	}
 }
 
 // agentListHandler serves the built-in + .opencode/agent(s) agents for the

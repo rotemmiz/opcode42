@@ -28,6 +28,9 @@ type Context struct {
 	// Subagent runs a nested agent task for the `task` tool; nil when subagent
 	// spawning is unavailable (e.g. inside a subagent, to bound recursion).
 	Subagent SubagentRunner
+	// Skiller loads a named skill's instructions for the `skill` tool; nil when
+	// no skill source is available.
+	Skiller SkillSource
 }
 
 // Result is a tool's output. Output is the model-facing text; Title is a short
