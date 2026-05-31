@@ -1,6 +1,7 @@
 package dev.forge.feature.sessions.ui
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -64,6 +65,8 @@ fun SessionListScreen(
             else -> SessionList(
                 sessions = uiState.sessions,
                 onSessionClick = onSessionClick,
+                onForkSession = { sessionId -> viewModel.forkSession(sessionId) { newSession -> onSessionClick(newSession) } },
+                onDeleteSession = { sessionId -> viewModel.deleteSession(sessionId) },
                 modifier = Modifier.padding(padding),
             )
         }
@@ -74,40 +77,79 @@ fun SessionListScreen(
 private fun SessionList(
     sessions: List<Session>,
     onSessionClick: (Session) -> Unit,
+    onForkSession: (String) -> Unit,
+    onDeleteSession: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier = modifier.fillMaxSize()) {
         items(sessions, key = { it.id }) { session ->
-            SessionRow(session = session, onClick = { onSessionClick(session) })
+            SessionRow(
+                session = session,
+                onClick = { onSessionClick(session) },
+                onFork = { onForkSession(session.id) },
+                onDelete = { onDeleteSession(session.id) },
+            )
             HorizontalDivider()
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SessionRow(session: Session, onClick: () -> Unit) {
-    ListItem(
-        headlineContent = {
-            Text(
-                text = session.title ?: session.id,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-        supportingContent = session.directory?.let { dir ->
-            { Text(dir, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-        },
-        trailingContent = {
-            session.tokens?.let { tokens ->
+private fun SessionRow(
+    session: Session,
+    onClick: () -> Unit,
+    onFork: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    var showMenu by remember { mutableStateOf(false) }
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        ListItem(
+            headlineContent = {
                 Text(
-                    text = "${(tokens.input + tokens.output).toLong() / 1000}K tokens",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = session.title ?: session.id,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-            }
-        },
-        modifier = Modifier.clickable(onClick = onClick),
-    )
+            },
+            supportingContent = session.directory?.let { dir ->
+                { Text(dir, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            },
+            trailingContent = {
+                session.tokens?.let { tokens ->
+                    Text(
+                        text = "${(tokens.input + tokens.output).toLong() / 1000}K tokens",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            modifier = Modifier.combinedClickable(
+                onClick = onClick,
+                onLongClick = { showMenu = true },
+            ),
+        )
+        DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { showMenu = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text("Fork session") },
+                onClick = {
+                    showMenu = false
+                    onFork()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Delete session") },
+                onClick = {
+                    showMenu = false
+                    onDelete()
+                },
+            )
+        }
+    }
 }
 
 @Composable

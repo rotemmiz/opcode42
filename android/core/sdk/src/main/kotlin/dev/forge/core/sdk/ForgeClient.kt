@@ -197,6 +197,15 @@ class ForgeClient @Inject constructor(
             body = JsonObject(emptyMap()),
         ) { _ -> Unit }
 
+    // ─── Session fork / delete ────────────────────────────────────────────────
+
+    suspend fun forkSession(sessionId: String): Session = post(
+        path = "/session/$sessionId/fork",
+        body = JsonObject(emptyMap()),
+    ) { json -> ForgeJson.decodeFromJsonElement(Session.serializer(), json) }
+
+    suspend fun deleteSession(sessionId: String) = delete("/session/$sessionId")
+
     // ─── HTTP helpers ─────────────────────────────────────────────────────────
 
     private suspend fun <T> get(
@@ -231,6 +240,17 @@ class ForgeClient @Inject constructor(
             if (!resp.isSuccessful) error("HTTP ${resp.code} for POST $path: $respBody")
             val elem = try { ForgeJson.parseToJsonElement(respBody) } catch (_: Exception) { JsonObject(emptyMap()) }
             parse(elem)
+        }
+    }
+
+    private suspend fun delete(path: String): Unit = withContext(Dispatchers.IO) {
+        val url = buildUrl(path, null)
+        val req = Request.Builder().url(url).delete().build()
+        httpClient.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                val body = resp.body?.string() ?: ""
+                error("HTTP ${resp.code} for DELETE $path: $body")
+            }
         }
     }
 

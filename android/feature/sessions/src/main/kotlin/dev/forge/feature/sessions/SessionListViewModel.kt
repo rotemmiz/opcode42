@@ -54,6 +54,29 @@ class SessionListViewModel @Inject constructor(
         }
     }
 
+    fun forkSession(sessionId: String, onForked: (Session) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val newSession = client.forkSession(sessionId)
+                store.dispatch(dev.forge.core.model.AppEvent.SessionUpdated(newSession))
+                onForked(newSession)
+            } catch (e: Exception) {
+                android.util.Log.e("SessionListVM", "forkSession failed", e)
+            }
+        }
+    }
+
+    fun deleteSession(sessionId: String) {
+        viewModelScope.launch {
+            try {
+                client.deleteSession(sessionId)
+                store.dispatch(dev.forge.core.model.AppEvent.SessionRemoved(sessionId))
+            } catch (e: Exception) {
+                android.util.Log.e("SessionListVM", "deleteSession failed", e)
+            }
+        }
+    }
+
     fun createSession(directory: String? = null, onCreated: (Session) -> Unit) {
         viewModelScope.launch {
             _isCreating.value = true
