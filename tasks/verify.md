@@ -409,13 +409,33 @@ dual-run conformance.
 - [x] (automated 2026-05-31) `POST /permission/:id/reply`, `POST /question/:id/reply`,
       `POST /question/:id/reject`, `GET /session/:id/todo` return opencode-identical shapes/status
       (live-smoke vs 127.0.0.1:4096 + dual-run: all four parity scenarios pass).
-- [ ] TUI-AGAINST-FORGE: point the TUI at a Forge daemon (`forged` on a port, then
-      `go run ./cmd/forge-tui --dir "$PWD"` against it) and confirm the U10 permission overlay
-      (allow/always/reject) and U10 question overlay (single/multi-select reply + reject) drive a
-      real run end-to-end, and the U11 tasks dock renders todos as `todowrite` runs. (Needs a real
-      LLM prompt that triggers a permission/question — left for you so it doesn't auto-spend tokens.)
-- [ ] The `question` tool is now registered (multi-question, matching opencode). Confirm the model
-      can call it and the overlay renders header/options/multiple correctly.
+- [ ] TUI-AGAINST-FORGE setup. Run a Forge daemon and point the TUI at it (NOT opencode):
+      `go build -o /tmp/forged ./cmd/forged && /tmp/forged --port 4097 --host 127.0.0.1`
+      then `go run ./cmd/forge-tui --url http://127.0.0.1:4097 --dir "$PWD" --provider <id> --model <id>`
+      (a provider API key must be in the env so the agent can run tools).
+- [ ] QUESTION OVERLAY + TODO DOCK (verifiable now): prompt the agent to call the `question` tool
+      (multi-question, matching opencode) — confirm the overlay renders header/options/multiple,
+      single- and multi-select answers reach the agent, and esc/r rejects. Prompt a multi-step task
+      so it calls `todowrite`, then open the tasks dock (`ctrl+x t`) and confirm todos render/update
+      live. (Needs a real LLM prompt — left for you so it doesn't auto-spend tokens.)
+- [ ] PERMISSION OVERLAY (DEFERRED to PR-3): the `POST /permission/:id/reply` endpoint is wired +
+      unit-tested, but the HTTP prompt path currently runs with allow-all rulesets
+      (`prompt_handlers.go`), so no live `permission.asked` fires yet. Full end-to-end verification
+      (allow-once/always/reject driving a real tool) unblocks once PR-3 wires agent/config permission
+      rules. No action needed until then.
+
+## Forge gap-closing PR-2 — GET /find/file (2026-05-31, branch feat/find-file)
+Fuzzy file/dir search backing the TUI's @-mention picker (plan 04 M8); was 501 before.
+- [x] (automated 2026-05-31) GET /find/file returns repo-relative paths (dirs with trailing /),
+      query required (400 if missing), limit 1..200 (default 100), ?type=directory supported.
+      Live-smoke vs opencode: top result for "server.go" is identical; ordering is close.
+- [ ] EYEBALL @-MENTION: in the TUI-against-Forge session above, type "@" + a partial filename and
+      confirm the picker shows sensible best-first matches and inserts the chosen path. (Forge's
+      fuzzy ranking is its own scorer, not opencode's fuzzysort — order may differ slightly; that's
+      an accepted divergence, see conformance/known-divergences.json "find-file".)
+- [ ] NOTE: Forge skips a fixed ignore set (.git/node_modules/vendor/.forge + hidden) rather than
+      parsing .gitignore like opencode's `rg --files`, so results may include files .gitignore would
+      hide. Confirm acceptable, or flag for the optional .gitignore-aware walker (PR-3/plan 04).
 
 ## Pre-existing conformance note (NOT Phase 3)
 - [ ] `session-create-list` still self-diffs (GET /session returns a project-scoped, accumulating

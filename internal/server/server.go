@@ -87,6 +87,7 @@ func New(opts Options) (http.Handler, error) {
 	// the spec only at /doc. Logged in conformance/known-additions.json.
 	reg(http.MethodGet, "/openapi.json", docHandler())
 	reg(http.MethodGet, "/config", configHandler())
+	registerFindRoutes(reg)
 
 	if opts.Sessions != nil {
 		registerSessionRoutes(reg, opts.Sessions)
