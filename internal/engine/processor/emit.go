@@ -9,15 +9,21 @@ import (
 	"github.com/rotemmiz/forge/internal/engine/message"
 )
 
-// updatePart persists a part and emits message.part.updated.
+// updatePart persists a part and emits message.part.updated. The processor
+// mutates parts in place as a turn streams (e.g. text deltas), so it snapshots
+// an immutable clone under p.mu before persisting/publishing — otherwise the SSE
+// goroutine marshals the part concurrently with onTextDelta's writes.
 func (p *Processor) updatePart(ctx context.Context, part message.Part) {
-	if err := p.cfg.Store.PutPart(ctx, part); err != nil {
+	p.mu.Lock()
+	snap := message.ClonePart(part)
+	p.mu.Unlock()
+	if err := p.cfg.Store.PutPart(ctx, snap); err != nil {
 		return // a write failure on a cancelled ctx is expected; nothing to surface here
 	}
 	if p.cfg.Bus != nil {
 		p.cfg.Bus.Publish(bus.NewEvent("message.part.updated", map[string]any{
 			"sessionID": p.cfg.SessionID,
-			"part":      part,
+			"part":      snap,
 			"time":      time.Now().UnixMilli(),
 		}))
 	}
@@ -38,15 +44,20 @@ func (p *Processor) publishDelta(partID, messageID, field, delta string) {
 	}))
 }
 
-// updateMessage persists the assistant message and emits message.updated.
+// updateMessage persists the assistant message and emits message.updated. It
+// snapshots the assistant under p.mu (the processor finalizes it in place —
+// tokens, Time.Completed, Error) so the published payload is race-free.
 func (p *Processor) updateMessage(ctx context.Context) {
-	if err := p.cfg.Store.PutMessage(ctx, message.Info{Assistant: p.assistant}); err != nil {
+	p.mu.Lock()
+	snap := message.CloneAssistant(p.assistant)
+	p.mu.Unlock()
+	if err := p.cfg.Store.PutMessage(ctx, message.Info{Assistant: snap}); err != nil {
 		return
 	}
 	if p.cfg.Bus != nil {
 		p.cfg.Bus.Publish(bus.NewEvent("message.updated", map[string]any{
 			"sessionID": p.cfg.SessionID,
-			"info":      message.Info{Assistant: p.assistant},
+			"info":      message.Info{Assistant: snap},
 		}))
 	}
 }

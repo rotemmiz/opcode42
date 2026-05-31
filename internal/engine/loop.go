@@ -131,8 +131,11 @@ func (e *Engine) buildSystem(modelID, override string) []string {
 
 func (e *Engine) emitAssistant(a *message.AssistantMessage) {
 	if e.cfg.Bus != nil {
+		// Publish an immutable snapshot: this same *AssistantMessage is handed to
+		// the processor, which finalizes it in place (Finish/Tokens/Cost) while
+		// the SSE goroutine may still be marshalling this event.
 		e.cfg.Bus.Publish(bus.NewEvent("message.updated", map[string]any{
-			"sessionID": a.SessionID, "info": message.Info{Assistant: a},
+			"sessionID": a.SessionID, "info": message.Info{Assistant: message.CloneAssistant(a)},
 		}))
 	}
 }

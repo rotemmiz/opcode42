@@ -418,11 +418,12 @@ dual-run conformance.
       single- and multi-select answers reach the agent, and esc/r rejects. Prompt a multi-step task
       so it calls `todowrite`, then open the tasks dock (`ctrl+x t`) and confirm todos render/update
       live. (Needs a real LLM prompt — left for you so it doesn't auto-spend tokens.)
-- [ ] PERMISSION OVERLAY (DEFERRED to PR-3): the `POST /permission/:id/reply` endpoint is wired +
-      unit-tested, but the HTTP prompt path currently runs with allow-all rulesets
-      (`prompt_handlers.go`), so no live `permission.asked` fires yet. Full end-to-end verification
-      (allow-once/always/reject driving a real tool) unblocks once PR-3 wires agent/config permission
-      rules. No action needed until then.
+- [x] PERMISSION OVERLAY now wired (PR #38, 2026-05-31): the prompt path resolves the named agent
+      and applies its permission ruleset instead of allow-all, so a restrictive agent fires
+      `permission.asked` and blocks until `POST /permission/:id/reply`. Proven by
+      `TestPrompt_RestrictiveAgentTriggersPermission`. EYEBALL: in a TUI-against-Forge session, run a
+      prompt under a restrictive `.opencode/agent/*.md` (e.g. `permission: {bash: ask}`) and confirm
+      the U10 overlay blocks the tool until you allow/reject.
 
 ## Forge gap-closing PR-2 — GET /find/file (2026-05-31, branch feat/find-file)
 Fuzzy file/dir search backing the TUI's @-mention picker (plan 04 M8); was 501 before.
@@ -456,6 +457,21 @@ to Forge.
       path (`prompt_handlers.go`) still uses allow-all, so live `permission.asked` doesn't fire yet.
       Consuming the loaded agent's rulesets in the engine is a separate follow-up (engine does not yet
       resolve agents by name). Flag if you want that prioritized next.
+
+## Finish Phase B — PR-4/PR-5/M11 (2026-05-31, PRs #38/#40 + M11)
+Plan 02 agent loop completed end-to-end on the Go daemon.
+- [x] PR-4 (#38): engine resolves the prompt's agent → applies its model/system-prompt/permission
+      rulesets (permission overlay now fires; see above).
+- [x] PR-5 (#40): subagent `task` tool wired — child session + nested loop + `<task>`-wrapped result.
+- [x] M11: HTTP-level agent-loop SSE baseline (`TestAgentLoopSSESequence`) asserts the documented
+      sequence (server.connected → user message → text deltas → completed assistant). Building it
+      surfaced and FIXED a real data race: the emit path published live mutable part/message pointers
+      that the SSE goroutine marshalled while the processor kept mutating them; now it publishes
+      immutable snapshots (`message.ClonePart`/`CloneAssistant`, deep-copying `TextPart.Time`). Full
+      `go test ./... -race` is clean.
+- [ ] EYEBALL: run the TUI against Forge and drive a multi-step prompt with a subagent (`task`) and a
+      restrictive agent; confirm streaming, the tasks dock, the permission overlay, and subagent
+      delegation all work end-to-end. (Needs a real LLM key — left for you.)
 
 ## Pre-existing conformance note (NOT Phase 3)
 - [ ] `session-create-list` still self-diffs (GET /session returns a project-scoped, accumulating
