@@ -114,6 +114,10 @@ private fun ToolRowView(row: ToolRow) {
 internal fun ToolPart.isHiddenFromRows(): Boolean =
     tool == "todowrite" || tool == "todoread"
 
+/** Tools whose output/content deserves a dedicated code-surface block, not a row. */
+internal fun ToolPart.rendersAsOwnBlock(): Boolean =
+    tool.lowercase() == "bash" || tool.lowercase() == "write"
+
 /** A renderable unit in the stream: a run of tool calls, or any other single part. */
 sealed interface RenderItem {
     data class Tools(val parts: List<ToolPart>) : RenderItem
@@ -137,7 +141,13 @@ fun groupRenderItems(parts: List<Part>): List<RenderItem> {
     for (part in parts) {
         if (part is ToolPart) {
             if (part.isHiddenFromRows()) continue
-            pending += part
+            // bash/write break the row run and render as their own block.
+            if (part.rendersAsOwnBlock()) {
+                flush()
+                items += RenderItem.Single(part)
+            } else {
+                pending += part
+            }
         } else {
             flush()
             items += RenderItem.Single(part)
@@ -149,7 +159,6 @@ fun groupRenderItems(parts: List<Part>): List<RenderItem> {
 
 private fun toolRowOf(part: ToolPart): ToolRow {
     val tool = part.tool.lowercase()
-    val input = part.state.input()
     val glyph = if (tool in setOf("grep", "glob", "list", "ls")) "*" else "→"
     val label = when (tool) {
         "read" -> "Read"
@@ -163,7 +172,7 @@ private fun toolRowOf(part: ToolPart): ToolRow {
         "task" -> "Task"
         else -> part.tool.replaceFirstChar { it.uppercase() }
     }
-    val rawPath = input.firstString("filePath", "path", "pattern", "command", "query", "url", "description")
+    val rawPath = part.inputString("filePath", "path", "pattern", "command", "query", "url", "description")
     val path = when (tool) {
         "grep", "glob" -> rawPath?.let { "\"$it\"" }
         "read", "write", "edit", "patch", "list", "ls" -> rawPath?.substringAfterLast('/')
@@ -178,12 +187,16 @@ private fun toolRowOf(part: ToolPart): ToolRow {
     return ToolRow(glyph, label, path, meta, isError)
 }
 
-private fun ToolState.input(): JsonObject? = when (this) {
+internal fun ToolState.inputObject(): JsonObject? = when (this) {
     is ToolStatePending -> input
     is ToolStateRunning -> input
     is ToolStateCompleted -> input
     is ToolStateError -> input
 }
+
+/** First non-blank string value among [keys] in the tool's input object. */
+internal fun ToolPart.inputString(vararg keys: String): String? =
+    state.inputObject().firstString(*keys)
 
 private fun JsonObject?.firstString(vararg keys: String): String? {
     if (this == null) return null
