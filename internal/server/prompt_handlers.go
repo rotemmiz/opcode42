@@ -84,6 +84,7 @@ func buildEngine(opts Options, inst *instance.Context, directory string, ruleset
 		Rulesets:           rulesets,
 		SystemInstructions: resource.SystemInstructions(directory, loadConfig(directory)),
 		Skills:             skillResolver{directory: directory},
+		MCP:                inst.MCP,
 	})
 }
 

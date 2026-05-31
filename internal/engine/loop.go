@@ -56,11 +56,13 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 		}
 		e.emitAssistant(assistant)
 
+		tools := e.cfg.Registry.Definitions(registry.FilterInput{ProviderID: providerID, ModelID: modelID, Flags: e.cfg.Flags})
+		tools = append(tools, e.mcpDefinitions(ctx, tools)...)
 		req := &llm.Request{
 			Model:         modelID,
 			SystemPrompts: e.buildSystem(modelID, latest.User.System),
 			Messages:      message.ToModelMessages(filtered, message.SerializeModel{ProviderID: providerID, ModelID: modelID}, message.SerializeOptions{}),
-			Tools:         e.cfg.Registry.Definitions(registry.FilterInput{ProviderID: providerID, ModelID: modelID, Flags: e.cfg.Flags}),
+			Tools:         tools,
 			ToolChoice:    llm.ToolChoiceAuto,
 		}
 		events, err := provider.Stream(ctx, req)
@@ -80,6 +82,9 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 		}
 		executor.Subagent = e.cfg.Subagent
 		executor.Skiller = e.cfg.Skills
+		if e.cfg.MCP != nil {
+			executor.MCP = e.cfg.MCP
+		}
 		proc := processor.New(processor.Config{
 			Store: e.cfg.Store, Bus: e.cfg.Bus, Catalog: e.cfg.Catalog,
 			Executor: executor, Asker: e.cfg.Permissions, SessionID: sessionID,
@@ -123,6 +128,27 @@ func (e *Engine) newAssistant(sessionID string, user *message.UserMessage) *mess
 	}
 	a.Time.Created = time.Now().UnixMilli()
 	return a
+}
+
+// mcpDefinitions returns the instance's MCP tools as LLM tool definitions,
+// skipping any whose name collides with an already-present (built-in) tool so
+// the model never sees a duplicate name (the executor resolves built-ins first).
+func (e *Engine) mcpDefinitions(ctx context.Context, existing []llm.ToolDefinition) []llm.ToolDefinition {
+	if e.cfg.MCP == nil {
+		return nil
+	}
+	taken := make(map[string]bool, len(existing))
+	for _, d := range existing {
+		taken[d.Name] = true
+	}
+	var defs []llm.ToolDefinition
+	for _, t := range e.cfg.MCP.Tools(ctx) {
+		if taken[t.Name] {
+			continue
+		}
+		defs = append(defs, llm.ToolDefinition{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema})
+	}
+	return defs
 }
 
 func (e *Engine) buildSystem(modelID, override string) []string {

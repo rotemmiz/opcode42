@@ -32,6 +32,15 @@ type Executor struct {
 	Subagent tool.SubagentRunner
 	// Skiller loads named skills for the `skill` tool (nil to disable).
 	Skiller tool.SkillSource
+	// MCP dispatches MCP tool calls when a name isn't a built-in tool (nil ⇒ no
+	// MCP). Satisfied by *mcp.Manager.
+	MCP MCPCaller
+}
+
+// MCPCaller dispatches a flattened MCP tool name; found is false when no MCP
+// tool matches the name.
+type MCPCaller interface {
+	CallTool(ctx context.Context, name string, args map[string]any) (output string, found bool, err error)
 }
 
 var _ processor.ToolExecutor = (*Executor)(nil)
@@ -40,6 +49,15 @@ var _ processor.ToolExecutor = (*Executor)(nil)
 func (e *Executor) Execute(ctx context.Context, call processor.ToolCall) (processor.ToolResult, error) {
 	t, ok := e.Registry.Get(call.Name)
 	if !ok {
+		// Not a built-in: try the instance's MCP tools.
+		if e.MCP != nil {
+			if out, found, err := e.MCP.CallTool(ctx, call.Name, call.Input); found {
+				if err != nil {
+					return processor.ToolResult{}, err
+				}
+				return processor.ToolResult{Output: out, Title: call.Name}, nil
+			}
+		}
 		return processor.ToolResult{}, fmt.Errorf("unknown tool: %s", call.Name)
 	}
 	if e.Asker != nil {

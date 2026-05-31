@@ -72,7 +72,7 @@
   {
     "scenario": "mcp",
     "phase": "C",
-    "reason": "MCP foundation (plan 03): config (mcp.* local/remote) is parsed per-instance, local (stdio) servers connect lazily, tools are listed, and GET /mcp reports {connected|disabled|failed} status. Not yet implemented: (1) MCP tools are NOT merged into the agent loop's tool set yet (the engine doesn't call them) — follow-up PR; (2) remote (StreamableHTTP/SSE) transports return 'failed: remote MCP servers are not yet supported'; (3) the needs_auth/needs_client_registration statuses + OAuth flow; (4) the mutating endpoints (POST /mcp add, /mcp/:name/connect|disconnect|auth) remain 501; (5) tools.changed watch/notifications.",
-    "track": "TODO: wire MCP tools into the engine loop, then remote transports + OAuth + mutating endpoints (plan 03)"
+    "reason": "MCP (plan 03): config (mcp.* local/remote) is parsed per-instance, local (stdio) servers connect lazily, GET /mcp reports {connected|disabled|failed} status, AND their tools are now merged into the agent loop — flattened as sanitize(server)_sanitize(tool), exposed to the model, and dispatched via the executor (registry-miss → MCP). Not yet implemented: (1) remote (StreamableHTTP/SSE) transports → 'failed: remote MCP servers are not yet supported'; (2) needs_auth/needs_client_registration statuses + OAuth; (3) mutating endpoints (POST /mcp add, /mcp/:name/connect|disconnect|auth) remain 501; (4) tools.changed watch/notifications; (5) MCP tool calls are NOT permission-gated (built-ins are; opencode gates MCP too).",
+    "track": "TODO: remote transports + OAuth + mutating endpoints + permission-gate MCP calls (plan 03)"
   }
 ]

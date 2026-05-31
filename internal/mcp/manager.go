@@ -2,13 +2,31 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"regexp"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	mcpgo "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 )
+
+// sanitizeRe matches characters not allowed in a tool name; opencode replaces
+// them with "_" (mcp/index.ts:115).
+var sanitizeRe = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+
+func sanitize(s string) string { return sanitizeRe.ReplaceAllString(s, "_") }
+
+// ToolDef is a flattened MCP tool exposed to the agent. Name is the unique key
+// the model calls: sanitize(server)+"_"+sanitize(tool) (mcp/index.ts:697).
+type ToolDef struct {
+	Name        string
+	Description string
+	InputSchema map[string]any
+}
 
 // defaultTimeout is opencode's MCP request timeout (mcp/index.ts:37, 30s — the
 // config description says 5s but the code uses 30s).
@@ -150,6 +168,129 @@ func (m *Manager) dialAndList(ctx context.Context, s Server) (conn, []mcp.Tool, 
 		return nil, nil, err
 	}
 	return c, res.Tools, nil
+}
+
+// flatTool is one MCP tool with its flattened (unique) name and origin server.
+type flatTool struct {
+	name   string // sanitize(server)_sanitize(tool)
+	server string
+	tool   mcp.Tool
+}
+
+// flatTools returns the connected tools flattened to unique names, sorted by
+// name with first-wins dedupe so the LLM listing (Tools) and dispatch (CallTool)
+// always agree on which tool a colliding name resolves to. Caller holds m.mu.
+func (m *Manager) flatTools() []flatTool {
+	var all []flatTool
+	for server, tools := range m.tools {
+		for _, t := range tools {
+			all = append(all, flatTool{name: sanitize(server) + "_" + sanitize(t.Name), server: server, tool: t})
+		}
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].name != all[j].name {
+			return all[i].name < all[j].name
+		}
+		return all[i].server < all[j].server
+	})
+	seen := map[string]bool{}
+	out := all[:0]
+	for _, ft := range all {
+		if !seen[ft.name] {
+			seen[ft.name] = true
+			out = append(out, ft)
+		}
+	}
+	return out
+}
+
+// Tools connects (once) and returns every connected server's tools as flattened
+// defs (unique sanitized names) for the LLM tool list.
+func (m *Manager) Tools(ctx context.Context) []ToolDef {
+	m.connect(ctx)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	fts := m.flatTools()
+	out := make([]ToolDef, 0, len(fts))
+	for _, ft := range fts {
+		out = append(out, ToolDef{
+			Name:        ft.name,
+			Description: ft.tool.Description,
+			InputSchema: schemaToMap(ft.tool),
+		})
+	}
+	return out
+}
+
+// CallTool dispatches a flattened tool name to its server. found is false when
+// no MCP tool matches (so the caller can fall through to "unknown tool"). A tool
+// that reports an error returns its error text as output (matching opencode,
+// which surfaces the text to the model rather than failing the call).
+func (m *Manager) CallTool(ctx context.Context, name string, args map[string]any) (output string, found bool, err error) {
+	m.connect(ctx)
+	m.mu.Lock()
+	var client conn
+	var toolName string
+	for _, ft := range m.flatTools() {
+		if ft.name == name {
+			client, toolName = m.clients[ft.server], ft.tool.Name
+			break
+		}
+	}
+	m.mu.Unlock()
+	if client == nil {
+		return "", false, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+	req := mcp.CallToolRequest{}
+	req.Params.Name = toolName
+	req.Params.Arguments = args
+	res, err := client.CallTool(ctx, req)
+	if err != nil {
+		return "", true, err
+	}
+	text := resultText(res)
+	if text == "" && res.IsError {
+		text = "tool returned an error"
+	}
+	return text, true, nil
+}
+
+// resultText joins the text content of an MCP tool result.
+func resultText(res *mcp.CallToolResult) string {
+	var b strings.Builder
+	for _, c := range res.Content {
+		if tc, ok := c.(mcp.TextContent); ok {
+			if b.Len() > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString(tc.Text)
+		}
+	}
+	return b.String()
+}
+
+// schemaToMap renders an MCP tool's input schema as a JSON-Schema object,
+// forcing type:object + additionalProperties:false (opencode convertMcpTool).
+func schemaToMap(t mcp.Tool) map[string]any {
+	var raw []byte
+	if len(t.RawInputSchema) > 0 {
+		raw = t.RawInputSchema
+	} else if b, err := json.Marshal(t.InputSchema); err == nil {
+		raw = b
+	}
+	m := map[string]any{}
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &m)
+	}
+	m["type"] = "object"
+	if _, ok := m["properties"]; !ok {
+		m["properties"] = map[string]any{}
+	}
+	m["additionalProperties"] = false
+	return m
 }
 
 // Close shuts down all connected clients and marks the manager closed so an

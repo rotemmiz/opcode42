@@ -20,6 +20,7 @@ import (
 	"github.com/rotemmiz/forge/internal/engine/runstate"
 	"github.com/rotemmiz/forge/internal/engine/tool"
 	"github.com/rotemmiz/forge/internal/id"
+	"github.com/rotemmiz/forge/internal/mcp"
 )
 
 // ProviderFactory builds a streaming provider for a provider/model pair (e.g. an
@@ -43,7 +44,9 @@ type Config struct {
 	// top-level prompts (nil inside a subagent) to bound recursion.
 	Subagent tool.SubagentRunner
 	// Skills loads named skills for the `skill` tool.
-	Skills    tool.SkillSource
+	Skills tool.SkillSource
+	// MCP exposes this instance's MCP servers' tools to the loop (nil ⇒ none).
+	MCP       *mcp.Manager
 	Bus       *bus.Bus
 	RunState  *runstate.RunState
 	Directory string
