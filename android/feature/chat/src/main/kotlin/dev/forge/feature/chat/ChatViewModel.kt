@@ -120,12 +120,12 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    /** A7 — Optimistic prompt submit */
-    fun sendPrompt(text: String) {
+    /** A7/C5 — Optimistic prompt submit with optional file attachments */
+    fun sendPrompt(text: String, attachments: List<FilePartInput> = emptyList()) {
         viewModelScope.launch {
             val optimisticId = store.addOptimistic(sessionId, text)
             try {
-                client.sendPrompt(sessionId, text, directory)
+                client.sendPrompt(sessionId, text, directory, attachments)
             } catch (e: Exception) {
                 store.removeOptimistic(sessionId, optimisticId)
             }

@@ -113,7 +113,7 @@ fun ChatScreen(
             Column(Modifier.background(Surface)) {
                 HorizontalDivider(color = Hairline)
                 PromptInput(
-                    onSend = viewModel::sendPrompt,
+                    onSend = { text, attachments -> viewModel.sendPrompt(text, attachments) },
                     enabled = pendingPermission == null && pendingQuestion == null,
                 )
             }
