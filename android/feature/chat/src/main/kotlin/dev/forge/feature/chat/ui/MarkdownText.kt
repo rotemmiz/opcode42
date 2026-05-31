@@ -287,14 +287,13 @@ private fun ListItemBlock(block: MdBlock.ListItem) {
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
             color = Tertiary,
-            modifier = Modifier.widthIn(min = 24.dp),
         )
         Text(
             text = buildInlineSpans(block.text, codeColor = Secondary, linkColor = LinkCyan),
             fontSize = 14.sp,
             lineHeight = 20.sp,
             color = OnSurface,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).padding(start = 10.dp), // mock gap:10 counter→text
         )
     }
 }

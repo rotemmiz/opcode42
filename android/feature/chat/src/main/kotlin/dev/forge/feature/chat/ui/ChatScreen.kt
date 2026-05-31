@@ -18,6 +18,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -341,12 +343,15 @@ private fun UserMessageBlock(
     parts: List<Part>,
     diffs: Map<String, List<SnapshotFileDiff>> = emptyMap(),
 ) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-        // 2dp primary blue left accent bar
-        Box(modifier = Modifier.width(2.dp).fillMaxHeight().background(Primary))
-        Column(modifier = Modifier.padding(start = 13.dp, end = 14.dp)) {
-            StreamParts(parts, diffs)
-        }
+    // 2dp primary left accent rail drawn relative to the measured height.
+    val rail = Primary
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .drawBehind { drawRect(rail, size = Size(2.dp.toPx(), size.height)) }
+            .padding(start = 13.dp, end = 14.dp),
+    ) {
+        StreamParts(parts, diffs)
     }
 }
 
@@ -362,19 +367,23 @@ private fun AssistantMessageBlock(
 
 @Composable
 private fun OptimisticMessageBlock(opt: OptimisticMessage) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Box(modifier = Modifier.width(2.dp).fillMaxHeight().background(Primary))
-        Column(modifier = Modifier.padding(start = 13.dp, end = 14.dp)) {
-            Text(
-                text = opt.text,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.5.sp),
-                color = OnSurface.copy(alpha = 0.6f),
-            )
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(1.dp),
-                color = Primary,
-                trackColor = Hairline,
-            )
-        }
+    val rail = Primary
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .drawBehind { drawRect(rail, size = Size(2.dp.toPx(), size.height)) }
+            .padding(start = 13.dp, end = 14.dp),
+    ) {
+        Text(
+            text = opt.text,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.5.sp),
+            color = OnSurface.copy(alpha = 0.6f),
+        )
+        LinearProgressIndicator(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(1.dp),
+            color = Primary,
+            trackColor = Hairline,
+        )
     }
 }
