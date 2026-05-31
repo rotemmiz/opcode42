@@ -49,7 +49,7 @@ fun StatusStrip(
             fontWeight = FontWeight.Bold,
             color = OnPrimary,
             modifier = Modifier
-                .clip(RoundedCornerShape(4.dp))
+                .clip(ForgeShapes.xs)
                 .background(Primary)
                 .padding(horizontal = 8.dp, vertical = 1.dp),
         )

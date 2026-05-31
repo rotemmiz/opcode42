@@ -70,9 +70,9 @@ fun ToolOutputBlock(part: ToolPart, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .padding(horizontal = 14.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(ForgeShapes.sm)
             .background(SurfaceContainer)
-            .border(1.dp, OutlineVariant, RoundedCornerShape(8.dp)),
+            .border(1.dp, OutlineVariant, ForgeShapes.sm),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

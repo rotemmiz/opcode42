@@ -1,5 +1,6 @@
 package dev.forge.feature.chat.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -7,6 +8,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+
+/**
+ * Forge's tighter-than-stock shape scale (design tokens.css):
+ * r-xs 4dp (code/diff blocks, chip, status pills) · r-sm 8dp (tool/diff cards) ·
+ * r-md 12dp (message/system cards) · r-lg 16dp (bottom sheets).
+ */
+object ForgeShapes {
+    val xs = RoundedCornerShape(4.dp)
+    val sm = RoundedCornerShape(8.dp)
+    val md = RoundedCornerShape(12.dp)
+    val lg = RoundedCornerShape(16.dp)
+}
 
 /**
  * Forge's named design tokens (design/android/tokens.css), resolved through

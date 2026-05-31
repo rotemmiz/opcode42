@@ -167,7 +167,7 @@ private fun HandleAndPeekRow(
                 fontSize = 11.5.sp,
                 color = LinkCyan,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(ForgeShapes.xs)
                     .background(LinkCyan.copy(alpha = 0.12f))
                     .padding(horizontal = 7.dp, vertical = 1.dp),
             )

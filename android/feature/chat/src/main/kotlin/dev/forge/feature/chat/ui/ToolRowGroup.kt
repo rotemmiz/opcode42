@@ -42,9 +42,9 @@ fun ToolRowGroup(parts: List<ToolPart>, modifier: Modifier = Modifier) {
     androidx.compose.foundation.layout.Column(
         modifier = modifier
             .padding(horizontal = 14.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(ForgeShapes.sm)
             .background(SurfaceContainer)
-            .border(1.dp, Hairline, RoundedCornerShape(8.dp)),
+            .border(1.dp, Hairline, ForgeShapes.sm),
     ) {
         rows.forEachIndexed { index, row ->
             if (index > 0) HorizontalDivider(color = Hairline)

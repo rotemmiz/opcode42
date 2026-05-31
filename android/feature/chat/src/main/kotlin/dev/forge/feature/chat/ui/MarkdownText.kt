@@ -249,8 +249,8 @@ private fun CodeBlockView(block: MdBlock.CodeBlock) {
         modifier = Modifier
             .padding(horizontal = 14.dp, vertical = 4.dp)
             .fillMaxWidth()
-            .background(SurfaceContainerLowest, RoundedCornerShape(4.dp))
-            .border(1.dp, Hairline, RoundedCornerShape(4.dp)),
+            .background(SurfaceContainerLowest, ForgeShapes.xs)
+            .border(1.dp, Hairline, ForgeShapes.xs),
     ) {
         Text(
             text = block.lines.joinToString("\n"),
@@ -305,8 +305,8 @@ private fun TableBlock(block: MdBlock.Table) {
     Column(
         modifier = Modifier
             .padding(horizontal = 14.dp, vertical = 6.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, Hairline, RoundedCornerShape(8.dp)),
+            .clip(ForgeShapes.sm)
+            .border(1.dp, Hairline, ForgeShapes.sm),
     ) {
         // Header row — purple, bold mono (design table-header color)
         Row(modifier = Modifier.fillMaxWidth().background(SurfaceContainerHigh)) {

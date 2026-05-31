@@ -122,9 +122,9 @@ private fun PatchPartView(
     Column(
         modifier = modifier
             .padding(horizontal = 14.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(ForgeShapes.sm)
             .background(SurfaceContainer)
-            .border(1.dp, OutlineVariant, RoundedCornerShape(8.dp)),
+            .border(1.dp, OutlineVariant, ForgeShapes.sm),
     ) {
         // Header — when active (expanded), the TUI amber rail: a 2dp amber
         // inset-start bar over a faint amber tint (design §2).
@@ -260,7 +260,7 @@ fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier
                 Box(modifier = Modifier.horizontalScroll(scrollState)) {
                     // IntrinsicSize.Max → all rows share the widest line's width,
                     // so add/del tints span the full row (design DiffRow look).
-                    Column(modifier = Modifier.width(IntrinsicSize.Max).padding(vertical = 6.dp)) {
+                    Column(modifier = Modifier.width(IntrinsicSize.Max).padding(vertical = 8.dp)) {
                         patch.lines().forEach { line -> DiffLine(line) }
                     }
                 }
