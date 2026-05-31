@@ -69,6 +69,14 @@ var (
 	// semverRe matches a semver-shaped version string (optional pre-release /
 	// build suffix), so only genuine daemon versions are collapsed.
 	semverRe = regexp.MustCompile(`^\d+\.\d+\.\d+`)
+	// confDirRe matches the conformance harness's per-scenario temp working dir
+	// (runner.go: os.MkdirTemp("", "forge-conf-")), in any form: absolute,
+	// symlink-resolved, or the leading-slash-stripped relative form opencode puts
+	// in a session "path". GET /session returns a GLOBAL list spanning every
+	// scenario's dir, so a per-client path registration can't cover the sibling
+	// scenarios' dirs — this pattern scrubs them all. The prefix is harness-owned,
+	// so it never appears in real API payloads.
+	confDirRe = regexp.MustCompile(`[/\w.-]*forge-conf-\d+`)
 )
 
 // Normalizer replaces volatile values. PathReplacements maps absolute path
@@ -77,11 +85,22 @@ type Normalizer struct {
 	PathReplacements map[string]string
 }
 
-// New returns a Normalizer. Each path in paths is replaced with "<path>".
+// New returns a Normalizer. Each path in paths is replaced with "<path>". The
+// leading-slash-trimmed form of every path is also registered, because some
+// fields carry the working directory as a relative path — opencode's session
+// "path" is the cwd with its leading "/" stripped (e.g. an absolute cwd of
+// /tmp/forge-conf-123 surfaces as "tmp/forge-conf-123") — which the absolute
+// prefix would otherwise never match.
 func New(paths ...string) *Normalizer {
-	repl := make(map[string]string, len(paths))
+	repl := make(map[string]string, len(paths)*2)
 	for _, p := range paths {
+		if p == "" {
+			continue
+		}
 		repl[p] = pathPlaceholder
+		if rel := strings.TrimPrefix(p, "/"); rel != p && rel != "" {
+			repl[rel] = pathPlaceholder
+		}
 	}
 	return &Normalizer{PathReplacements: repl}
 }
@@ -186,6 +205,9 @@ func (n *Normalizer) replacePaths(s string) string {
 	for _, p := range keys {
 		s = strings.ReplaceAll(s, p, n.PathReplacements[p])
 	}
+	// Scrub any conformance temp dir not in the explicit replacement set (a
+	// sibling scenario's dir surfacing in the global session list).
+	s = confDirRe.ReplaceAllString(s, pathPlaceholder)
 	// Replace timestamps and prefixed ULIDs embedded inside strings (e.g. the
 	// auto title "New session - 2026-...Z" or "Session not found: ses_01J…").
 	s = rfc3339SubRe.ReplaceAllString(s, tsPlaceholder)

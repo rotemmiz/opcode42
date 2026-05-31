@@ -147,6 +147,31 @@ func TestPathReplacementIsDeterministicAcrossSymlinkForms(t *testing.T) {
 	}
 }
 
+func TestPathReplacementCoversRelativeForm(t *testing.T) {
+	// opencode's session "path" is the cwd with the leading "/" stripped. The
+	// normalizer registers only the absolute dir, so the relative form must be
+	// derived automatically — otherwise the random temp suffix diffs run-to-run.
+	n := New("/tmp/forge-conf-abc")
+	m := normJSON(t, n, `{"directory":"/tmp/forge-conf-abc","path":"tmp/forge-conf-abc"}`)
+	if m["directory"] != "<path>" {
+		t.Errorf("directory: want <path>, got %v", m["directory"])
+	}
+	if m["path"] != "<path>" {
+		t.Errorf("relative path: want <path>, got %v", m["path"])
+	}
+}
+
+func TestConfDirScrubbedWhenNotRegistered(t *testing.T) {
+	// GET /session returns a global list spanning sibling scenarios' temp dirs,
+	// which this client never registered. They must still be scrubbed so two runs
+	// don't diff on the random forge-conf suffix.
+	n := New("/tmp/forge-conf-100")
+	m := normJSON(t, n, `{"directory":"/private/tmp/claude-501/forge-conf-999","path":"private/tmp/claude-501/forge-conf-999"}`)
+	if m["directory"] != "<path>" || m["path"] != "<path>" {
+		t.Errorf("unregistered conf dir not scrubbed: %v", m)
+	}
+}
+
 func TestNormalizeSSE(t *testing.T) {
 	n := New()
 	body := "event: message\n" +
