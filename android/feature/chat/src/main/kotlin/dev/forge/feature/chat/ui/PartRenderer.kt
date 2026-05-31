@@ -255,11 +255,11 @@ private fun PatchPartView(
             )
         }
 
-        if (expanded) {
+        if (expanded && (fileDiffs.isNotEmpty() || part.files.isNotEmpty())) {
             HorizontalDivider(color = Hairline)
             if (fileDiffs.isNotEmpty()) {
                 UnifiedDiffView(diffs = fileDiffs)
-            } else if (part.files.isNotEmpty()) {
+            } else {
                 // Diff not yet loaded — show file list as placeholder
                 part.files.forEach { file ->
                     Row(
@@ -319,24 +319,30 @@ fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier
             // Patch lines with color coding
             val patch = diff.patch
             if (!patch.isNullOrEmpty()) {
-                patch.lines().forEach { line ->
-                    val (bg, fg) = when {
-                        line.startsWith("+") -> DiffAddBg to Tertiary
-                        line.startsWith("-") -> DiffRemoveBg to Error
-                        line.startsWith("@@") -> DiffHunkBg to HeaderPurple
-                        else -> Color.Transparent to OnSurfaceVariant
+                val scrollState = rememberScrollState()
+                Box(modifier = Modifier.horizontalScroll(scrollState)) {
+                    Column {
+                        patch.lines().forEach { line ->
+                            val (bg, fg) = when {
+                                line.startsWith("+++") || line.startsWith("---") || line.startsWith("Index:") || line.startsWith("===") ->
+                                    Color.Transparent to OnSurfaceFaint
+                                line.startsWith("+") -> DiffAddBg to Tertiary
+                                line.startsWith("-") -> DiffRemoveBg to Error
+                                line.startsWith("@@") -> DiffHunkBg to HeaderPurple
+                                else -> Color.Transparent to OnSurfaceVariant
+                            }
+                            Text(
+                                text = line.ifEmpty { " " },
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp,
+                                color = fg,
+                                softWrap = false,
+                                modifier = Modifier
+                                    .background(bg)
+                                    .padding(horizontal = 12.dp, vertical = 1.dp),
+                            )
+                        }
                     }
-                    Text(
-                        text = line.ifEmpty { " " },
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                        color = fg,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(bg)
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 12.dp, vertical = 1.dp),
-                    )
                 }
             }
         }

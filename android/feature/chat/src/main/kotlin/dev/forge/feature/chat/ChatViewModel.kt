@@ -37,6 +37,9 @@ class ChatViewModel @Inject constructor(
 
     private val sessionId: String = checkNotNull(savedStateHandle["sessionId"])
 
+    // C4 — tracks in-flight diff fetches to prevent duplicate requests and infinite retry
+    private val _diffInFlight = mutableSetOf<String>()
+
     val uiState: StateFlow<ChatUiState> = store.state
         .map { appState ->
             val session = appState.sessions.firstOrNull { it.id == sessionId }
@@ -75,10 +78,13 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             store.state.collect { appState ->
                 val dir = appState.sessions.firstOrNull { it.id == sessionId }?.directory ?: return@collect
-                val allParts = appState.parts.values.flatten()
-                allParts.filterIsInstance<PatchPart>()
-                    .filter { it.sessionID == sessionId && it.messageID !in appState.diffs }
-                    .forEach { patch -> loadDiff(patch.messageID, dir) }
+                appState.parts[sessionId]
+                    ?.filterIsInstance<PatchPart>()
+                    ?.filter { it.messageID !in appState.diffs && it.messageID !in _diffInFlight }
+                    ?.forEach { patch ->
+                        _diffInFlight.add(patch.messageID)
+                        loadDiff(patch.messageID, dir)
+                    }
             }
         }
     }
@@ -106,6 +112,10 @@ class ChatViewModel @Inject constructor(
                 store.dispatch(AppEvent.SessionDiffLoaded(messageId, diffs))
             } catch (e: Exception) {
                 android.util.Log.w("ChatVM", "loadDiff failed for $messageId", e)
+                // Store empty list to prevent infinite retry on persistent failures
+                store.dispatch(AppEvent.SessionDiffLoaded(messageId, emptyList()))
+            } finally {
+                _diffInFlight.remove(messageId)
             }
         }
     }
