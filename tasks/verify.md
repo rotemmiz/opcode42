@@ -402,6 +402,21 @@ Eyeball these against a daemon (`pnpm --filter @forge/tui start` or the forge-tu
       Dual-run TUI parity vs Forge is blocked until Forge implements /agent, /provider,
       permission/question replies, /find/file, /pty (gap-closing track).
 
+## Forge gap-closing PR-1 — interactive replies + todo (2026-05-31, branch feat/daemon-interactive-endpoints)
+Forge's daemon now implements the manager-backed interactive endpoints (plan 02 M6/M7); they
+were 501 before. Verified against the live opencode daemon (byte-identical 404 shapes) and via
+dual-run conformance.
+- [x] (automated 2026-05-31) `POST /permission/:id/reply`, `POST /question/:id/reply`,
+      `POST /question/:id/reject`, `GET /session/:id/todo` return opencode-identical shapes/status
+      (live-smoke vs 127.0.0.1:4096 + dual-run: all four parity scenarios pass).
+- [ ] TUI-AGAINST-FORGE: point the TUI at a Forge daemon (`forged` on a port, then
+      `go run ./cmd/forge-tui --dir "$PWD"` against it) and confirm the U10 permission overlay
+      (allow/always/reject) and U10 question overlay (single/multi-select reply + reject) drive a
+      real run end-to-end, and the U11 tasks dock renders todos as `todowrite` runs. (Needs a real
+      LLM prompt that triggers a permission/question — left for you so it doesn't auto-spend tokens.)
+- [ ] The `question` tool is now registered (multi-question, matching opencode). Confirm the model
+      can call it and the overlay renders header/options/multiple correctly.
+
 ## Pre-existing conformance note (NOT Phase 3)
 - [ ] `session-create-list` still self-diffs (GET /session returns a project-scoped, accumulating
       session list — len differs between two fresh runs because sessions persist in the repo's

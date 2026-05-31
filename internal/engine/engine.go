@@ -15,6 +15,7 @@ import (
 	"github.com/rotemmiz/forge/internal/engine/llm"
 	"github.com/rotemmiz/forge/internal/engine/message"
 	"github.com/rotemmiz/forge/internal/engine/permission"
+	"github.com/rotemmiz/forge/internal/engine/question"
 	"github.com/rotemmiz/forge/internal/engine/registry"
 	"github.com/rotemmiz/forge/internal/engine/runstate"
 	"github.com/rotemmiz/forge/internal/id"
@@ -36,6 +37,7 @@ type Config struct {
 	Registry    *registry.Registry
 	Providers   ProviderFactory
 	Permissions *permission.Manager
+	Questions   *question.Manager
 	Bus         *bus.Bus
 	RunState    *runstate.RunState
 	Directory   string

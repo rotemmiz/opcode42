@@ -3,6 +3,9 @@ package tool
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"github.com/rotemmiz/forge/internal/engine/question"
 )
 
 // These tools depend on collaborators delivered by later milestones/plans
@@ -11,45 +14,77 @@ import (
 // now; an unset dependency yields a clear "not available" error rather than a
 // panic.
 
-// Asker asks the user a question and blocks for the answer (question.Manager).
+// Asker asks the user one or more questions and blocks for the answers, one
+// selected-label array per question, in order (question.Manager).
 type Asker interface {
-	Ask(ctx context.Context, sessionID, text string, options []string) (string, error)
+	Ask(ctx context.Context, sessionID string, questions []question.Info) ([][]string, error)
 }
 
-// Question asks the user a question and returns their answer.
-type Question struct{ Asker Asker }
+// Question asks the user one or more multiple-choice questions and returns their
+// answers (question/index.ts; tool/question.ts). Its Asker is the per-instance
+// question manager, injected at execution time via tool.Context.Questioner
+// (mirroring how the executor delivers the permission gate).
+type Question struct{}
 
-// Info describes the question tool.
+// Info describes the question tool. The parameters mirror opencode's
+// QuestionPrompt array (tool/question.ts): each question has a header, the
+// question text, and selectable options ({label, description}).
 func (Question) Info() Info {
+	option := obj(map[string]any{
+		"label":       strProp("The option's display label."),
+		"description": strProp("Explanation of the choice."),
+	}, "label", "description")
+	question := obj(map[string]any{
+		"question": strProp("The complete question."),
+		"header":   strProp("A very short label (max 30 chars)."),
+		"options":  map[string]any{"type": "array", "items": option, "description": "Available choices."},
+		"multiple": map[string]any{"type": "boolean", "description": "Allow selecting multiple choices."},
+	}, "question", "header", "options")
 	return Info{
 		ID:          "question",
-		Description: "Ask the user a question and wait for their answer.",
+		Description: "Ask the user one or more multiple-choice questions and wait for their answers.",
 		Parameters: obj(map[string]any{
-			"text":    strProp("The question to ask."),
-			"options": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Optional choices."},
-		}, "text"),
+			"questions": map[string]any{"type": "array", "items": question, "description": "Questions to ask."},
+		}, "questions"),
 	}
 }
 
 type questionParams struct {
-	Text    string   `json:"text"`
-	Options []string `json:"options"`
+	Questions []question.Info `json:"questions"`
 }
 
-// Run asks via the injected Asker.
+// Run asks via the injected Asker and formats the answers back to the model,
+// matching opencode's question tool output (tool/question.ts).
 func (q Question) Run(ctx context.Context, input map[string]any, tctx Context) (Result, error) {
-	if q.Asker == nil {
+	if tctx.Questioner == nil {
 		return Result{}, fmt.Errorf("question: not available")
 	}
 	var p questionParams
 	if err := decode(input, &p); err != nil {
 		return Result{}, err
 	}
-	answer, err := q.Asker.Ask(ctx, tctx.SessionID, p.Text, p.Options)
+	answers, err := tctx.Questioner.Ask(ctx, tctx.SessionID, p.Questions)
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Title: p.Text, Output: answer, Metadata: map[string]any{"answer": answer}}, nil
+	pairs := make([]string, 0, len(p.Questions))
+	for i, q := range p.Questions {
+		ans := "Unanswered"
+		if i < len(answers) && len(answers[i]) > 0 {
+			ans = strings.Join(answers[i], ", ")
+		}
+		pairs = append(pairs, fmt.Sprintf("%q=%q", q.Question, ans))
+	}
+	noun := "question"
+	if len(p.Questions) > 1 {
+		noun = "questions"
+	}
+	return Result{
+		Title: fmt.Sprintf("Asked %d %s", len(p.Questions), noun),
+		Output: "User has answered your questions: " + strings.Join(pairs, ", ") +
+			". You can now continue with the user's answers in mind.",
+		Metadata: map[string]any{"answers": answers},
+	}, nil
 }
 
 // Searcher performs a web search (Exa/Parallel/etc., wired in plan 03/flags).

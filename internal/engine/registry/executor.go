@@ -25,6 +25,9 @@ type Executor struct {
 	Directory string
 	// Rulesets are the merged agent/config permission rules consulted on ask.
 	Rulesets []permission.Ruleset
+	// Questioner is the per-instance question manager passed to the `question`
+	// tool via tool.Context (nil when no client can answer).
+	Questioner tool.Asker
 }
 
 var _ processor.ToolExecutor = (*Executor)(nil)
@@ -49,7 +52,8 @@ func (e *Executor) Execute(ctx context.Context, call processor.ToolCall) (proces
 		}
 	}
 	res, err := t.Run(ctx, call.Input, tool.Context{
-		SessionID: call.SessionID, MessageID: call.MessageID, CallID: call.CallID, Directory: e.Directory,
+		SessionID: call.SessionID, MessageID: call.MessageID, CallID: call.CallID,
+		Directory: e.Directory, Questioner: e.Questioner,
 	})
 	if err != nil {
 		return processor.ToolResult{}, err

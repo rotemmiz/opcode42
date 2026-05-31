@@ -1,8 +1,10 @@
 // Package question implements the blocking ask/reply flow the `question` tool
-// uses: a tool asks the user a question, the daemon publishes a question.asked
-// SSE event, and the tool goroutine blocks until a client POSTs a reply (or the
-// context is cancelled). It mirrors opencode's Question service and is the same
-// deferred-unblock pattern the permission manager (M7) reuses.
+// uses: a tool asks the user one or more questions, the daemon publishes a
+// question.asked SSE event, and the tool goroutine blocks until a client POSTs
+// answers (or the context is cancelled). It mirrors opencode's Question service
+// (packages/opencode/src/question/index.ts) — a multi-question request whose
+// reply carries one answer (an array of selected option labels) per question —
+// and is the same deferred-unblock pattern the permission manager (M7) reuses.
 package question
 
 import (
@@ -20,12 +22,27 @@ var ErrRejected = errors.New("the user dismissed this question")
 // ErrUnknown is returned when replying to an unknown/already-answered id.
 var ErrUnknown = errors.New("unknown question id")
 
+// Option is one selectable choice within a question
+// (question/index.ts QuestionOption).
+type Option struct {
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+}
+
+// Info is one question within a request (question/index.ts QuestionInfo).
+type Info struct {
+	Question string   `json:"question"`
+	Header   string   `json:"header"`
+	Options  []Option `json:"options"`
+	Multiple bool     `json:"multiple,omitempty"`
+	Custom   bool     `json:"custom,omitempty"`
+}
+
 // Request is the payload published on question.asked.
 type Request struct {
-	ID        string   `json:"id"`
-	SessionID string   `json:"sessionID"`
-	Text      string   `json:"text"`
-	Options   []string `json:"options,omitempty"`
+	ID        string `json:"id"`
+	SessionID string `json:"sessionID"`
+	Questions []Info `json:"questions"`
 }
 
 // Manager tracks pending questions and unblocks them on reply.
@@ -41,8 +58,8 @@ type pending struct {
 }
 
 type result struct {
-	answer string
-	err    error
+	answers [][]string
+	err     error
 }
 
 // NewManager builds a question manager that publishes on the given bus.
@@ -50,10 +67,11 @@ func NewManager(b *bus.Bus) *Manager {
 	return &Manager{bus: b, pending: map[string]*pending{}}
 }
 
-// Ask publishes a question and blocks until a reply arrives or ctx is cancelled.
-// It returns the chosen answer text, ErrRejected if dismissed, or ctx.Err().
-func (m *Manager) Ask(ctx context.Context, sessionID, text string, options []string) (string, error) {
-	req := Request{ID: id.Ascending(id.Question), SessionID: sessionID, Text: text, Options: options}
+// Ask publishes a set of questions and blocks until a reply arrives or ctx is
+// cancelled. It returns the answers (one array of selected labels per question,
+// in order), ErrRejected if dismissed, or ctx.Err().
+func (m *Manager) Ask(ctx context.Context, sessionID string, questions []Info) ([][]string, error) {
+	req := Request{ID: id.Ascending(id.Question), SessionID: sessionID, Questions: questions}
 	p := &pending{req: req, resolve: make(chan result, 1)}
 
 	m.mu.Lock()
@@ -67,14 +85,14 @@ func (m *Manager) Ask(ctx context.Context, sessionID, text string, options []str
 	select {
 	case <-ctx.Done():
 		m.remove(req.ID)
-		return "", ctx.Err()
+		return nil, ctx.Err()
 	case r := <-p.resolve:
-		return r.answer, r.err
+		return r.answers, r.err
 	}
 }
 
-// Reply answers a pending question. answer="" with reject=true dismisses it.
-func (m *Manager) Reply(questionID, answer string, reject bool) error {
+// Reply answers a pending question with one selected-label array per question.
+func (m *Manager) Reply(questionID string, answers [][]string) error {
 	m.mu.Lock()
 	p, ok := m.pending[questionID]
 	if ok {
@@ -84,14 +102,30 @@ func (m *Manager) Reply(questionID, answer string, reject bool) error {
 	if !ok {
 		return ErrUnknown
 	}
-	if reject {
-		p.resolve <- result{err: ErrRejected}
-	} else {
-		p.resolve <- result{answer: answer}
-	}
+	p.resolve <- result{answers: answers}
 	if m.bus != nil {
 		m.bus.Publish(bus.NewEvent("question.replied", map[string]any{
-			"sessionID": p.req.SessionID, "questionID": questionID, "answer": answer, "rejected": reject,
+			"sessionID": p.req.SessionID, "requestID": questionID, "answers": answers,
+		}))
+	}
+	return nil
+}
+
+// Reject dismisses a pending question (the user declined to answer).
+func (m *Manager) Reject(questionID string) error {
+	m.mu.Lock()
+	p, ok := m.pending[questionID]
+	if ok {
+		delete(m.pending, questionID)
+	}
+	m.mu.Unlock()
+	if !ok {
+		return ErrUnknown
+	}
+	p.resolve <- result{err: ErrRejected}
+	if m.bus != nil {
+		m.bus.Publish(bus.NewEvent("question.rejected", map[string]any{
+			"sessionID": p.req.SessionID, "requestID": questionID,
 		}))
 	}
 	return nil

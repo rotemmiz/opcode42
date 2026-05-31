@@ -72,6 +72,7 @@ func buildEngine(opts Options, inst *instance.Context, directory string) *engine
 		Registry:    opts.Registry,
 		Providers:   opts.Providers,
 		Permissions: inst.Permissions,
+		Questions:   inst.Questions,
 		Bus:         inst.Bus,
 		RunState:    inst.RunState,
 		Directory:   directory,
@@ -164,4 +165,15 @@ func requireSession(w http.ResponseWriter, r *http.Request, opts Options, sessio
 
 func writeError(w http.ResponseWriter, status int, tag, msg string) {
 	writeJSON(w, status, map[string]any{"_tag": tag, "message": msg})
+}
+
+// writeNotFoundRequest emits opencode's 404 shape for a missing permission or
+// question request: {_tag, requestID, message} (handlers/permission.ts,
+// handlers/question.ts).
+func writeNotFoundRequest(w http.ResponseWriter, tag, noun, requestID string) {
+	writeJSON(w, http.StatusNotFound, map[string]any{
+		"_tag":      tag,
+		"requestID": requestID,
+		"message":   noun + " request not found: " + requestID,
+	})
 }

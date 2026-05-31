@@ -73,6 +73,11 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 			Registry: e.cfg.Registry, Asker: e.cfg.Permissions,
 			SessionID: sessionID, Directory: e.cfg.Directory, Rulesets: e.cfg.Rulesets,
 		}
+		// Assign only when present so a nil *question.Manager does not become a
+		// non-nil tool.Asker interface (the tool guards on Questioner == nil).
+		if e.cfg.Questions != nil {
+			executor.Questioner = e.cfg.Questions
+		}
 		proc := processor.New(processor.Config{
 			Store: e.cfg.Store, Bus: e.cfg.Bus, Catalog: e.cfg.Catalog,
 			Executor: executor, Asker: e.cfg.Permissions, SessionID: sessionID,

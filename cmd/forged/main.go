@@ -142,6 +142,7 @@ func run(opts options) error {
 	defer cancelBase()
 
 	modelCatalog := loadCatalog(baseCtx)
+	todos := tool.NewTodoStore()
 
 	handler, err := server.New(server.Options{
 		Version:   version,
@@ -153,7 +154,8 @@ func run(opts options) error {
 		BaseCtx:   baseCtx,
 		Messages:  message.NewStore(db),
 		Catalog:   modelCatalog,
-		Registry:  builtinRegistry(),
+		Registry:  builtinRegistry(todos),
+		Todos:     todos,
 		Providers: providerFactory(modelCatalog),
 	})
 	if err != nil {
@@ -212,11 +214,12 @@ func loadCatalog(ctx context.Context) catalog.Catalog {
 }
 
 // builtinRegistry is the agent's built-in tool set. MCP/config tools fill the
-// registry's dynamic slot in plan 03.
-func builtinRegistry() *registry.Registry {
+// registry's dynamic slot in plan 03. The todo store is passed in so the daemon
+// can also serve it over GET /session/:id/todo.
+func builtinRegistry(todos *tool.TodoStore) *registry.Registry {
 	return registry.New(
 		tool.Bash{}, tool.Read{}, tool.Write{}, tool.Edit{}, tool.Glob{}, tool.Grep{}, tool.Patch{},
-		tool.WebFetch{}, tool.TodoWrite{Store: tool.NewTodoStore()},
+		tool.WebFetch{}, tool.TodoWrite{Store: todos}, tool.Question{},
 	)
 }
 

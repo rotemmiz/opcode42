@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/rotemmiz/forge/internal/engine/question"
 )
 
 func TestWebFetch_StripsHTML(t *testing.T) {
@@ -49,20 +51,29 @@ func TestTodoWrite_StoresAndRenders(t *testing.T) {
 	}
 }
 
-type fakeAsker struct{ answer string }
+type fakeAsker struct{ answers [][]string }
 
-func (f fakeAsker) Ask(context.Context, string, string, []string) (string, error) {
-	return f.answer, nil
+func (f fakeAsker) Ask(context.Context, string, []question.Info) ([][]string, error) {
+	return f.answers, nil
 }
 
-func TestQuestion_UsesAsker(t *testing.T) {
-	res, err := Question{Asker: fakeAsker{answer: "blue"}}.Run(context.Background(),
-		map[string]any{"text": "color?", "options": []any{"red", "blue"}}, tctx(""))
+func TestQuestion_UsesQuestioner(t *testing.T) {
+	ctx := tctx("")
+	ctx.Questioner = fakeAsker{answers: [][]string{{"blue"}}}
+	res, err := Question{}.Run(context.Background(), map[string]any{
+		"questions": []any{map[string]any{
+			"question": "color?", "header": "Color",
+			"options": []any{map[string]any{"label": "red"}, map[string]any{"label": "blue"}},
+		}},
+	}, ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Output != "blue" {
-		t.Fatalf("answer = %q", res.Output)
+	if !strings.Contains(res.Output, `"color?"="blue"`) {
+		t.Fatalf("output = %q", res.Output)
+	}
+	if !strings.Contains(res.Title, "Asked 1 question") {
+		t.Fatalf("title = %q", res.Title)
 	}
 }
 

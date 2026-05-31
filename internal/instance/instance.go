@@ -5,6 +5,7 @@ import (
 
 	"github.com/rotemmiz/forge/internal/bus"
 	"github.com/rotemmiz/forge/internal/engine/permission"
+	"github.com/rotemmiz/forge/internal/engine/question"
 	"github.com/rotemmiz/forge/internal/engine/runstate"
 	"github.com/rotemmiz/forge/internal/pty"
 )
@@ -18,6 +19,7 @@ type Context struct {
 	Bus         *bus.Bus
 	Pty         *pty.Manager
 	Permissions *permission.Manager
+	Questions   *question.Manager
 	RunState    *runstate.RunState
 }
 
@@ -76,6 +78,7 @@ func (m *Manager) Get(directory string) *Context {
 		// falls back to $SHELL / a platform default until then.
 		Pty:         pty.NewManager(directory, ""),
 		Permissions: permission.NewManager(instBus),
+		Questions:   question.NewManager(instBus),
 		RunState:    runstate.New(),
 	}
 	m.instances[directory] = c

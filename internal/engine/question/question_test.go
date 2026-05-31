@@ -3,11 +3,21 @@ package question
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/rotemmiz/forge/internal/bus"
 )
+
+// oneQuestion is a single-question request fixture.
+func oneQuestion(text string, labels ...string) []Info {
+	opts := make([]Option, len(labels))
+	for i, l := range labels {
+		opts[i] = Option{Label: l}
+	}
+	return []Info{{Question: text, Header: text, Options: opts}}
+}
 
 func TestAskReply_Answer(t *testing.T) {
 	b := bus.NewInstanceBus("ses_1", nil)
@@ -15,13 +25,13 @@ func TestAskReply_Answer(t *testing.T) {
 	m := NewManager(b)
 
 	done := make(chan struct {
-		ans string
+		ans [][]string
 		err error
 	}, 1)
 	go func() {
-		ans, err := m.Ask(context.Background(), "ses_1", "color?", []string{"red", "blue"})
+		ans, err := m.Ask(context.Background(), "ses_1", oneQuestion("color?", "red", "blue"))
 		done <- struct {
-			ans string
+			ans [][]string
 			err error
 		}{ans, err}
 	}()
@@ -37,12 +47,15 @@ func TestAskReply_Answer(t *testing.T) {
 		t.Fatalf("event type = %s", ev.Type)
 	}
 	req := ev.Properties.(Request)
-	if err := m.Reply(req.ID, "blue", false); err != nil {
+	if len(req.Questions) != 1 || req.Questions[0].Question != "color?" {
+		t.Fatalf("asked request = %+v", req)
+	}
+	if err := m.Reply(req.ID, [][]string{{"blue"}}); err != nil {
 		t.Fatal(err)
 	}
 	res := <-done
-	if res.err != nil || res.ans != "blue" {
-		t.Fatalf("ask result = %q err %v", res.ans, res.err)
+	if res.err != nil || !reflect.DeepEqual(res.ans, [][]string{{"blue"}}) {
+		t.Fatalf("ask result = %v err %v", res.ans, res.err)
 	}
 }
 
@@ -50,12 +63,12 @@ func TestReply_Reject(t *testing.T) {
 	m := NewManager(nil)
 	done := make(chan error, 1)
 	go func() {
-		_, err := m.Ask(context.Background(), "ses_1", "ok?", nil)
+		_, err := m.Ask(context.Background(), "ses_1", oneQuestion("ok?"))
 		done <- err
 	}()
 
 	id := waitForQuestion(t, m)
-	if err := m.Reply(id, "", true); err != nil {
+	if err := m.Reject(id); err != nil {
 		t.Fatal(err)
 	}
 	if err := <-done; !errors.Is(err, ErrRejected) {
@@ -84,7 +97,7 @@ func TestAsk_ContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		_, err := m.Ask(ctx, "ses_1", "?", nil)
+		_, err := m.Ask(ctx, "ses_1", oneQuestion("?"))
 		done <- err
 	}()
 	for len(m.List()) == 0 {
@@ -101,7 +114,10 @@ func TestAsk_ContextCancel(t *testing.T) {
 
 func TestReply_Unknown(t *testing.T) {
 	m := NewManager(nil)
-	if err := m.Reply("nope", "x", false); !errors.Is(err, ErrUnknown) {
+	if err := m.Reply("nope", [][]string{{"x"}}); !errors.Is(err, ErrUnknown) {
 		t.Fatalf("want ErrUnknown, got %v", err)
+	}
+	if err := m.Reject("nope"); !errors.Is(err, ErrUnknown) {
+		t.Fatalf("reject want ErrUnknown, got %v", err)
 	}
 }

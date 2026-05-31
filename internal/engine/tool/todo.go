@@ -9,9 +9,10 @@ import (
 
 // TodoItem is one entry in a session's todo list.
 type TodoItem struct {
-	ID      string `json:"id,omitempty"`
-	Content string `json:"content"`
-	Status  string `json:"status"` // pending | in_progress | completed | cancelled
+	ID       string `json:"id,omitempty"`
+	Content  string `json:"content"`
+	Status   string `json:"status"`   // pending | in_progress | completed | cancelled
+	Priority string `json:"priority"` // high | medium | low (opencode Todo wire field)
 }
 
 // TodoStore holds per-session todo lists. It is safe for concurrent use.
@@ -51,9 +52,10 @@ func (TodoWrite) Info() Info {
 			"todos": map[string]any{
 				"type": "array",
 				"items": obj(map[string]any{
-					"id":      strProp("Stable id for the item."),
-					"content": strProp("What the task is."),
-					"status":  strProp("pending | in_progress | completed | cancelled"),
+					"id":       strProp("Stable id for the item."),
+					"content":  strProp("What the task is."),
+					"status":   strProp("pending | in_progress | completed | cancelled"),
+					"priority": strProp("high | medium | low"),
 				}, "content", "status"),
 			},
 		}, "todos"),

@@ -30,6 +30,13 @@ var Scenarios = []Scenario{
 	// client-side, so order doesn't matter there.
 	{Name: "session-todo-empty", Run: scenarioSessionTodo},
 	{Name: "session-message-list", Run: scenarioSessionMessageList},
+	// The reply/reject endpoints' happy path needs a pending request (a running
+	// tool), which isn't deterministic in a stateless scenario. Their error path
+	// is: a missing request returns 404 {_tag, requestID, message}. Cover that as
+	// the parity gate for the interactive endpoints (plan 08 U10).
+	{Name: "permission-reply-unknown", Run: scenarioPermissionReplyUnknown},
+	{Name: "question-reply-unknown", Run: scenarioQuestionReplyUnknown},
+	{Name: "question-reject-unknown", Run: scenarioQuestionRejectUnknown},
 	{Name: "sse-instance-connected", Run: scenarioSSEInstanceConnected},
 	{Name: "sse-global-connected", Run: scenarioSSEGlobalConnected},
 	{Name: "auth-basic-ok", Run: scenarioAuthBasicOK},
@@ -143,6 +150,36 @@ func scenarioSessionTodo(c *Client) ([]result.Step, error) {
 		return steps, err
 	}
 	return steps, nil
+}
+
+// scenarioPermissionReplyUnknown replies to a non-existent permission request;
+// both daemons return 404 with {_tag, requestID, message}.
+func scenarioPermissionReplyUnknown(c *Client) ([]result.Step, error) {
+	s, err := c.Do("reply-unknown", http.MethodPost, "/permission/per_000/reply",
+		map[string]any{"reply": "once"})
+	if err != nil {
+		return nil, err
+	}
+	return []result.Step{s}, nil
+}
+
+// scenarioQuestionReplyUnknown replies to a non-existent question request.
+func scenarioQuestionReplyUnknown(c *Client) ([]result.Step, error) {
+	s, err := c.Do("reply-unknown", http.MethodPost, "/question/que_000/reply",
+		map[string]any{"answers": [][]string{}})
+	if err != nil {
+		return nil, err
+	}
+	return []result.Step{s}, nil
+}
+
+// scenarioQuestionRejectUnknown rejects a non-existent question request.
+func scenarioQuestionRejectUnknown(c *Client) ([]result.Step, error) {
+	s, err := c.Do("reject-unknown", http.MethodPost, "/question/que_000/reject", nil)
+	if err != nil {
+		return nil, err
+	}
+	return []result.Step{s}, nil
 }
 
 // scenarioSessionMessageList creates a session and reads its (empty) message

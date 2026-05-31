@@ -29,6 +29,7 @@ import (
 	"github.com/rotemmiz/forge/internal/engine/catalog"
 	"github.com/rotemmiz/forge/internal/engine/message"
 	"github.com/rotemmiz/forge/internal/engine/registry"
+	"github.com/rotemmiz/forge/internal/engine/tool"
 	"github.com/rotemmiz/forge/internal/instance"
 	"github.com/rotemmiz/forge/internal/session"
 )
@@ -52,6 +53,9 @@ type Options struct {
 	Catalog catalog.Catalog
 	// Registry is the agent tool registry.
 	Registry *registry.Registry
+	// Todos is the per-session todo store shared with the todowrite tool,
+	// backing GET /session/:id/todo.
+	Todos *tool.TodoStore
 	// Providers builds a streaming LLM provider for a provider/model pair.
 	Providers engine.ProviderFactory
 	// Global is the process-global event bus backing /global/event (M4).
@@ -94,6 +98,11 @@ func New(opts Options) (http.Handler, error) {
 		reg(http.MethodGet, "/event", instanceEventHandler(opts.BaseCtx, opts.Instances))
 		registerPtyRoutes(reg, opts.Instances)
 		reg(http.MethodGet, "/pty/{ptyID}/connect", ptyConnectHandler(opts.BaseCtx, opts.Instances))
+		registerPermissionRoutes(reg, opts.Instances)
+		registerQuestionRoutes(reg, opts.Instances)
+	}
+	if opts.Todos != nil && opts.Sessions != nil {
+		registerTodoRoutes(reg, opts)
 	}
 	if opts.Global != nil {
 		reg(http.MethodGet, "/global/event", globalEventHandler(opts.BaseCtx, opts.Global))

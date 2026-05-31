@@ -22,6 +22,9 @@ type Context struct {
 	CallID    string
 	// Directory is the resolved working directory the tool operates within.
 	Directory string
+	// Questioner is the per-instance question manager the `question` tool uses
+	// to ask the user and block for answers; nil when no client can answer.
+	Questioner Asker
 }
 
 // Result is a tool's output. Output is the model-facing text; Title is a short
