@@ -38,6 +38,7 @@ import (
 	"github.com/rotemmiz/forge/internal/server"
 	"github.com/rotemmiz/forge/internal/session"
 	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/forge/internal/websearch"
 )
 
 // version is the daemon version, overridable at build time via
@@ -220,6 +221,7 @@ func builtinRegistry(todos *tool.TodoStore) *registry.Registry {
 	return registry.New(
 		tool.Bash{}, tool.Read{}, tool.Write{}, tool.Edit{}, tool.Glob{}, tool.Grep{}, tool.Patch{},
 		tool.WebFetch{}, tool.TodoWrite{Store: todos}, tool.Question{}, tool.Task{}, tool.Skill{},
+		tool.WebSearch{Searcher: websearch.New()},
 	)
 }
 

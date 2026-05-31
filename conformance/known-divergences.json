@@ -62,5 +62,11 @@
     "phase": "C",
     "reason": "Credential CRUD is implemented: PUT/DELETE /auth/{providerID} read+write opencode's shared ~/.local/share/opencode/auth.json (api/oauth/wellknown records), so a key added in Forge flips /provider.connected and is shared with opencode. Deferred: GET /provider/auth (the per-provider auth-method listing) and the OAuth flow (POST /provider/:id/oauth/authorize + /callback) remain 501 — OAuth is provider-specific and intricate.",
     "track": "TODO: GET /provider/auth method listing + OAuth authorize/callback (plan 04 M7/M8)"
+  },
+  {
+    "scenario": "websearch-tool",
+    "phase": "C",
+    "reason": "The websearch tool is wired against Exa/Parallel hosted MCP endpoints (env-gated: OPENCODE_WEBSEARCH_PROVIDER / EXA_API_KEY / PARALLEL_API_KEY); without a key it returns a clear 'not configured' error. Forge passes only the query (defaults: type=auto, numResults=8, livecrawl=fallback); it does not forward opencode's numResults/livecrawl/type/contextMaxCharacters params, the session_id/model_name to Parallel, or apply opencode's session-checksum default-provider selection (Forge defaults to whichever key is present). It is not behind a permission ask.",
+    "track": "TODO: forward full search params + session/model context (plan 04)"
   }
 ]

@@ -87,7 +87,7 @@ func (q Question) Run(ctx context.Context, input map[string]any, tctx Context) (
 	}, nil
 }
 
-// Searcher performs a web search (Exa/Parallel/etc., wired in plan 03/flags).
+// Searcher performs a web search (Exa/Parallel via their MCP endpoints; plan 04).
 type Searcher interface {
 	Search(ctx context.Context, query string) (string, error)
 }
