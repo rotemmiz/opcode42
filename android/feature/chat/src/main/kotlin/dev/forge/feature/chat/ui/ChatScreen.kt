@@ -38,6 +38,7 @@ fun ChatScreen(
     onNavigateBack: () -> Unit,
     onOpenTerminal: (directory: String) -> Unit = {},
     onNavigateToSession: (sessionId: String) -> Unit = {},
+    onOpenTasksBoard: () -> Unit = {},
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {},
     viewModel: ChatViewModel = hiltViewModel(),
@@ -209,7 +210,7 @@ fun ChatScreen(
             // Todos dock — anchored above the status strip / composer
             TodoSheet(
                 todos = uiState.todos,
-                onOpenTasksBoard = { /* tasks board tab — future */ },
+                onOpenTasksBoard = onOpenTasksBoard,
             )
         }
 

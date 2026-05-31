@@ -8,6 +8,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dev.forge.feature.connections.ui.AddServerScreen
 import dev.forge.feature.chat.ui.ChatScreen
+import dev.forge.feature.chat.ui.TasksScreen
 import dev.forge.feature.sessions.ui.SessionListScreen
 import dev.forge.feature.settings.ui.SettingsScreen
 import dev.forge.feature.terminal.ui.TerminalScreen
@@ -24,6 +25,9 @@ sealed class Screen(val route: String) {
     data object Terminal : Screen("terminal/{directory}") {
         fun route(directory: String) =
             "terminal/${URLEncoder.encode(directory, "UTF-8")}"
+    }
+    data object Tasks : Screen("tasks/{sessionId}") {
+        fun route(sessionId: String) = "tasks/$sessionId"
     }
 }
 
@@ -69,9 +73,19 @@ fun ForgeNavGraph(
                 onNavigateToSession = { newSessionId ->
                     navController.navigate(Screen.Chat.route(newSessionId))
                 },
+                onOpenTasksBoard = {
+                    navController.navigate(Screen.Tasks.route(sessionId))
+                },
                 isDarkTheme = isDarkTheme,
                 onToggleTheme = onToggleTheme,
             )
+        }
+
+        composable(
+            route = Screen.Tasks.route,
+            arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
+        ) {
+            TasksScreen(onNavigateBack = { navController.popBackStack() })
         }
 
         composable(Screen.Settings.route) {

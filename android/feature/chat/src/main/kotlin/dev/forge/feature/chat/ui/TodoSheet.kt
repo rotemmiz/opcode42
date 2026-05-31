@@ -233,7 +233,7 @@ private fun TodoRow(todo: TodoItem) {
 }
 
 @Composable
-private fun TodoStatusGlyph(doing: Boolean, done: Boolean) {
+internal fun TodoStatusGlyph(doing: Boolean, done: Boolean) {
     when {
         done -> Box(
             Modifier.size(20.dp).clip(RoundedCornerShape(10.dp)).background(Tertiary),
