@@ -186,7 +186,10 @@ fun ChatScreen(
                 state = listState,
                 contentPadding = PaddingValues(bottom = 64.dp), // clear the todo-sheet peek
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxHeight()
+                    .fillMaxWidth()
+                    .widthIn(max = 720.dp) // tablet: cap + center the stream
+                    .align(Alignment.TopCenter)
                     .imeNestedScroll(),
             ) {
                 items(uiState.messages, key = { it.id }) { message ->

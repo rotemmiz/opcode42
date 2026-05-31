@@ -261,39 +261,52 @@ fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier
                         .padding(horizontal = 12.dp, vertical = 5.dp),
                 )
             }
-            // Patch lines with color coding
+            // Patch lines — design DiffRow grammar: a 1-char gutter sign column
+            // (colored) + body text in onSurface; whole-line tint for add/del,
+            // purple hunks, red/cyan ---/+++ headers (design §2).
             val patch = diff.patch
             if (!patch.isNullOrEmpty()) {
                 val scrollState = rememberScrollState()
                 Box(modifier = Modifier.horizontalScroll(scrollState)) {
-                    Column {
-                        patch.lines().forEach { line ->
-                            val (bg, fg) = when {
-                                line.startsWith("---") -> Color.Transparent to Error
-                                line.startsWith("+++") -> Color.Transparent to LinkCyan
-                                line.startsWith("Index:") || line.startsWith("===") ->
-                                    Color.Transparent to OnSurfaceFaint
-                                line.startsWith("+") -> DiffAddBg to Tertiary
-                                line.startsWith("-") -> DiffRemoveBg to Error
-                                line.startsWith("@@") -> DiffHunkBg to HeaderPurple
-                                else -> Color.Transparent to OnSurfaceVariant
-                            }
-                            Text(
-                                text = line.ifEmpty { " " },
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 12.sp,
-                                color = fg,
-                                softWrap = false,
-                                modifier = Modifier
-                                    .background(bg)
-                                    .padding(horizontal = 12.dp, vertical = 1.dp),
-                            )
-                        }
+                    // IntrinsicSize.Max → all rows share the widest line's width,
+                    // so add/del tints span the full row (design DiffRow look).
+                    Column(modifier = Modifier.width(IntrinsicSize.Max).padding(vertical = 6.dp)) {
+                        patch.lines().forEach { line -> DiffLine(line) }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun DiffLine(line: String) {
+    // (bg, sign, signColor, textColor); empty sign = no gutter (headers/hunks).
+    data class Spec(val bg: Color, val sign: String, val signColor: Color, val text: Color, val body: String)
+    val s = when {
+        line.startsWith("+++") -> Spec(Color.Transparent, "", Color.Transparent, LinkCyan, line)
+        line.startsWith("---") -> Spec(Color.Transparent, "", Color.Transparent, Error, line)
+        line.startsWith("@@") -> Spec(DiffHunkBg, "", Color.Transparent, HeaderPurple, line)
+        line.startsWith("Index:") || line.startsWith("===") ->
+            Spec(Color.Transparent, "", Color.Transparent, OnSurfaceFaint, line)
+        line.startsWith("+") -> Spec(DiffAddBg, "+", Tertiary, OnSurface, line.drop(1))
+        line.startsWith("-") -> Spec(DiffRemoveBg, "−", Error, OnSurface, line.drop(1))
+        else -> Spec(Color.Transparent, " ", Color.Transparent, OnSurfaceVariant, line.removePrefix(" "))
+    }
+    Text(
+        text = buildAnnotatedString {
+            if (s.sign.isNotEmpty()) withStyle(SpanStyle(color = s.signColor)) { append(s.sign) }
+            withStyle(SpanStyle(color = s.text)) { append(s.body.ifEmpty { " " }) }
+        },
+        fontFamily = FontFamily.Monospace,
+        fontSize = 12.sp,
+        lineHeight = 20.sp,
+        softWrap = false,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(s.bg)
+            .padding(horizontal = 8.dp),
+    )
 }
 
 // ─── File ─────────────────────────────────────────────────────────────────────
