@@ -8,8 +8,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CallSplit
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
@@ -36,6 +38,8 @@ fun ChatScreen(
     onNavigateBack: () -> Unit,
     onOpenTerminal: (directory: String) -> Unit = {},
     onNavigateToSession: (sessionId: String) -> Unit = {},
+    isDarkTheme: Boolean = true,
+    onToggleTheme: () -> Unit = {},
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -129,6 +133,7 @@ fun ChatScreen(
                             OverflowMenu(
                                 expanded = showOverflow,
                                 onDismiss = { showOverflow = false },
+                                isDarkTheme = isDarkTheme,
                                 onFork = {
                                     showOverflow = false
                                     viewModel.forkSession { newId -> onNavigateToSession(newId) }
@@ -136,6 +141,10 @@ fun ChatScreen(
                                 onDelete = {
                                     showOverflow = false
                                     viewModel.deleteSession { onNavigateBack() }
+                                },
+                                onToggleTheme = {
+                                    showOverflow = false
+                                    onToggleTheme()
                                 },
                             )
                         }
@@ -231,8 +240,10 @@ fun ChatScreen(
 private fun OverflowMenu(
     expanded: Boolean,
     onDismiss: () -> Unit,
+    isDarkTheme: Boolean,
     onFork: () -> Unit,
     onDelete: () -> Unit,
+    onToggleTheme: () -> Unit,
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -244,6 +255,18 @@ private fun OverflowMenu(
             leadingIcon = { Icon(Icons.Default.CallSplit, contentDescription = null, tint = OnSurfaceVariant) },
             onClick = onFork,
         )
+        DropdownMenuItem(
+            text = { Text(if (isDarkTheme) "Light theme" else "Dark theme", color = OnSurface) },
+            leadingIcon = {
+                Icon(
+                    if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                    contentDescription = null,
+                    tint = OnSurfaceVariant,
+                )
+            },
+            onClick = onToggleTheme,
+        )
+        HorizontalDivider(color = Hairline)
         DropdownMenuItem(
             text = { Text("Delete session", color = Error) },
             leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Error) },

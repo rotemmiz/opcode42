@@ -16,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,7 +58,7 @@ private data class ToolRow(
     val label: String,
     val path: String?,
     val meta: String?,
-    val metaColor: Color,
+    val metaIsError: Boolean,
 )
 
 @Composable
@@ -101,7 +100,7 @@ private fun ToolRowView(row: ToolRow) {
                 text = row.meta,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 13.sp,
-                color = row.metaColor,
+                color = if (row.metaIsError) Error else OnSurfaceFaint,
                 maxLines = 1,
                 modifier = Modifier
                     .weight(1f)
@@ -170,13 +169,13 @@ private fun toolRowOf(part: ToolPart): ToolRow {
         "read", "write", "edit", "patch", "list", "ls" -> rawPath?.substringAfterLast('/')
         else -> rawPath
     }
-    val (meta, metaColor) = when (val s = part.state) {
-        is ToolStateRunning -> (s.title ?: "running…") to OnSurfaceFaint
-        is ToolStateCompleted -> s.title to OnSurfaceFaint
-        is ToolStateError -> "error" to Error
-        is ToolStatePending -> null to OnSurfaceFaint
+    val (meta, isError) = when (val s = part.state) {
+        is ToolStateRunning -> (s.title ?: "running…") to false
+        is ToolStateCompleted -> s.title to false
+        is ToolStateError -> "error" to true
+        is ToolStatePending -> null to false
     }
-    return ToolRow(glyph, label, path, meta, metaColor)
+    return ToolRow(glyph, label, path, meta, isError)
 }
 
 private fun ToolState.input(): JsonObject? = when (this) {

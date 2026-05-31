@@ -28,7 +28,10 @@ sealed class Screen(val route: String) {
 }
 
 @Composable
-fun ForgeNavGraph() {
+fun ForgeNavGraph(
+    isDarkTheme: Boolean = true,
+    onToggleTheme: () -> Unit = {},
+) {
     val navController = rememberNavController()
 
     NavHost(navController = navController, startDestination = Screen.SessionList.route) {
@@ -66,6 +69,8 @@ fun ForgeNavGraph() {
                 onNavigateToSession = { newSessionId ->
                     navController.navigate(Screen.Chat.route(newSessionId))
                 },
+                isDarkTheme = isDarkTheme,
+                onToggleTheme = onToggleTheme,
             )
         }
 

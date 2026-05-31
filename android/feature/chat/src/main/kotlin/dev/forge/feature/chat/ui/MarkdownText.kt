@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -93,7 +94,11 @@ private fun parse(markdown: String): List<MdBlock> {
 
 // ─── Inline span parser ───────────────────────────────────────────────────────
 
-internal fun buildInlineSpans(text: String): AnnotatedString = buildAnnotatedString {
+internal fun buildInlineSpans(
+    text: String,
+    codeColor: Color,
+    linkColor: Color,
+): AnnotatedString = buildAnnotatedString {
     var pos = 0
     while (pos < text.length) {
         when {
@@ -101,7 +106,7 @@ internal fun buildInlineSpans(text: String): AnnotatedString = buildAnnotatedStr
             text[pos] == '`' -> {
                 val end = text.indexOf('`', pos + 1)
                 if (end > pos) {
-                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = Secondary, fontSize = 13.sp)) {
+                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = codeColor, fontSize = 13.sp)) {
                         append(text.substring(pos + 1, end))
                     }
                     pos = end + 1
@@ -143,7 +148,7 @@ internal fun buildInlineSpans(text: String): AnnotatedString = buildAnnotatedStr
                 if (textEnd > pos && textEnd + 1 < text.length && text[textEnd + 1] == '(') {
                     val urlEnd = text.indexOf(')', textEnd + 2)
                     if (urlEnd > textEnd) {
-                        withStyle(SpanStyle(color = LinkCyan, textDecoration = TextDecoration.Underline)) {
+                        withStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)) {
                             append(text.substring(pos + 1, textEnd))
                         }
                         pos = urlEnd + 1
@@ -230,7 +235,7 @@ private fun CodeBlockView(block: MdBlock.CodeBlock) {
 @Composable
 private fun ParagraphBlock(block: MdBlock.Paragraph) {
     Text(
-        text = buildInlineSpans(block.text),
+        text = buildInlineSpans(block.text, codeColor = Secondary, linkColor = LinkCyan),
         fontSize = 14.5.sp,
         lineHeight = 22.sp,
         color = OnSurface,
@@ -252,7 +257,7 @@ private fun ListItemBlock(block: MdBlock.ListItem) {
             modifier = Modifier.widthIn(min = 24.dp),
         )
         Text(
-            text = buildInlineSpans(block.text),
+            text = buildInlineSpans(block.text, codeColor = Secondary, linkColor = LinkCyan),
             fontSize = 14.sp,
             lineHeight = 20.sp,
             color = OnSurface,

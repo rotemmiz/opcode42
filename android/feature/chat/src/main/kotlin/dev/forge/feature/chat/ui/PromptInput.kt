@@ -24,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
@@ -194,7 +195,7 @@ fun PromptInput(
                             fontSize = 13.5.sp,
                         ),
                         cursorBrush = SolidColor(Primary),
-                        visualTransformation = ComposerTokenTransformation,
+                        visualTransformation = composerTokenTransformation(Secondary, LinkCyan),
                         modifier = Modifier
                             .weight(1f)
                             .padding(horizontal = 10.dp, vertical = 12.dp),
@@ -359,17 +360,17 @@ private fun SourcePill(source: String) {
     )
 }
 
-/** Colors a leading `/command` amber and any `@mention` cyan (length-preserving). */
-private val ComposerTokenTransformation = VisualTransformation { original ->
+/** Colors a leading `/command` [accent] and any `@mention` [mention] (length-preserving). */
+private fun composerTokenTransformation(accent: Color, mention: Color) = VisualTransformation { original ->
     val str = original.text
     val annotated = buildAnnotatedString {
         append(str)
         if (str.startsWith("/")) {
             val end = str.indexOf(' ').let { if (it == -1) str.length else it }
-            addStyle(SpanStyle(color = Secondary), 0, end)
+            addStyle(SpanStyle(color = accent), 0, end)
         }
         Regex("""@\S+""").findAll(str).forEach { m ->
-            addStyle(SpanStyle(color = LinkCyan), m.range.first, m.range.last + 1)
+            addStyle(SpanStyle(color = mention), m.range.first, m.range.last + 1)
         }
     }
     TransformedText(annotated, OffsetMapping.Identity)
