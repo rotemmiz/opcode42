@@ -1,0 +1,20 @@
+# Gradle build outputs
+.gradle/
+build/
+**/build/
+
+# Android local config (machine-specific)
+local.properties
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Keystore files (never commit real keystores)
+*.jks
+*.keystore
+
+# Generated code
+**/gen/
