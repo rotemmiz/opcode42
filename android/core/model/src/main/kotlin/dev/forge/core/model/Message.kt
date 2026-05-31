@@ -27,7 +27,8 @@ data class AssistantMessage(
     val error: AssistantError? = null,
     val model: MessageModel? = null,
     val agent: String? = null,
-    val summary: MessageSummary? = null,
+    /** True when this assistant message is a context-compaction summary. */
+    val summary: Boolean? = null,
 )
 
 @Serializable
@@ -49,12 +50,6 @@ data class AssistantError(
     val message: String? = null,
 )
 
-@Serializable
-data class MessageSummary(
-    val title: String? = null,
-    val body: String? = null,
-)
-
 /** Unified message envelope — carries whichever role variant was returned. */
 data class Message(
     val id: String,
@@ -65,6 +60,8 @@ data class Message(
     val error: AssistantError? = null,
     val model: MessageModel? = null,
     val agent: String? = null,
+    /** True when this assistant message is a context-compaction summary. */
+    val isSummary: Boolean = false,
 )
 
 fun UserMessage.toMessage() = Message(
@@ -86,4 +83,5 @@ fun AssistantMessage.toMessage() = Message(
     error = error,
     model = model,
     agent = agent,
+    isSummary = summary == true,
 )

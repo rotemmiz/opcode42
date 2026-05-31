@@ -65,8 +65,11 @@ class ForgeClient @Inject constructor(
                     val error = if (role == "assistant") {
                         info["error"]?.let { ForgeJson.decodeFromJsonElement(AssistantError.serializer(), it) }
                     } else null
+                    val isSummary = role == "assistant" &&
+                        info["summary"]?.jsonPrimitive?.booleanOrNull == true
                     Message(id = id, sessionID = sessionID, role = role, time = time,
-                        parts = parts, error = error, model = model, agent = agent)
+                        parts = parts, error = error, model = model, agent = agent,
+                        isSummary = isSummary)
                 } catch (_: Exception) { null }
             }
         }

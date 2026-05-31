@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -28,8 +29,14 @@ private sealed class MdBlock {
     data class CodeBlock(val lang: String?, val lines: List<String>) : MdBlock()
     data class Paragraph(val text: String) : MdBlock()
     data class ListItem(val index: Int?, val text: String) : MdBlock() // null index = bullet
+    data class Table(val header: List<String>, val rows: List<List<String>>) : MdBlock()
     data object Divider : MdBlock()
 }
+
+private val TableSeparator = Regex("""^\|?[\s:|-]*-[\s:|-]*\|?$""")
+
+private fun splitTableRow(line: String): List<String> =
+    line.trim().trim('|').split('|').map { it.trim() }
 
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
@@ -68,6 +75,20 @@ private fun parse(markdown: String): List<MdBlock> {
             trimmed.startsWith("## ") -> { flushPara(); blocks += MdBlock.Header(2, trimmed.drop(3)) }
             trimmed.startsWith("### ") -> { flushPara(); blocks += MdBlock.Header(3, trimmed.drop(4)) }
             trimmed.startsWith("#### ") -> { flushPara(); blocks += MdBlock.Header(4, trimmed.drop(5)) }
+            // GFM table: a `|`-row immediately followed by a `---` separator row
+            trimmed.startsWith("|") && i + 1 < lines.size &&
+                TableSeparator.matches(lines[i + 1].trim()) && lines[i + 1].contains('-') -> {
+                flushPara()
+                val header = splitTableRow(trimmed)
+                var j = i + 2
+                val rows = mutableListOf<List<String>>()
+                while (j < lines.size && lines[j].trimStart().startsWith("|")) {
+                    rows += splitTableRow(lines[j].trim())
+                    j++
+                }
+                blocks += MdBlock.Table(header, rows)
+                i = j - 1 // outer i++ advances past the last consumed row
+            }
             // Divider
             trimmed == "---" || trimmed == "***" || trimmed == "___" -> { flushPara(); blocks += MdBlock.Divider }
             // Ordered list item
@@ -172,6 +193,7 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier) {
                 is MdBlock.CodeBlock -> CodeBlockView(block)
                 is MdBlock.Paragraph -> ParagraphBlock(block)
                 is MdBlock.ListItem -> ListItemBlock(block)
+                is MdBlock.Table -> TableBlock(block)
                 is MdBlock.Divider -> androidx.compose.material3.HorizontalDivider(
                     color = Hairline,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -264,4 +286,44 @@ private fun ListItemBlock(block: MdBlock.ListItem) {
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+@Composable
+private fun TableBlock(block: MdBlock.Table) {
+    val cols = block.header.size.coerceAtLeast(1)
+    Column(
+        modifier = Modifier
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .border(1.dp, Hairline, RoundedCornerShape(8.dp)),
+    ) {
+        // Header row — purple, bold mono (design table-header color)
+        Row(modifier = Modifier.fillMaxWidth().background(SurfaceContainerHigh)) {
+            for (c in 0 until cols) {
+                TableCell(block.header.getOrElse(c) { "" }, color = HeaderPurple, weight = FontWeight.Bold)
+            }
+        }
+        block.rows.forEach { row ->
+            androidx.compose.material3.HorizontalDivider(color = Hairline)
+            Row(modifier = Modifier.fillMaxWidth()) {
+                for (c in 0 until cols) {
+                    TableCell(row.getOrElse(c) { "" }, color = OnSurface, weight = FontWeight.Normal)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.TableCell(text: String, color: Color, weight: FontWeight) {
+    Text(
+        text = buildInlineSpans(text, codeColor = Secondary, linkColor = LinkCyan),
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
+        color = color,
+        fontWeight = weight,
+        modifier = Modifier
+            .weight(1f)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    )
 }
