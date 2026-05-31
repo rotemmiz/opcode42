@@ -126,7 +126,7 @@ fun ChatScreen(
                         uiState.session?.directory?.let { dir ->
                             Text(
                                 text = dir,
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = ForgeMono,
                                 fontSize = 11.5.sp,
                                 color = OnSurfaceFaint,
                                 maxLines = 1,
@@ -317,7 +317,7 @@ private fun CompactionMarker() {
         HorizontalDivider(color = Hairline, modifier = Modifier.weight(1f))
         Text(
             text = "context summarized",
-            fontFamily = FontFamily.Monospace,
+            fontFamily = ForgeMono,
             fontSize = 11.sp,
             color = HeaderPurple,
             modifier = Modifier.padding(horizontal = 10.dp),

@@ -44,7 +44,7 @@ fun StatusStrip(
         // mode chip — blue fill, 700, 4dp radius
         Text(
             text = (mode ?: "build").replaceFirstChar { it.uppercase() },
-            fontFamily = FontFamily.Monospace,
+            fontFamily = ForgeMono,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             color = OnPrimary,
@@ -56,7 +56,7 @@ fun StatusStrip(
         if (model != null) {
             Text(
                 text = model,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = ForgeMono,
                 fontSize = 12.sp,
                 color = OnSurface,
                 maxLines = 1,
@@ -65,10 +65,10 @@ fun StatusStrip(
             )
         }
         if (provider != null) {
-            Text("·", fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = OnSurfaceGhost)
+            Text("·", fontFamily = ForgeMono, fontSize = 12.sp, color = OnSurfaceGhost)
             Text(
                 text = provider.replaceFirstChar { it.uppercase() },
-                fontFamily = FontFamily.Monospace,
+                fontFamily = ForgeMono,
                 fontSize = 12.sp,
                 color = OnSurfaceVariant,
                 maxLines = 1,
@@ -82,7 +82,7 @@ fun StatusStrip(
             if (total > 0) {
                 Text(
                     text = formatTokenCount(total),
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = ForgeMono,
                     fontSize = 12.sp,
                     color = OnSurfaceFaint,
                 )

@@ -65,7 +65,7 @@ fun TasksScreen(
                             if (todos.isNotEmpty()) {
                                 Text(
                                     text = "$active active · $done done",
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = ForgeMono,
                                     fontSize = 11.5.sp,
                                     color = OnSurfaceFaint,
                                 )

@@ -8,7 +8,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.forge.feature.chat.R
+
+/**
+ * Roboto Mono — the design's typeface for all code/diff/tool/status/mono text.
+ * The platform `FontFamily.Monospace` maps to Droid Sans Mono on Android, not
+ * Roboto Mono, so we bundle it (res/font).
+ */
+val ForgeMono = FontFamily(
+    Font(R.font.roboto_mono_regular, FontWeight.Normal),
+    Font(R.font.roboto_mono_medium, FontWeight.Medium),
+    Font(R.font.roboto_mono_bold, FontWeight.Bold),
+)
 
 /**
  * Forge's tighter-than-stock shape scale (design tokens.css):

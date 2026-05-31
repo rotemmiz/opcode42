@@ -73,14 +73,14 @@ private fun ToolRowView(row: ToolRow) {
     ) {
         Text(
             text = row.glyph,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = ForgeMono,
             fontSize = 13.sp,
             color = OnSurfaceFaint,
             modifier = Modifier.width(14.dp),
         )
         Text(
             text = row.label,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = ForgeMono,
             fontSize = 13.sp,
             color = OnSurface,
         )
@@ -89,7 +89,7 @@ private fun ToolRowView(row: ToolRow) {
         if (row.path != null) {
             Text(
                 text = row.path,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = ForgeMono,
                 fontSize = 13.sp,
                 color = OnSurfaceVariant,
                 maxLines = 1,
@@ -102,7 +102,7 @@ private fun ToolRowView(row: ToolRow) {
         if (row.meta != null) {
             Text(
                 text = row.meta,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = ForgeMono,
                 fontSize = 13.sp,
                 color = if (row.metaIsError) Error else OnSurfaceFaint,
                 maxLines = 1,

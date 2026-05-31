@@ -127,7 +127,7 @@ internal fun buildInlineSpans(
             text[pos] == '`' -> {
                 val end = text.indexOf('`', pos + 1)
                 if (end > pos) {
-                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = codeColor, fontSize = 13.sp)) {
+                    withStyle(SpanStyle(fontFamily = ForgeMono, color = codeColor, fontSize = 13.sp)) {
                         append(text.substring(pos + 1, end))
                     }
                     pos = end + 1
@@ -181,7 +181,7 @@ internal fun buildInlineSpans(
                 var end = pos + 1
                 while (end < text.length && !text[end].isWhitespace()) end++
                 if (end > pos + 1) {
-                    withStyle(SpanStyle(color = linkColor, fontFamily = FontFamily.Monospace)) {
+                    withStyle(SpanStyle(color = linkColor, fontFamily = ForgeMono)) {
                         append(text.substring(pos, end))
                     }
                     pos = end
@@ -235,7 +235,7 @@ private fun HeaderBlock(block: MdBlock.Header) {
             text = block.text.uppercase(),
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = ForgeMono,
             color = HeaderPurple,
             letterSpacing = 1.sp,
             modifier = Modifier.padding(start = 14.dp, top = 10.dp, end = 14.dp, bottom = 2.dp),
@@ -254,7 +254,7 @@ private fun CodeBlockView(block: MdBlock.CodeBlock) {
     ) {
         Text(
             text = block.lines.joinToString("\n"),
-            fontFamily = FontFamily.Monospace,
+            fontFamily = ForgeMono,
             fontSize = 12.sp,
             lineHeight = 18.sp,
             color = Secondary,
@@ -284,7 +284,7 @@ private fun ListItemBlock(block: MdBlock.ListItem) {
         Text(
             text = if (block.index != null) "${block.index}." else "•",
             fontSize = 14.sp,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = ForgeMono,
             fontWeight = FontWeight.Bold,
             color = Tertiary,
         )

@@ -192,7 +192,7 @@ fun PromptInput(
                 onValueChange = { text = it },
                 textStyle = TextStyle(
                     color = OnSurface,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = ForgeMono,
                     fontSize = 13.5.sp,
                 ),
                 cursorBrush = SolidColor(Primary),
@@ -205,7 +205,7 @@ fun PromptInput(
                         Text(
                             "Ask anything…  /  @",
                             color = OnSurfaceGhost,
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = ForgeMono,
                             fontSize = 13.5.sp,
                         )
                     }
@@ -277,7 +277,7 @@ private fun CommandPanel(commands: List<CommandInfo>, onPick: (CommandInfo) -> U
                 ) {
                     Text(
                         text = "/${cmd.name}",
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = ForgeMono,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = Secondary,
@@ -318,7 +318,7 @@ private fun MentionPanel(files: List<String>, onPick: (String) -> Unit) {
                 ) {
                     Text(
                         text = path,
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = ForgeMono,
                         fontSize = 13.sp,
                         color = LinkCyan,
                         maxLines = 1,
@@ -349,7 +349,7 @@ private fun SuggestionPanel(content: @Composable () -> Unit) {
 private fun SourcePill(source: String) {
     Text(
         text = source,
-        fontFamily = FontFamily.Monospace,
+        fontFamily = ForgeMono,
         fontSize = 11.sp,
         color = LinkCyan,
         modifier = Modifier

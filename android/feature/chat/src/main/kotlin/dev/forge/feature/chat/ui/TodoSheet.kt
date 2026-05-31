@@ -163,7 +163,7 @@ private fun HandleAndPeekRow(
             Text("Todos", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = OnSurface)
             Text(
                 text = "tasks.md",
-                fontFamily = FontFamily.Monospace,
+                fontFamily = ForgeMono,
                 fontSize = 11.5.sp,
                 color = LinkCyan,
                 modifier = Modifier
@@ -263,7 +263,7 @@ private fun BrailleSpinner() {
     )
     Text(
         text = frames[index % frames.length].toString(),
-        fontFamily = FontFamily.Monospace,
+        fontFamily = ForgeMono,
         fontSize = 13.sp,
         color = Secondary,
     )

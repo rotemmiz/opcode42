@@ -74,12 +74,12 @@ private fun ReasoningPartView(part: ReasoningPart, modifier: Modifier = Modifier
     // full reasoning. No chevron — the line itself is the affordance.
     Text(
         text = buildAnnotatedString {
-            withStyle(SpanStyle(color = Secondary, fontFamily = FontFamily.Monospace)) {
+            withStyle(SpanStyle(color = Secondary, fontFamily = ForgeMono)) {
                 append(if (duration != null) "+ Thought:" else "+ Thought")
             }
             duration?.let {
                 append(" ")
-                withStyle(SpanStyle(color = OnSurfaceFaint, fontFamily = FontFamily.Monospace)) { append(it) }
+                withStyle(SpanStyle(color = OnSurfaceFaint, fontFamily = ForgeMono)) { append(it) }
             }
         },
         fontSize = 13.sp,
@@ -161,7 +161,7 @@ private fun PatchPartView(
                         append(if (fileCount == 1) part.files.first().substringAfterLast('/') else "$fileCount files")
                     }
                 },
-                fontFamily = FontFamily.Monospace,
+                fontFamily = ForgeMono,
                 fontSize = 13.sp,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -174,13 +174,13 @@ private fun PatchPartView(
                         append(" ")
                         withStyle(SpanStyle(color = Error)) { append("−$deletions") }
                     },
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = ForgeMono,
                     fontSize = 12.5.sp,
                 )
             } else {
                 Text(
                     text = part.hash.take(7),
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = ForgeMono,
                     fontSize = 11.sp,
                     color = OnSurfaceFaint,
                 )
@@ -209,7 +209,7 @@ private fun PatchPartView(
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = file,
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = ForgeMono,
                             fontSize = 12.sp,
                             color = OnSurfaceVariant,
                             maxLines = 1,
@@ -272,7 +272,7 @@ fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier
         if (totalLines > MAX_DIFF_LINES) {
             Text(
                 text = "… ${totalLines - MAX_DIFF_LINES} more lines",
-                fontFamily = FontFamily.Monospace,
+                fontFamily = ForgeMono,
                 fontSize = 12.sp,
                 color = OnSurfaceFaint,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
@@ -305,7 +305,7 @@ private fun DiffLine(line: String) {
     ) {
         Text(
             text = s.sign,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = ForgeMono,
             fontSize = 12.sp,
             lineHeight = 20.sp,
             color = s.signColor,
@@ -314,7 +314,7 @@ private fun DiffLine(line: String) {
         )
         Text(
             text = s.body.ifEmpty { " " },
-            fontFamily = FontFamily.Monospace,
+            fontFamily = ForgeMono,
             fontSize = 12.sp,
             lineHeight = 20.sp,
             color = s.text,
@@ -332,7 +332,7 @@ private fun FilePartView(part: FilePart, modifier: Modifier = Modifier) {
         label = {
             Text(
                 text = part.filename ?: part.url,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = ForgeMono,
                 fontSize = 12.sp,
                 maxLines = 1,
             )
