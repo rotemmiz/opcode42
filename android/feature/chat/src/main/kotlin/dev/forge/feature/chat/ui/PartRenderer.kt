@@ -42,6 +42,7 @@ fun PartRenderer(
         is ReasoningPart -> ReasoningPartView(part, modifier)
         is ToolPart -> when {
             part.isHiddenFromRows() -> Unit
+            part.tool.lowercase() == "task" -> SubAgentBlock(part, modifier)
             part.rendersAsOwnBlock() -> ToolOutputBlock(part, modifier)
             else -> ToolRowGroup(listOf(part), modifier)
         }

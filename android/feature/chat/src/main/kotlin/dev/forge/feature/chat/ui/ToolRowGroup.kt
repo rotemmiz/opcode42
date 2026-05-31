@@ -114,9 +114,9 @@ private fun ToolRowView(row: ToolRow) {
 internal fun ToolPart.isHiddenFromRows(): Boolean =
     tool == "todowrite" || tool == "todoread"
 
-/** Tools whose output/content deserves a dedicated code-surface block, not a row. */
+/** Tools whose output/content deserves a dedicated block, not a compact row. */
 internal fun ToolPart.rendersAsOwnBlock(): Boolean =
-    tool.lowercase() == "bash" || tool.lowercase() == "write"
+    tool.lowercase() in setOf("bash", "write", "task")
 
 /** A renderable unit in the stream: a run of tool calls, or any other single part. */
 sealed interface RenderItem {
