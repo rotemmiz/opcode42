@@ -288,8 +288,28 @@ private fun MessageBlock(
         if (message.role == "user") {
             UserMessageBlock(parts, diffs)
         } else {
+            if (message.isSummary) CompactionMarker()
             AssistantMessageBlock(parts, diffs)
         }
+    }
+}
+
+/** Labeled hairline marker shown above a context-compaction summary message. */
+@Composable
+private fun CompactionMarker() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+    ) {
+        HorizontalDivider(color = Hairline, modifier = Modifier.weight(1f))
+        Text(
+            text = "context summarized",
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp,
+            color = HeaderPurple,
+            modifier = Modifier.padding(horizontal = 10.dp),
+        )
+        HorizontalDivider(color = Hairline, modifier = Modifier.weight(1f))
     }
 }
 
