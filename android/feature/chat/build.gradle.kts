@@ -24,6 +24,7 @@ dependencies {
     implementation(project(":core:sdk"))
     implementation(project(":core:network"))
     implementation(project(":feature:connections"))
+    implementation(libs.activity.compose)
     implementation(libs.android.lifecycle.viewmodel.compose)
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)

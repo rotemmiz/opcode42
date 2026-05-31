@@ -87,19 +87,32 @@ class ForgeClient @Inject constructor(
         }
     }
 
-    suspend fun sendPrompt(sessionId: String, text: String, directory: String? = null) =
-        post(
-            path = "/session/$sessionId/message",
-            body = buildJsonObject {
-                put("parts", buildJsonArray {
+    suspend fun sendPrompt(
+        sessionId: String,
+        text: String,
+        directory: String? = null,
+        attachments: List<FilePartInput> = emptyList(),
+    ) = post(
+        path = "/session/$sessionId/message",
+        body = buildJsonObject {
+            put("parts", buildJsonArray {
+                if (text.isNotBlank()) {
                     add(buildJsonObject {
                         put("type", "text")
                         put("text", text)
                     })
-                })
-            },
-            directory = directory,
-        ) { _ -> Unit }
+                }
+                attachments.forEach { att ->
+                    add(buildJsonObject {
+                        put("type", "file")
+                        put("mime", att.mime)
+                        put("url", att.url)
+                    })
+                }
+            })
+        },
+        directory = directory,
+    ) { _ -> Unit }
 
     // ─── Diff ─────────────────────────────────────────────────────────────────
 
