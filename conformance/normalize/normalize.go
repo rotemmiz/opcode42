@@ -82,9 +82,11 @@ var (
 	// absolute HOME into agent permission patterns (e.g.
 	// "$HOME/.local/share/opencode/tool-output/*"), so two runs diff on the
 	// random suffix. mktemp's signature is a "tmp.<random>" segment under /tmp
-	// (Linux) or $TMPDIR (/var/folders/.../T on macOS); only the volatile HOME
-	// prefix is collapsed, leaving the stable ".../.local/share/opencode/…" tail.
-	confHomeRe = regexp.MustCompile(`(/private)?(/var/folders/[^/]+/[^/]+/T|/tmp)/tmp\.[A-Za-z0-9]+`)
+	// (Linux) or $TMPDIR (/var/folders/.../T on macOS); the leading slash is
+	// optional because opencode also emits the slash-stripped relative form. Only
+	// the volatile HOME prefix is collapsed, leaving the stable
+	// ".../.local/share/opencode/…" tail.
+	confHomeRe = regexp.MustCompile(`/?((private/)?var/folders/[^/]+/[^/]+/T|tmp)/tmp\.[A-Za-z0-9]+`)
 )
 
 // Normalizer replaces volatile values. PathReplacements maps absolute path

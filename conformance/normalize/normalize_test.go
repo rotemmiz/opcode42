@@ -178,8 +178,10 @@ func TestConfHomeScrubbedInPermissionPattern(t *testing.T) {
 	n := New("/tmp/forge-conf-1")
 	for _, home := range []string{
 		"/tmp/tmp.24TAFncWtJ",
+		"tmp/tmp.24TAFncWtJ", // leading-slash-stripped relative form
 		"/var/folders/q5/abc123/T/tmp.iLVyqTr56n",
 		"/private/var/folders/q5/abc123/T/tmp.iLVyqTr56n",
+		"var/folders/q5/abc123/T/tmp.iLVyqTr56n",
 	} {
 		got := n.replacePaths(home + "/.local/share/opencode/tool-output/*")
 		if got != "<path>/.local/share/opencode/tool-output/*" {
