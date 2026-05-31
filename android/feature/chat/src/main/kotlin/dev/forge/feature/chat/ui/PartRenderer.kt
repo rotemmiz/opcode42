@@ -14,6 +14,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -115,6 +117,13 @@ private fun PatchPartView(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val fileCount = part.files.size
+    val additions = fileDiffs.sumOf { it.additions }
+    val deletions = fileDiffs.sumOf { it.deletions }
+    val hasCounts = fileDiffs.isNotEmpty() && (additions > 0 || deletions > 0)
+
+    // Captured for the (non-composable) drawBehind lambda.
+    val railColor = Secondary
+    val activeTint = Secondary.copy(alpha = 0.10f)
 
     Column(
         modifier = modifier
@@ -123,15 +132,23 @@ private fun PatchPartView(
             .background(SurfaceContainer)
             .border(1.dp, OutlineVariant, RoundedCornerShape(8.dp)),
     ) {
-        // Header — amber tint when expanded (active state)
+        // Header — when active (expanded), the TUI amber rail: a 2dp amber
+        // inset-start bar over a faint amber tint (design §2).
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 46.dp)
                 .then(
-                    if (expanded) Modifier.background(
-                        color = Secondary.copy(alpha = 0.10f),
-                    ) else Modifier
+                    if (expanded) {
+                        Modifier
+                            .background(activeTint)
+                            .drawBehind {
+                                drawRect(railColor, size = Size(2.dp.toPx(), size.height))
+                            }
+                    } else {
+                        Modifier
+                    },
                 )
                 .clickable { expanded = !expanded }
                 .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -139,23 +156,41 @@ private fun PatchPartView(
             Icon(
                 if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                 contentDescription = null,
-                tint = OnSurfaceVariant,
+                tint = if (expanded) Secondary else OnSurfaceVariant,
                 modifier = Modifier.size(16.dp),
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                text = if (fileCount == 1) part.files.first().substringAfterLast('/') else "$fileCount files changed",
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(color = OnSurface)) { append("Edit ") }
+                    withStyle(SpanStyle(color = Tertiary)) {
+                        append(if (fileCount == 1) part.files.first().substringAfterLast('/') else "$fileCount files")
+                    }
+                },
                 fontFamily = FontFamily.Monospace,
                 fontSize = 13.sp,
-                color = Tertiary,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                text = part.hash.take(7),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                color = OnSurfaceFaint,
-            )
+            if (hasCounts) {
+                Text(
+                    text = buildAnnotatedString {
+                        withStyle(SpanStyle(color = Tertiary)) { append("+$additions") }
+                        append(" ")
+                        withStyle(SpanStyle(color = Error)) { append("−$deletions") }
+                    },
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.5.sp,
+                )
+            } else {
+                Text(
+                    text = part.hash.take(7),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    color = OnSurfaceFaint,
+                )
+            }
         }
 
         if (expanded && (fileDiffs.isNotEmpty() || part.files.isNotEmpty())) {
@@ -207,18 +242,21 @@ fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier
             .background(SurfaceContainerLowest),
     ) {
         diffs.forEach { diff ->
-            // File header
-            Text(
-                text = diff.file ?: "",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = OnSurfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(SurfaceContainerHigh)
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
-            )
+            // File header — redundant for a single-file card (the card header
+            // already names it), so only shown when several files are bundled.
+            if (diffs.size > 1) {
+                Text(
+                    text = diff.file ?: "",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = OnSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SurfaceContainerHigh)
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                )
+            }
             // Patch lines with color coding
             val patch = diff.patch
             if (!patch.isNullOrEmpty()) {
@@ -227,7 +265,9 @@ fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier
                     Column {
                         patch.lines().forEach { line ->
                             val (bg, fg) = when {
-                                line.startsWith("+++") || line.startsWith("---") || line.startsWith("Index:") || line.startsWith("===") ->
+                                line.startsWith("---") -> Color.Transparent to Error
+                                line.startsWith("+++") -> Color.Transparent to LinkCyan
+                                line.startsWith("Index:") || line.startsWith("===") ->
                                     Color.Transparent to OnSurfaceFaint
                                 line.startsWith("+") -> DiffAddBg to Tertiary
                                 line.startsWith("-") -> DiffRemoveBg to Error
