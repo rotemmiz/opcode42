@@ -84,77 +84,80 @@ fun ChatScreen(
             }
         },
         topBar = {
-            Column {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = uiState.session?.title ?: "Session",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-                                    color = OnSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f, fill = false),
+            // Custom 52dp dense bar (design §1) — M3 TopAppBar's 64dp is too tall.
+            Column(Modifier.background(Surface).statusBarsPadding()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .padding(horizontal = 6.dp),
+                ) {
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.size(42.dp)) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = OnSurface,
+                            modifier = Modifier.size(21.dp),
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = uiState.session?.title ?: "Session",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = OnSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            if (uiState.sessionStatus == "busy") {
+                                Spacer(Modifier.width(8.dp))
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = Secondary,
                                 )
-                                if (uiState.sessionStatus == "busy") {
-                                    Spacer(Modifier.width(8.dp))
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(12.dp),
-                                        strokeWidth = 1.5.dp,
-                                        color = Secondary,
-                                    )
-                                }
-                            }
-                            uiState.session?.directory?.let { dir ->
-                                Text(
-                                    text = dir,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 11.5.sp,
-                                    color = OnSurfaceFaint,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
                             }
                         }
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = OnSurface)
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { showInfoSheet = true }) {
-                            Icon(Icons.Default.Info, contentDescription = "Session info", tint = OnSurfaceVariant)
-                        }
-                        Box {
-                            IconButton(onClick = { showOverflow = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "More", tint = OnSurfaceVariant)
-                            }
-                            OverflowMenu(
-                                expanded = showOverflow,
-                                onDismiss = { showOverflow = false },
-                                isDarkTheme = isDarkTheme,
-                                onFork = {
-                                    showOverflow = false
-                                    viewModel.forkSession { newId -> onNavigateToSession(newId) }
-                                },
-                                onDelete = {
-                                    showOverflow = false
-                                    viewModel.deleteSession { onNavigateBack() }
-                                },
-                                onToggleTheme = {
-                                    showOverflow = false
-                                    onToggleTheme()
-                                },
+                        uiState.session?.directory?.let { dir ->
+                            Text(
+                                text = dir,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.5.sp,
+                                color = OnSurfaceFaint,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Surface,
-                        titleContentColor = OnSurface,
-                    ),
-                )
+                    }
+                    IconButton(onClick = { showInfoSheet = true }, modifier = Modifier.size(42.dp)) {
+                        Icon(Icons.Default.Info, contentDescription = "Session info", tint = OnSurfaceVariant, modifier = Modifier.size(20.dp))
+                    }
+                    Box {
+                        IconButton(onClick = { showOverflow = true }, modifier = Modifier.size(42.dp)) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More", tint = OnSurfaceVariant, modifier = Modifier.size(20.dp))
+                        }
+                        OverflowMenu(
+                            expanded = showOverflow,
+                            onDismiss = { showOverflow = false },
+                            isDarkTheme = isDarkTheme,
+                            onFork = {
+                                showOverflow = false
+                                viewModel.forkSession { newId -> onNavigateToSession(newId) }
+                            },
+                            onDelete = {
+                                showOverflow = false
+                                viewModel.deleteSession { onNavigateBack() }
+                            },
+                            onToggleTheme = {
+                                showOverflow = false
+                                onToggleTheme()
+                            },
+                        )
+                    }
+                }
                 HorizontalDivider(color = Hairline, thickness = 1.dp)
             }
         },
@@ -192,7 +195,7 @@ fun ChatScreen(
         ) {
             LazyColumn(
                 state = listState,
-                contentPadding = PaddingValues(bottom = 64.dp), // clear the todo-sheet peek
+                contentPadding = PaddingValues(top = 6.dp, bottom = 64.dp), // 6+8 ≈ 14dp top gutter; clear the sheet peek
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth()
