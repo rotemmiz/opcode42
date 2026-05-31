@@ -25,7 +25,10 @@ data class AssistantMessage(
     val time: MessageTime = MessageTime(0),
     val parts: List<@Contextual Part> = emptyList(),
     val error: AssistantError? = null,
-    val model: MessageModel? = null,
+    // opencode sends these flat on the message (not a nested `model` object).
+    val modelID: String? = null,
+    val providerID: String? = null,
+    val mode: String? = null,
     val agent: String? = null,
     /** True when this assistant message is a context-compaction summary. */
     val summary: Boolean? = null,
@@ -58,7 +61,9 @@ data class Message(
     val time: MessageTime,
     val parts: List<Part>,
     val error: AssistantError? = null,
-    val model: MessageModel? = null,
+    val modelID: String? = null,
+    val providerID: String? = null,
+    val mode: String? = null,
     val agent: String? = null,
     /** True when this assistant message is a context-compaction summary. */
     val isSummary: Boolean = false,
@@ -70,7 +75,6 @@ fun UserMessage.toMessage() = Message(
     role = role,
     time = time,
     parts = parts,
-    model = model,
     agent = agent,
 )
 
@@ -81,7 +85,9 @@ fun AssistantMessage.toMessage() = Message(
     time = time,
     parts = parts,
     error = error,
-    model = model,
+    modelID = modelID,
+    providerID = providerID,
+    mode = mode,
     agent = agent,
     isSummary = summary == true,
 )

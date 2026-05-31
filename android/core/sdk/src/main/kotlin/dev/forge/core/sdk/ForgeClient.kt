@@ -60,15 +60,19 @@ class ForgeClient @Inject constructor(
                     val parts = partsArr.mapNotNull { p ->
                         try { parsePart(p.jsonObject) } catch (_: Exception) { null }
                     }
-                    val model = info["model"]?.let { ForgeJson.decodeFromJsonElement(MessageModel.serializer(), it) }
-                    val agent = info["agent"]?.jsonPrimitive?.content
+                    // opencode sends these flat on the message info, not nested.
+                    val modelID = info["modelID"]?.jsonPrimitive?.contentOrNull
+                    val providerID = info["providerID"]?.jsonPrimitive?.contentOrNull
+                    val mode = info["mode"]?.jsonPrimitive?.contentOrNull
+                    val agent = info["agent"]?.jsonPrimitive?.contentOrNull
                     val error = if (role == "assistant") {
                         info["error"]?.let { ForgeJson.decodeFromJsonElement(AssistantError.serializer(), it) }
                     } else null
                     val isSummary = role == "assistant" &&
                         info["summary"]?.jsonPrimitive?.booleanOrNull == true
                     Message(id = id, sessionID = sessionID, role = role, time = time,
-                        parts = parts, error = error, model = model, agent = agent,
+                        parts = parts, error = error, modelID = modelID,
+                        providerID = providerID, mode = mode, agent = agent,
                         isSummary = isSummary)
                 } catch (_: Exception) { null }
             }

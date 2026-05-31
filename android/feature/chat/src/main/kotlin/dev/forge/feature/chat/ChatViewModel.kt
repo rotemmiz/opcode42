@@ -61,7 +61,7 @@ class ChatViewModel @Inject constructor(
             val messages = appState.messages[sessionId] ?: emptyList()
             // Status-strip context comes from the most recent assistant turn that
             // carries a model/agent (the live "what's running" state).
-            val lastModelled = messages.lastOrNull { it.role == "assistant" && it.model != null }
+            val lastModelled = messages.lastOrNull { it.role == "assistant" && it.modelID != null }
             ChatUiState(
                 session = session,
                 messages = messages,
@@ -72,9 +72,11 @@ class ChatViewModel @Inject constructor(
                 pendingQuestions = appState.questions[sessionId] ?: emptyList(),
                 sessionStatus = appState.sessionStatus[sessionId] ?: "idle",
                 todos = extractTodos(messages, appState.parts),
-                agentMode = lastModelled?.agent ?: messages.lastOrNull { it.agent != null }?.agent,
-                modelID = lastModelled?.model?.modelID,
-                providerID = lastModelled?.model?.providerID,
+                agentMode = lastModelled?.mode ?: lastModelled?.agent
+                    ?: messages.lastOrNull { it.mode != null }?.mode
+                    ?: messages.lastOrNull { it.agent != null }?.agent,
+                modelID = lastModelled?.modelID,
+                providerID = lastModelled?.providerID,
             )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatUiState())
