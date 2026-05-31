@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.forge.core.sdk.PtyClient
 import dev.forge.core.sdk.ForgeClient
 import dev.forge.feature.connections.ServerConnectionManager
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -21,6 +22,7 @@ class TerminalViewModel @Inject constructor(
 ) : ViewModel() {
 
     private var ptyClient: PtyClient? = null
+    private var connectJob: Job? = null
 
     /** Rendered terminal lines — observed directly by the UI via Compose snapshot state. */
     val lines = mutableStateListOf<String>()
@@ -29,7 +31,8 @@ class TerminalViewModel @Inject constructor(
     val connected: StateFlow<Boolean> = _connected
 
     fun connect(directory: String) {
-        viewModelScope.launch {
+        if (connectJob?.isActive == true) return  // already connected
+        connectJob = viewModelScope.launch {
             try {
                 // 1. Create PTY session via POST /pty
                 val pty = client.createPty(directory)
@@ -45,15 +48,13 @@ class TerminalViewModel @Inject constructor(
                 ptyClient = pc
                 _connected.value = true
 
-                // 4. Collect output and render into lines
+                // 4. Collect output and render into lines.
+                // Channel close (EOF) causes collect to return naturally.
                 pc.output.collect { bytes ->
-                    if (bytes.isEmpty()) {
-                        // EOF sentinel — WebSocket closed or failed
-                        _connected.value = false
-                        return@collect
-                    }
                     appendText(String(bytes, Charsets.UTF_8))
                 }
+                // Flow completed = connection ended (channel closed by server or failure)
+                _connected.value = false
             } catch (e: Exception) {
                 Log.e("TerminalVM", "connect failed", e)
                 _connected.value = false
@@ -73,10 +74,11 @@ class TerminalViewModel @Inject constructor(
     private fun appendText(text: String) {
         val segments = text.split("\n")
         segments.forEachIndexed { i, seg ->
+            val clean = seg.trimEnd('\r')
             if (i == 0 && lines.isNotEmpty()) {
-                lines[lines.lastIndex] = lines.last() + seg
+                lines[lines.lastIndex] = lines.last() + clean
             } else {
-                lines.add(seg)
+                lines.add(clean)
             }
         }
     }
@@ -86,6 +88,7 @@ class TerminalViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        connectJob?.cancel()
         ptyClient?.close()
         super.onCleared()
     }

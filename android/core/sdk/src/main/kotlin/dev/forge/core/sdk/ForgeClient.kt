@@ -2,7 +2,7 @@ package dev.forge.core.sdk
 
 import dev.forge.core.model.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -145,11 +145,11 @@ class ForgeClient @Inject constructor(
             .replace(Regex("^https://"), "wss://")
             .replace(Regex("^http://"), "ws://")
         val url = "$wsBase/pty/$ptyId/connect?auth_token=${URLEncoder.encode(authToken, "UTF-8")}"
-        val outputFlow = MutableSharedFlow<ByteArray>(extraBufferCapacity = 256)
-        val listener = PtyClient.createListener(outputFlow)
+        val channel = Channel<ByteArray>(Channel.UNLIMITED)
+        val listener = PtyClient.createListener(channel)
         val request = Request.Builder().url(url).build()
         val ws = httpClient.newWebSocket(request, listener)
-        return PtyClient(ws, outputFlow)
+        return PtyClient(ws, channel)
     }
 
     // ─── Diff ─────────────────────────────────────────────────────────────────

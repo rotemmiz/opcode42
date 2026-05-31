@@ -58,9 +58,8 @@ fun TerminalScreen(
         ) {
             // Scrolling terminal output
             val scrollState = rememberScrollState()
-            val lines = viewModel.lines.toList()
 
-            LaunchedEffect(lines.size) {
+            LaunchedEffect(viewModel.lines.size) {
                 scrollState.animateScrollTo(scrollState.maxValue)
             }
 
@@ -71,7 +70,7 @@ fun TerminalScreen(
                     .verticalScroll(scrollState)
                     .padding(8.dp),
             ) {
-                lines.forEach { line ->
+                viewModel.lines.forEach { line ->
                     Text(
                         text = line,
                         fontFamily = FontFamily.Monospace,
@@ -110,7 +109,7 @@ fun TerminalScreen(
                 )
                 IconButton(
                     onClick = {
-                        viewModel.sendInput(input + "\n")
+                        viewModel.sendInput(input + "\r")
                         input = ""
                     },
                 ) {

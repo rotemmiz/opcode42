@@ -1,8 +1,9 @@
 package dev.forge.core.sdk
 
 import android.util.Log
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -16,12 +17,15 @@ import okio.ByteString
  *   - Otherwise: raw terminal output bytes — emitted on [output]
  *
  * Outgoing: raw keystroke bytes sent as binary frames.
+ *
+ * Uses an unlimited [Channel] for backpressure — no frames are ever dropped.
+ * Channel close (via [close] or on WebSocket failure/closure) signals EOF.
  */
 class PtyClient(
     private val webSocket: WebSocket,
-    private val _output: MutableSharedFlow<ByteArray> = MutableSharedFlow(extraBufferCapacity = 256),
+    private val _channel: Channel<ByteArray> = Channel(Channel.UNLIMITED),
 ) {
-    val output: SharedFlow<ByteArray> = _output
+    val output: Flow<ByteArray> = _channel.receiveAsFlow()
 
     fun send(bytes: ByteArray) {
         webSocket.send(ByteString.of(*bytes))
@@ -29,31 +33,32 @@ class PtyClient(
 
     fun close() {
         webSocket.close(1000, null)
+        _channel.close()
     }
 
     companion object {
         /**
-         * Creates a WebSocketListener that emits to the given flow.
-         * Create the listener, build the WebSocket, then construct PtyClient(ws, flow).
+         * Creates a WebSocketListener that emits to the given channel.
+         * Create the listener, build the WebSocket, then construct PtyClient(ws, channel).
          */
-        fun createListener(output: MutableSharedFlow<ByteArray>): WebSocketListener =
+        fun createListener(channel: Channel<ByteArray>): WebSocketListener =
             object : WebSocketListener() {
                 override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                     val raw = bytes.toByteArray()
                     if (raw.isEmpty()) return
                     // 0x00 prefix = cursor control frame — skip for now
                     if (raw[0] == 0x00.toByte()) return
-                    output.tryEmit(raw)
+                    channel.trySend(raw)
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                     Log.e("PtyClient", "WebSocket failure", t)
-                    // Emit empty bytes as EOF sentinel
-                    output.tryEmit(ByteArray(0))
+                    // Close channel to signal EOF
+                    channel.close()
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                    output.tryEmit(ByteArray(0))
+                    channel.close()
                 }
             }
     }
