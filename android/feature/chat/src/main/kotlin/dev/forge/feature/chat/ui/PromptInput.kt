@@ -128,7 +128,7 @@ fun PromptInput(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
     ) {
         // ── Autocomplete panels (above the field) ──
         when {
@@ -251,7 +251,7 @@ fun PromptInput(
                         Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send",
                         tint = if (canSend) OnPrimary else OnSurfaceFaint,
-                        modifier = Modifier.size(19.dp),
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }

@@ -176,6 +176,17 @@ internal fun buildInlineSpans(
                     } else { append(text[pos++]) }
                 } else { append(text[pos++]) }
             }
+            // @-mention: @path → cyan mono (design user-turn / prose idiom)
+            text[pos] == '@' && (pos == 0 || text[pos - 1].isWhitespace()) -> {
+                var end = pos + 1
+                while (end < text.length && !text[end].isWhitespace()) end++
+                if (end > pos + 1) {
+                    withStyle(SpanStyle(color = linkColor, fontFamily = FontFamily.Monospace)) {
+                        append(text.substring(pos, end))
+                    }
+                    pos = end
+                } else { append(text[pos++]) }
+            }
             else -> append(text[pos++])
         }
     }

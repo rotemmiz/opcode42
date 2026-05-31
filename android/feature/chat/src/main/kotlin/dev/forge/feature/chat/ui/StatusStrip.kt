@@ -3,10 +3,10 @@ package dev.forge.feature.chat.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,7 +34,7 @@ fun StatusStrip(
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         modifier = modifier
             .fillMaxWidth()
             .height(32.dp)
@@ -75,6 +75,8 @@ fun StatusStrip(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        // push the token count to the right edge (mock's margin-left:auto)
+        Spacer(Modifier.weight(1f))
         tokens?.let {
             val total = it.input + it.output + it.reasoning + it.cache.read + it.cache.write
             if (total > 0) {
@@ -83,9 +85,6 @@ fun StatusStrip(
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
                     color = OnSurfaceFaint,
-                    modifier = Modifier
-                        .weight(1f)
-                        .wrapContentWidth(Alignment.End),
                 )
             }
         }

@@ -74,11 +74,11 @@ private fun ReasoningPartView(part: ReasoningPart, modifier: Modifier = Modifier
     // full reasoning. No chevron — the line itself is the affordance.
     Text(
         text = buildAnnotatedString {
-            withStyle(SpanStyle(color = Secondary, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium)) {
-                append("+ Thought")
+            withStyle(SpanStyle(color = Secondary, fontFamily = FontFamily.Monospace)) {
+                append(if (duration != null) "+ Thought:" else "+ Thought")
             }
             duration?.let {
-                withStyle(SpanStyle(color = Secondary, fontFamily = FontFamily.Monospace)) { append(": ") }
+                append(" ")
                 withStyle(SpanStyle(color = OnSurfaceFaint, fontFamily = FontFamily.Monospace)) { append(it) }
             }
         },
@@ -145,7 +145,7 @@ private fun PatchPartView(
                     },
                 )
                 .clickable { expanded = !expanded }
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp), // centered in 46dp, no vertical pad (mock)
         ) {
             Icon(
                 if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -153,7 +153,7 @@ private fun PatchPartView(
                 tint = if (expanded) Secondary else OnSurfaceVariant,
                 modifier = Modifier.size(16.dp),
             )
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(10.dp))
             Text(
                 text = buildAnnotatedString {
                     withStyle(SpanStyle(color = OnSurface)) { append("Edit ") }
