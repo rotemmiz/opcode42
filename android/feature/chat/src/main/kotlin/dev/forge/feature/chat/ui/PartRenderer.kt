@@ -40,7 +40,11 @@ fun PartRenderer(
     when (part) {
         is TextPart -> TextPartView(part, modifier)
         is ReasoningPart -> ReasoningPartView(part, modifier)
-        is ToolPart -> if (!part.isHiddenFromRows()) ToolRowGroup(listOf(part), modifier)
+        is ToolPart -> when {
+            part.isHiddenFromRows() -> Unit
+            part.rendersAsOwnBlock() -> ToolOutputBlock(part, modifier)
+            else -> ToolRowGroup(listOf(part), modifier)
+        }
         is FilePart -> FilePartView(part, modifier)
         is PatchPart -> PatchPartView(part, modifier, diffs[part.messageID] ?: emptyList())
         is StepStartPart, is StepFinishPart -> Unit  // invisible separators
