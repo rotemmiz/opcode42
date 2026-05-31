@@ -283,20 +283,32 @@ private fun DiffLine(line: String) {
         line.startsWith("-") -> Spec(DiffRemoveBg, "−", Error, OnSurface, line.drop(1))
         else -> Spec(Color.Transparent, " ", Color.Transparent, OnSurfaceVariant, line.removePrefix(" "))
     }
-    Text(
-        text = buildAnnotatedString {
-            if (s.sign.isNotEmpty()) withStyle(SpanStyle(color = s.signColor)) { append(s.sign) }
-            withStyle(SpanStyle(color = s.text)) { append(s.body.ifEmpty { " " }) }
-        },
-        fontFamily = FontFamily.Monospace,
-        fontSize = 12.sp,
-        lineHeight = 20.sp,
-        softWrap = false,
+    // Fixed 1ch gutter sign column + body (mock DiffRow), so body text aligns
+    // across context/add/del/hunk/header rows regardless of the sign.
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(s.bg)
             .padding(horizontal = 8.dp),
-    )
+    ) {
+        Text(
+            text = s.sign,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp,
+            lineHeight = 20.sp,
+            color = s.signColor,
+            softWrap = false,
+            modifier = Modifier.width(8.dp), // ≈1ch at 12sp mono
+        )
+        Text(
+            text = s.body.ifEmpty { " " },
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp,
+            lineHeight = 20.sp,
+            color = s.text,
+            softWrap = false,
+        )
+    }
 }
 
 // ─── File ─────────────────────────────────────────────────────────────────────
