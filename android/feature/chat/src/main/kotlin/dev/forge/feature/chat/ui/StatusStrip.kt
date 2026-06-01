@@ -1,6 +1,7 @@
 package dev.forge.feature.chat.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +32,7 @@ fun StatusStrip(
     provider: String?,
     tokens: TokenUsage?,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -39,6 +41,7 @@ fun StatusStrip(
             .fillMaxWidth()
             .height(32.dp)
             .background(Surface)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 12.dp),
     ) {
         // mode chip — blue fill, 700, 4dp radius

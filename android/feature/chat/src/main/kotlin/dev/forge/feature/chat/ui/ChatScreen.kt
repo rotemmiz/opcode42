@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.forge.core.model.Message
+import dev.forge.core.model.ModelRef
 import dev.forge.core.model.Part
 import dev.forge.core.model.SnapshotFileDiff
 import dev.forge.core.store.OptimisticMessage
@@ -47,6 +48,10 @@ fun ChatScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val commands by viewModel.commands.collectAsStateWithLifecycle()
+    val providers by viewModel.providers.collectAsStateWithLifecycle()
+    val agents by viewModel.agents.collectAsStateWithLifecycle()
+    val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
+    val selectedAgent by viewModel.selectedAgent.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     // Only auto-scroll if the user is already near the bottom
@@ -71,6 +76,17 @@ fun ChatScreen(
     val sessionDirectory = uiState.session?.directory
     var showInfoSheet by remember { mutableStateOf(false) }
     var showOverflow by remember { mutableStateOf(false) }
+    var showModelPicker by remember { mutableStateOf(false) }
+
+    // The strip shows the user's explicit pick if any, else the last-run state from the stream.
+    val displayAgent = selectedAgent ?: uiState.agentMode
+    val displayModelRef = selectedModel ?: run {
+        val p = uiState.providerID
+        val m = uiState.modelID
+        if (p != null && m != null) ModelRef(providerID = p, modelID = m) else null
+    }
+    val displayModel = displayModelRef?.modelID
+    val displayProvider = displayModelRef?.providerID
 
     Scaffold(
         containerColor = Surface,
@@ -174,10 +190,13 @@ fun ChatScreen(
             ) {
                 HorizontalDivider(color = Hairline)
                 StatusStrip(
-                    mode = uiState.agentMode,
-                    model = uiState.modelID,
-                    provider = uiState.providerID,
+                    mode = displayAgent,
+                    model = displayModel,
+                    provider = displayProvider,
                     tokens = uiState.session?.tokens,
+                    onClick = if (providers.isNotEmpty() || agents.isNotEmpty()) {
+                        { showModelPicker = true }
+                    } else null,
                 )
                 HorizontalDivider(color = Hairline)
                 PromptInput(
@@ -250,6 +269,24 @@ fun ChatScreen(
             uiState.session?.let { session ->
                 SessionInfoSheet(session = session, onDismiss = { showInfoSheet = false })
             }
+        }
+
+        if (showModelPicker) {
+            ModelPickerSheet(
+                providers = providers,
+                agents = agents,
+                selectedModel = displayModelRef,
+                selectedAgent = displayAgent,
+                onSelectModel = { ref ->
+                    viewModel.selectModel(ref)
+                    showModelPicker = false
+                },
+                onSelectAgent = { name ->
+                    viewModel.selectAgent(name)
+                    showModelPicker = false
+                },
+                onDismiss = { showModelPicker = false },
+            )
         }
     }
 }

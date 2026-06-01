@@ -87,6 +87,26 @@ class ChatViewModel @Inject constructor(
     private val _commands = MutableStateFlow<List<CommandInfo>>(emptyList())
     val commands: StateFlow<List<CommandInfo>> = _commands.asStateFlow()
 
+    /** Providers + their models for the picker (loaded once). */
+    private val _providers = MutableStateFlow<List<ProviderInfo>>(emptyList())
+    val providers: StateFlow<List<ProviderInfo>> = _providers.asStateFlow()
+
+    /** Selectable agents (primary/all modes) for the picker (loaded once). */
+    private val _agents = MutableStateFlow<List<AgentInfo>>(emptyList())
+    val agents: StateFlow<List<AgentInfo>> = _agents.asStateFlow()
+
+    /** User's explicit model pick for upcoming prompts; null = use the server default. */
+    private val _selectedModel = MutableStateFlow<ModelRef?>(null)
+    val selectedModel: StateFlow<ModelRef?> = _selectedModel.asStateFlow()
+
+    /** User's explicit agent pick for upcoming prompts; null = use the server default. */
+    private val _selectedAgent = MutableStateFlow<String?>(null)
+    val selectedAgent: StateFlow<String?> = _selectedAgent.asStateFlow()
+
+    fun selectModel(model: ModelRef) { _selectedModel.value = model }
+
+    fun selectAgent(name: String) { _selectedAgent.value = name }
+
     init {
         loadMessages()
         // Load slash commands once the directory is known.
@@ -96,6 +116,21 @@ class ChatViewModel @Inject constructor(
                 _commands.value = client.listCommands(dir)
             } catch (e: Exception) {
                 android.util.Log.w("ChatVM", "listCommands failed", e)
+            }
+            try {
+                val resp = client.listProviders(dir)
+                // Only offer providers the daemon is actually authed against, so a picked
+                // model can't fail the prompt. Fall back to all if `connected` is unreported.
+                val connected = resp.connected.toSet()
+                _providers.value =
+                    if (connected.isEmpty()) resp.all else resp.all.filter { it.id in connected }
+            } catch (e: Exception) {
+                android.util.Log.w("ChatVM", "listProviders failed", e)
+            }
+            try {
+                _agents.value = client.listAgents(dir).filter { it.isPrimary }
+            } catch (e: Exception) {
+                android.util.Log.w("ChatVM", "listAgents failed", e)
             }
         }
         // Subscribe to per-directory SSE exactly once, when the session's directory is known
@@ -168,7 +203,11 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             val optimisticId = if (text.isNotBlank()) store.addOptimistic(sessionId, text) else null
             try {
-                client.sendPrompt(sessionId, text, directory, attachments)
+                client.sendPrompt(
+                    sessionId, text, directory, attachments,
+                    model = _selectedModel.value,
+                    agent = _selectedAgent.value,
+                )
             } catch (e: Exception) {
                 optimisticId?.let { store.removeOptimistic(sessionId, it) }
             }

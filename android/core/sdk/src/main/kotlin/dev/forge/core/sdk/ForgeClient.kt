@@ -100,9 +100,18 @@ class ForgeClient @Inject constructor(
         text: String,
         directory: String? = null,
         attachments: List<FilePartInput> = emptyList(),
+        model: ModelRef? = null,
+        agent: String? = null,
     ) = post(
         path = "/session/$sessionId/message",
         body = buildJsonObject {
+            model?.let {
+                put("model", buildJsonObject {
+                    put("providerID", it.providerID)
+                    put("modelID", it.modelID)
+                })
+            }
+            agent?.let { put("agent", it) }
             put("parts", buildJsonArray {
                 if (text.isNotBlank()) {
                     add(buildJsonObject {
@@ -130,6 +139,25 @@ class ForgeClient @Inject constructor(
             val arr = json as? JsonArray ?: return@get emptyList()
             arr.mapNotNull {
                 try { ForgeJson.decodeFromJsonElement(CommandInfo.serializer(), it) } catch (_: Exception) { null }
+            }
+        }
+
+    /** GET /provider — providers and their models, for the model picker. */
+    suspend fun listProviders(directory: String? = null): ProvidersResponse =
+        get("/provider", directory = directory) { json ->
+            try {
+                ForgeJson.decodeFromJsonElement(ProvidersResponse.serializer(), json)
+            } catch (_: Exception) {
+                ProvidersResponse()
+            }
+        }
+
+    /** GET /agent — selectable agents (modes), for the agent picker. */
+    suspend fun listAgents(directory: String? = null): List<AgentInfo> =
+        get("/agent", directory = directory) { json ->
+            val arr = json as? JsonArray ?: return@get emptyList()
+            arr.mapNotNull {
+                try { ForgeJson.decodeFromJsonElement(AgentInfo.serializer(), it) } catch (_: Exception) { null }
             }
         }
 
