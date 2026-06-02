@@ -51,6 +51,7 @@ type Config struct {
 	Password  string
 	Provider  string // prompt model provider id (else resolved from /config)
 	Model     string // prompt model id
+	Theme     string // override theme name (empty = auto-pick or KV-pinned; for deterministic capture)
 }
 
 // Model is the Bubble Tea application state.
@@ -184,8 +185,12 @@ func New(cfg Config) Model {
 	}
 	// Auto-pick light vs dark by terminal background — mirrors opencode's
 	// theme_mode_lock behaviour. Restore() will override with any pinned KV theme.
+	// cfg.Theme (--theme flag) wins over both auto-pick and KV.
 	m.termDark = lipgloss.HasDarkBackground()
 	defName := pickDefaultTheme(m.termDark)
+	if cfg.Theme != "" {
+		defName = cfg.Theme
+	}
 	def, _ := theme.ByNameForMode(defName, m.termDark)
 	m = m.applyTheme(defName, def)
 	m.histIdx = -1
@@ -216,15 +221,18 @@ func (m Model) applyTheme(name string, p theme.Palette) Model {
 
 // Restore loads the persisted theme/model/history from the local KV and turns on
 // persistence. Call once from the real entrypoint (not in tests, which want a
-// hermetic New). CLI --provider/--model still win.
-// Theme resolution order: pinned KV theme > auto-pick by terminal background.
+// hermetic New). CLI --provider/--model/--theme still win.
+// Theme resolution order: cfg.Theme (CLI --theme) > pinned KV theme > auto-pick by terminal background.
 func (m Model) Restore() Model {
 	m.persistEnabled = true
 	kv := loadKV()
 	m.history, m.histIdx = kv.History, -1
 	m.stash = kv.Stash
 	m.diffTreeHidden = kv.HideDiffTree
-	if kv.Theme != "" {
+	if m.cfg.Theme != "" {
+		// CLI --theme flag takes highest priority — deterministic capture / testing.
+		m = m.applyThemeByName(m.cfg.Theme)
+	} else if kv.Theme != "" {
 		// User explicitly pinned a theme — honour it (mirrors opencode's theme_mode_lock).
 		m = m.applyThemeByName(kv.Theme)
 	}
