@@ -34,6 +34,9 @@ func (m Model) renderSession() string {
 	if sf := m.subagentFooterView(leftW); sf != "" {
 		footer = sf + "\n" + footer // sub-agent context strip (plan 08b §9)
 	}
+	if pty := m.ptyPaneView(leftW); pty != "" {
+		footer = pty + "\n" + footer // embedded terminal split (plan 08b §2)
+	}
 
 	sid := m.cfg.SessionID
 	header := s.Section.Render(m.sessionTitle(sid))

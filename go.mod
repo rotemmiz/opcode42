@@ -14,6 +14,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/grandcat/zeroconf v1.0.0
+	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/mark3labs/mcp-go v0.54.1
 	github.com/oapi-codegen/runtime v1.4.1
 	github.com/tailscale/hujson v0.0.0-20260302212456-ecc657c15afd
@@ -26,7 +27,7 @@ require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
-	github.com/charmbracelet/colorprofile v0.4.1 // indirect
+	github.com/charmbracelet/colorprofile v0.4.2 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.9.0 // indirect
