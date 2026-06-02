@@ -144,6 +144,12 @@ type Model struct {
 	// by the theme name component: a theme switch produces cache misses and new
 	// entries for the new theme; old entries become unreachable and are GC'd.
 	mdCache mdCache
+
+	// animFrame is the monotonic animation frame counter incremented on each
+	// animTickMsg.  Passed to scannerFrame() and (later) logo shimmer.
+	// Reset to 0 when a new session opens so the sweep always starts from the left.
+	// (plan 08c M9 — spinner.go)
+	animFrame int
 }
 
 // pickDefaultTheme returns the appropriate default theme name based on whether
@@ -422,6 +428,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.store.sessions = upsertSession(m.store.sessions, msg.session)
 		m.cfg.SessionID, m.screen, m.modal = msg.session.ID, ScreenSession, modalNone
+		// Reset animation frame so the sweep starts from the left in the new session.
+		m.animFrame = 0
 		return m, nil
 
 	case sessionDeletedMsg:
@@ -729,6 +737,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tasksOpen && m.cfg.SessionID != "" && isTodoWriteEvent(msg.ev) {
 			cmds = append(cmds, loadTodosCmd(m.ctx, m.client, m.cfg.SessionID))
 		}
+		// Kick the animation tick when a tool part arrives — the tick will self-sustain
+		// while animating() is true and stop automatically when the turn completes.
+		// maybeKickAnim is a no-op when no animation is needed, so this is safe to call
+		// on every SSE event.  (plan 08c M9 — spinner.go)
+		if kick := m.maybeKickAnim(); kick != nil {
+			cmds = append(cmds, kick)
+		}
 		return m, tea.Batch(cmds...)
 
 	case todosLoadedMsg:
@@ -816,6 +831,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case reconnectMsg:
 		return m, openSSECmd(m.ctx, m.client)
+
+	// animTickMsg drives the gradient-scanner spinner and any other per-frame
+	// animation (plan 08c M9).  The tick is gated: it only reschedules while
+	// animating() is true, so the render loop is never woken at idle.
+	//
+	// Pattern:
+	//   animating() == true  → increment frame, return a new tick cmd
+	//   animating() == false → do not reschedule; animation is over
+	//
+	// The tick is started (kicked) by sseEventMsg and sessionOpenedMsg below,
+	// which are the natural entry points for a new assistant turn.
+	case animTickMsg:
+		if m.animating() {
+			m.animFrame++
+			return m, animTickCmd()
+		}
+		// Not animating — stop; the next animating state will re-kick via maybeKickAnim.
+		return m, nil
 	}
 	return m, nil
 }

@@ -199,13 +199,21 @@ func toolHeader(tool string, inp toolInput) string {
 	}
 }
 
-// statusGlyph returns (glyph, fgColor) for a tool status.
+// spinnerFrames are the braille-pattern animation frames, matching opencode's
+// component/spinner.tsx SPINNER_FRAMES at 80ms cadence. Our animPeriod is 100ms
+// so we map animFrame → braille index to stay consistent with the tick rate.
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// statusGlyph returns (glyph, fgStyle) for a tool status.
 // Colors mirror opencode session-v2.tsx InlineTool fg logic:
 //
 //	completed → textMuted (FgDim)
 //	error     → error (Red)
-//	running   → text (Fg, spinner would go here)
-//	pending   → text (Fg)
+//	running   → animated braille spinner (Accent) — opencode component/spinner.tsx
+//	pending   → amber dot
+//
+// For "running" the glyph is a braille frame driven by m.animFrame so it
+// animates with the global animTick.  The Accent color keeps it visually distinct.
 func (m Model) statusGlyph(status string) (string, lipgloss.Style) {
 	s := m.styles
 	switch status {
@@ -214,7 +222,8 @@ func (m Model) statusGlyph(status string) (string, lipgloss.Style) {
 	case "error":
 		return "✗", lipgloss.NewStyle().Foreground(s.P.Red)
 	case "running":
-		return "~", lipgloss.NewStyle().Foreground(s.P.Fg)
+		frame := spinnerFrames[m.animFrame%len(spinnerFrames)]
+		return frame, lipgloss.NewStyle().Foreground(s.P.Accent())
 	default: // pending or empty
 		return "•", lipgloss.NewStyle().Foreground(s.P.Amber)
 	}
@@ -249,10 +258,22 @@ func (m Model) toolRow(p Part) string {
 		}
 	}
 
-	// Build header: glyph · dim(header) · foldIcon
+	// Build header: glyph · header · foldIcon
+	// For running tools, color the header text with the gradient scanner so it
+	// visually animates alongside the braille glyph.  Completed/error/pending
+	// tools use the dim style (static, less visual noise).
+	// Background fill is provided by the host row — no extra bg needed here
+	// (plan 08c M9 CRITICAL note on background fill).
 	cw := m.contentWidth()
 	glyphStr := gstyle.Render(glyph)
-	hdrStr := s.Dim.Render(truncate(hdr, cw-lipgloss.Width(glyph)-3-len(foldIcon)))
+	truncHdr := truncate(hdr, cw-lipgloss.Width(glyph)-3-len(foldIcon))
+	var hdrStr string
+	if st.Status == "running" {
+		// Scanner frame: sweep the header label with Accent ramp.
+		hdrStr = scannerFrame(truncHdr, m.animFrame, s.P)
+	} else {
+		hdrStr = s.Dim.Render(truncHdr)
+	}
 	headerLine := glyphStr + " " + hdrStr + s.Faint.Render(foldIcon)
 
 	var lines []string

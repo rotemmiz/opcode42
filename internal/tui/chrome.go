@@ -98,8 +98,21 @@ func (m Model) statusBarView(width int) string {
 			s.Faint.Render(" · ") + s.Faint.Render(m.model.Provider)
 	}
 
-	// Right: connection dot + status, token/cost counts, command hint.
-	right := m.connGlyph() + s.Faint.Render(" "+m.status)
+	// Right: connection dot + status/spinner, token/cost counts, command hint.
+	// When a turn is in progress, show a gradient-scanner "thinking…" label
+	// with a braille spinner in place of the static status text.  This mirrors
+	// opencode's prompt/index.tsx which renders a <Spinner>Working...</Spinner>
+	// while the assistant is active.  The scanner uses the left side of the bar
+	// text — short enough that the sweep is clearly visible.
+	var right string
+	if m.animating() {
+		frame := spinnerFrames[m.animFrame%len(spinnerFrames)]
+		spinGlyph := lipgloss.NewStyle().Foreground(s.P.Accent()).Render(frame)
+		thinkingLabel := scannerFrame("thinking…", m.animFrame, s.P)
+		right = spinGlyph + " " + thinkingLabel
+	} else {
+		right = m.connGlyph() + s.Faint.Render(" "+m.status)
+	}
 	if ss := m.currentSession(); ss != nil && ss.Tokens.Total() > 0 {
 		right += s.Faint.Render(" · ") + s.Dim.Render(humanInt(ss.Tokens.Total())+" tok")
 		if ss.Cost > 0 {
