@@ -3,7 +3,9 @@ package tui
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -277,22 +279,83 @@ func (m Model) diffTreePane(width, height int) string {
 	return lipgloss.NewStyle().Width(width).Render(strings.Join(lines, "\n"))
 }
 
+// hunkRe matches the @@ -oldStart[,oldLen] +newStart[,newLen] @@ header.
+// Capture groups: (1) oldStart, (2) newStart.
+var hunkRe = regexp.MustCompile(`^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@`)
+
+// gutterWidth is the number of visible columns reserved for the line-number
+// gutter (two numbers + a separator, e.g. "123 456 │ ").  The format is
+// right-aligned in a fixed field of gutterNumWidth digits each.
+const (
+	gutterNumWidth = 4   // digits per side (handles up to 9999-line files)
+	gutterSep      = "│" // vertical bar between gutter and code body
+	// gutterTotalWidth is gutterNumWidth*2 + 1 (space) + 1 (sep) + 1 (space) = 11
+	gutterTotalWidth = gutterNumWidth*2 + 3
+)
+
+// diffLineKind categorises a unified-diff source line.
+type diffLineKind int
+
+const (
+	diffLineContext diffLineKind = iota // space-prefixed or bare context
+	diffLineAdded                       // +
+	diffLineRemoved                     // -
+	diffLineHunk                        // @@
+	diffLineMeta                        // ---/+++/diff /index
+)
+
+// classifyDiffLine returns the kind of a unified-diff line.
+func classifyDiffLine(line string) diffLineKind {
+	switch {
+	case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"),
+		strings.HasPrefix(line, "diff "), strings.HasPrefix(line, "index "):
+		return diffLineMeta
+	case strings.HasPrefix(line, "@@"):
+		return diffLineHunk
+	case strings.HasPrefix(line, "+"):
+		return diffLineAdded
+	case strings.HasPrefix(line, "-"):
+		return diffLineRemoved
+	default:
+		return diffLineContext
+	}
+}
+
 // diffPatchPane renders the selected file's unified patch (folded → just a hint),
-// colorized and windowed to height by the scroll offset.
+// full-row background-tinted with a line-number gutter, syntax-highlighted code
+// bodies, and windowed to height by the scroll offset.
+//
+// M6 changes vs the old implementation:
+//  1. Full-row background tint: each diff line row is painted end-to-end with
+//     Diff.AddedBg / Diff.RemovedBg / Diff.ContextBg. The old implementation
+//     only colored the text spans.
+//  2. Line-number gutter: parsed from @@ hunk headers; old/new numbers tracked
+//     per line and rendered in a left gutter with its own bg.
+//  3. Hunk headers: rendered in Diff.HunkHeader color on Diff.ContextBg.
+//  4. Syntax-highlighted code bodies: each code line (sign stripped) is passed
+//     through highlightCodeBg() with the row background, so syntax fg is
+//     composed with the diff bg without transparent gaps.
+//
+// Anti-bleed: highlightCodeBg sets Background(rowBg) on every token style.
+// After the syntax-highlighted body we post-pad each row to exactly width with
+// the row background so trailing cells are painted and lipgloss.Width(row)==width.
 func (m Model) diffPatchPane(width, height int) string {
 	s := m.styles
 	if m.diff.sel >= len(m.diff.files) {
-		return padLines(nil, height) // keep the column height for separator alignment
+		return padLines(nil, height)
 	}
 	f := m.diff.files[m.diff.sel]
 
 	if m.diff.folded[m.diff.sel] {
-		body := []string{s.Base.Bold(true).Render(truncate(f.File, width)), "", s.Faint.Render("(folded — space to expand)")}
-		return padLines(body, height)
+		body := []string{
+			s.Base.Bold(true).Render(truncate(f.File, width)),
+			"",
+			s.Faint.Render("(folded — space to expand)"),
+		}
+		return padLines(padDiffLines(body, width, m.styles.P.Bg), height)
 	}
 
-	// Build the raw (unstyled) line list — header, blank, then the patch — and
-	// window it BEFORE styling, so a huge patch only styles its visible rows.
+	// Build raw line list (header + blank + patch lines) and window before styling.
 	noPatch := strings.TrimSpace(f.Patch) == ""
 	raw := []string{f.File, ""}
 	if noPatch {
@@ -302,39 +365,258 @@ func (m Model) diffPatchPane(width, height int) string {
 	}
 	start, end := windowFrom(m.diff.scroll, len(raw), height)
 
-	out := make([]string, 0, end-start)
-	for i := start; i < end; i++ {
-		switch {
-		case i == 0: // file header
-			out = append(out, s.Base.Bold(true).Render(truncate(raw[i], width)))
-		case i == 1: // blank spacer
-			out = append(out, "")
-		case noPatch: // the single sentinel line
-			out = append(out, s.Faint.Render(raw[i]))
-		default: // a unified-diff line
-			out = append(out, m.diffLineStyle(raw[i]).Render(truncate(raw[i], width)))
+	// Scan from the beginning of the patch to compute line numbers at the
+	// window start. This is O(patch lines) but patches are short in practice.
+	// Hunk headers reset the counters; other lines advance them.
+	oldLine, newLine := 0, 0
+	for i := 2; i < start && i < len(raw); i++ {
+		l := raw[i]
+		if strings.HasPrefix(l, "@@") {
+			if sub := hunkRe.FindStringSubmatch(l); sub != nil {
+				o, _ := strconv.Atoi(sub[1])
+				n, _ := strconv.Atoi(sub[2])
+				oldLine = o - 1
+				newLine = n - 1
+			}
+		} else {
+			oldLine, newLine = advanceDiffLineNumbers(l, oldLine, newLine)
 		}
 	}
-	return padLines(out, height)
+
+	// Code width = total pane width minus the gutter.
+	codeWidth := width - gutterTotalWidth
+	if codeWidth < 1 {
+		codeWidth = 1
+	}
+
+	out := make([]string, 0, end-start)
+	for i := start; i < end; i++ {
+		line := raw[i]
+		switch {
+		case i == 0: // file header — no gutter
+			row := s.Base.Bold(true).Render(truncate(line, width))
+			out = append(out, padRow(row, width, s.P.Bg))
+
+		case i == 1: // blank spacer — no gutter
+			out = append(out, padRow("", width, s.P.Bg))
+
+		case noPatch: // sentinel — no gutter
+			out = append(out, padRow(s.Faint.Render(line), width, s.P.Bg))
+
+		case strings.HasPrefix(line, "@@"): // hunk header
+			// Parse to reset line-number counters.
+			if sub := hunkRe.FindStringSubmatch(line); sub != nil {
+				oldLine, _ = strconv.Atoi(sub[1])
+				newLine, _ = strconv.Atoi(sub[2])
+				// Hunk headers use 1-based numbers; subtract 1 so the first
+				// advanceDiffLineNumbers call on the next content line yields the
+				// correct starting number.
+				oldLine--
+				newLine--
+			}
+			gutterStr := m.renderGutter(-1, -1, diffLineHunk)
+			bodyStr := lipgloss.NewStyle().
+				Foreground(s.P.Diff.HunkHeader).
+				Background(s.P.Diff.ContextBg).
+				Render(truncate(line, codeWidth))
+			row := gutterStr + bodyStr
+			out = append(out, padRow(row, width, s.P.Diff.ContextBg))
+			// Hunk header does not consume a source line.
+
+		default: // +, -, or context code line
+			kind := classifyDiffLine(line)
+			oldLine, newLine = advanceDiffLineNumbers(line, oldLine, newLine)
+			gutterStr := m.renderGutter(oldLine, newLine, kind)
+			bodyStr := m.renderDiffCodeLine(line, kind, codeWidth, f.File)
+			row := gutterStr + bodyStr
+			var rowBg lipgloss.Color
+			switch kind {
+			case diffLineAdded:
+				rowBg = s.P.Diff.AddedBg
+			case diffLineRemoved:
+				rowBg = s.P.Diff.RemovedBg
+			default:
+				rowBg = s.P.Diff.ContextBg
+			}
+			out = append(out, padRow(row, width, rowBg))
+		}
+	}
+	// Pad remaining lines to height with empty bg-filled rows so the pane is
+	// exactly height lines tall and every line is exactly width visible chars.
+	return padLinesWidth(out, height, width, s.P.Bg)
 }
 
-// diffLineStyle colors a unified-diff line by its leading marker.
-func (m Model) diffLineStyle(line string) lipgloss.Style {
-	s := m.styles
+// advanceDiffLineNumbers updates the old/new line number counters based on the
+// type of unified-diff line. Called in patch-line order.
+//
+// Convention:
+//   - '+' lines (not "+++") advance newLine only.
+//   - '-' lines (not "---") advance oldLine only.
+//   - context lines (space or bare) advance both.
+//   - meta (---/+++/diff/index) and hunk (@@) lines: no advance (caller handles @@).
+//
+// IMPORTANT: meta patterns (---/+++) must be checked BEFORE the single-char
+// +/- patterns because "---" has prefix "-" and "+++" has prefix "+".
+func advanceDiffLineNumbers(line string, oldLine, newLine int) (int, int) {
 	switch {
-	case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"),
-		strings.HasPrefix(line, "diff "), strings.HasPrefix(line, "index "):
-		return s.Faint
-	case strings.HasPrefix(line, "@@"):
-		return lipgloss.NewStyle().Foreground(s.P.Cyan)
+	// Meta lines — must be checked before single-char +/- to avoid misclassifying
+	// "---" as a removed line and "+++" as an added line.
+	case strings.HasPrefix(line, "@@"),
+		strings.HasPrefix(line, "---"),
+		strings.HasPrefix(line, "+++"),
+		strings.HasPrefix(line, "diff "),
+		strings.HasPrefix(line, "index "):
+		return oldLine, newLine
 	case strings.HasPrefix(line, "+"):
-		return lipgloss.NewStyle().Foreground(s.P.Green)
+		return oldLine, newLine + 1
 	case strings.HasPrefix(line, "-"):
-		return lipgloss.NewStyle().Foreground(s.P.Red)
-	default:
-		return s.Base
+		return oldLine + 1, newLine
+	default: // context (space-prefixed or bare)
+		return oldLine + 1, newLine + 1
 	}
 }
+
+// renderGutter renders the fixed-width left gutter showing old/new line numbers.
+// For added lines: blank old number, newLine shown. For removed: oldLine shown,
+// blank new number. For context: both numbers. For hunk/meta: both blank.
+//
+// Gutter format (gutterTotalWidth = 11 visible chars):
+//
+//	"OOOO NNNN │ "
+//	 old  new  sep
+//
+// where OOOO/NNNN are right-aligned in gutterNumWidth=4. A value of -1 means
+// "do not show" → rendered as spaces.
+func (m Model) renderGutter(oldLine, newLine int, kind diffLineKind) string {
+	s := m.styles
+	d := s.P.Diff
+
+	// Determine background colors for old-number and new-number cells.
+	var oldBg, newBg, sepBg lipgloss.Color
+	switch kind {
+	case diffLineAdded:
+		oldBg = d.AddedLineNumberBg
+		newBg = d.AddedLineNumberBg
+		sepBg = d.AddedLineNumberBg
+	case diffLineRemoved:
+		oldBg = d.RemovedLineNumberBg
+		newBg = d.RemovedLineNumberBg
+		sepBg = d.RemovedLineNumberBg
+	default:
+		// context, hunk header, meta
+		oldBg = s.P.BgPanel
+		newBg = s.P.BgPanel
+		sepBg = s.P.BgPanel
+	}
+
+	gutterStyle := func(bg lipgloss.Color) lipgloss.Style {
+		return lipgloss.NewStyle().Foreground(d.LineNumber).Background(bg)
+	}
+
+	// Format old-line number cell.
+	var oldStr string
+	if oldLine > 0 && (kind == diffLineRemoved || kind == diffLineContext) {
+		oldStr = fmt.Sprintf("%*d", gutterNumWidth, oldLine)
+	} else {
+		oldStr = strings.Repeat(" ", gutterNumWidth)
+	}
+
+	// Format new-line number cell.
+	var newStr string
+	if newLine > 0 && (kind == diffLineAdded || kind == diffLineContext) {
+		newStr = fmt.Sprintf("%*d", gutterNumWidth, newLine)
+	} else {
+		newStr = strings.Repeat(" ", gutterNumWidth)
+	}
+
+	oldCell := gutterStyle(oldBg).Render(oldStr)
+	spaceCell := gutterStyle(sepBg).Render(" ")
+	newCell := gutterStyle(newBg).Render(newStr)
+	sepCell := lipgloss.NewStyle().Foreground(s.P.BorderSoft).Background(sepBg).Render(gutterSep)
+	trailCell := gutterStyle(sepBg).Render(" ")
+	// Gutter: "OOOO NNNN │ " (11 visible chars)
+	return oldCell + spaceCell + newCell + sepCell + trailCell
+}
+
+// renderDiffCodeLine renders the code body of a single diff line: strips the
+// leading +/-/space marker, syntax-highlights the code with the row's diff
+// background, and truncates to codeWidth.
+//
+// For meta lines (---/+++/diff/index), the whole line is rendered in the faint
+// color (no syntax — these are not source code).
+func (m Model) renderDiffCodeLine(line string, kind diffLineKind, codeWidth int, filename string) string {
+	s := m.styles
+	d := s.P.Diff
+
+	var rowBg lipgloss.Color
+	switch kind {
+	case diffLineAdded:
+		rowBg = d.AddedBg
+	case diffLineRemoved:
+		rowBg = d.RemovedBg
+	case diffLineMeta:
+		// meta lines (---/+++/diff/index): faint, no highlighting
+		return lipgloss.NewStyle().
+			Foreground(s.P.FgFaint).
+			Background(s.P.Bg).
+			Render(truncate(line, codeWidth))
+	default:
+		rowBg = d.ContextBg
+	}
+
+	// Strip the leading marker (+/-/ ) to get the raw code.
+	code := line
+	if len(line) > 0 {
+		code = line[1:]
+	}
+
+	// Truncate the code to codeWidth (visible chars) before highlighting so we
+	// don't syntax-highlight characters that will be clipped. This avoids any
+	// off-by-one in ANSI-length accounting after truncation.
+	code = truncate(code, codeWidth)
+
+	// Syntax-highlight with the row's diff background color so every token
+	// span carries the bg — no transparent cells between tokens.
+	return highlightCodeBg(code, filename, s.P, rowBg)
+}
+
+// padRow pads a rendered row string (which may contain ANSI escapes) to exactly
+// width visible columns by appending spaces with Background(bg). This ensures
+// the rightmost cells are painted with the row background and no transparent
+// trailing gap exists.
+//
+// Mechanism: lipgloss.Width() strips ANSI and returns visible column count.
+// We subtract the visible width of row from width to get the pad length, then
+// render that many spaces with Background(bg). If row is already >= width we
+// truncate using lipgloss's own ansi-aware truncation via Render(Width(width)).
+func padRow(row string, width int, bg lipgloss.Color) string {
+	visible := lipgloss.Width(row)
+	if visible >= width {
+		// Truncate to exactly width using a lipgloss Width constraint so ANSI
+		// accounting is correct. We pass through a plain style (no extra colors)
+		// because the row already has all its colors embedded.
+		return lipgloss.NewStyle().MaxWidth(width).Render(row)
+	}
+	pad := width - visible
+	trailing := lipgloss.NewStyle().Background(bg).Render(strings.Repeat(" ", pad))
+	return row + trailing
+}
+
+// padDiffLines pads each element of lines to width using padRow, so that
+// non-diff rows (file header, spacer, folded hint) are also background-filled.
+func padDiffLines(lines []string, width int, bg lipgloss.Color) []string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = padRow(l, width, bg)
+	}
+	return out
+}
+
+// TODO(08c M6 split-mode): when split-mode is implemented, add a
+// diffLineStyleSimple helper that maps +/-/@@/meta → a lipgloss.Style for the
+// split-pane's simpler rendering path (no gutter, no bg-tint compositing).
+// For now the unified-mode path (diffPatchPane) handles everything via
+// renderDiffCodeLine + renderGutter.
 
 // padLines pads (or trims) a block to exactly height lines.
 func padLines(lines []string, height int) string {
@@ -345,6 +627,25 @@ func padLines(lines []string, height int) string {
 		lines = append(lines, "")
 	}
 	return strings.Join(lines, "\n")
+}
+
+// padLinesWidth is like padLines but additionally ensures that every line is
+// exactly width visible characters wide by padding short lines with bg-colored
+// spaces. This is used by diffPatchPane to guarantee full-width fill on every
+// row including the empty padding lines at the bottom of a short patch.
+func padLinesWidth(lines []string, height, width int, bg lipgloss.Color) string {
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	out := make([]string, len(lines), height)
+	for i, l := range lines {
+		out[i] = padRow(l, width, bg)
+	}
+	emptyRow := padRow("", width, bg)
+	for len(out) < height {
+		out = append(out, emptyRow)
+	}
+	return strings.Join(out, "\n")
 }
 
 // sortFileDiffs orders diffs by path so the tree + selection indexes are stable.
