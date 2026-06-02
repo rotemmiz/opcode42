@@ -262,7 +262,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.String() == "ctrl+x" {
 			m.leader = true
-			m.status = "ctrl+x — l sessions · n new · m model · a agent · g timeline · s status · b sidebar · t tasks · y copy · r thinking · o tools · e editor"
+			m.status = "ctrl+x — l sessions · n new · m model · a agent · g timeline · s status · b sidebar · t tasks · y copy · r thinking · o tools · e editor · ↓ child · ↑ parent · [ ] siblings"
 			return m, nil
 		}
 		// The slash popup captures nav/accept/dismiss keys; other keys fall
@@ -588,10 +588,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.store = m.store.ingestHistory(msg.sessionID, msg.items)
 		}
 		m.todos = nil // todos are per-session; refetch for the opened one if the dock is up
-		if m.tasksOpen && m.cfg.SessionID != "" {
-			return m, loadTodosCmd(m.ctx, m.client, m.cfg.SessionID)
+		cmds := []tea.Cmd{}
+		if msg.sessionID != "" { // keep the sub-agent footer fresh (GET /session/{id}/children)
+			cmds = append(cmds, loadChildrenCmd(m.ctx, m.client, msg.sessionID))
 		}
-		return m, nil
+		if m.tasksOpen && m.cfg.SessionID != "" {
+			cmds = append(cmds, loadTodosCmd(m.ctx, m.client, m.cfg.SessionID))
+		}
+		return m, tea.Batch(cmds...)
 
 	case connErrMsg:
 		m.conn, m.err = ConnError, msg.err
@@ -635,6 +639,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case todosLoadedMsg:
 		if msg.err == nil && msg.sessionID == m.cfg.SessionID {
 			m.todos = msg.todos
+		}
+		return m, nil
+
+	case childrenLoadedMsg:
+		if msg.err == nil {
+			for _, ss := range msg.children {
+				m.store.sessions = upsertSession(m.store.sessions, ss)
+			}
 		}
 		return m, nil
 
@@ -809,6 +821,14 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "e":
 		return m, openEditorCmd(m.input.Value())
+	case "down":
+		return m.enterFirstChild() // descend into the first sub-agent child
+	case "up":
+		return m.gotoParent() // return to the parent session
+	case "]":
+		return m.cycleSibling(+1) // next sibling sub-agent
+	case "[":
+		return m.cycleSibling(-1) // previous sibling sub-agent
 	}
 	return m, nil
 }

@@ -31,6 +31,9 @@ func (m Model) renderSession() string {
 	if dock := m.tasksDockView(leftW); dock != "" {
 		footer = dock + "\n" + footer // tasks dock above the composer area
 	}
+	if sf := m.subagentFooterView(leftW); sf != "" {
+		footer = sf + "\n" + footer // sub-agent context strip (plan 08b §9)
+	}
 
 	sid := m.cfg.SessionID
 	header := s.Section.Render(m.sessionTitle(sid))

@@ -16,6 +16,7 @@ import (
 // Session is a session list entry.
 type Session struct {
 	ID        string        `json:"id"`
+	ParentID  string        `json:"parentID,omitempty"` // set on sub-agent child sessions
 	Title     string        `json:"title"`
 	Directory string        `json:"directory"`
 	Cost      float64       `json:"cost"`
