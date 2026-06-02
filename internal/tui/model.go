@@ -290,7 +290,11 @@ func (m Model) Init() tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
-	return healthCmd(m.ctx, m.client)
+	// Kick the animation tick immediately: the splash screen is the initial state,
+	// and the logo shimmer needs to start running right away (plan 08c M10).
+	// maybeKickAnim() returns animTickCmd() because animating() is true on
+	// ScreenSplash.  The health check and tick run concurrently.
+	return tea.Batch(healthCmd(m.ctx, m.client), m.maybeKickAnim())
 }
 
 // Update handles messages.
@@ -451,6 +455,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
 			}
 			m.cfg.SessionID, m.screen = "", ScreenSplash
+			// Re-entering the splash — kick the logo shimmer tick (plan 08c M10).
+			return m, m.maybeKickAnim()
 		}
 		return m, nil
 
@@ -1191,7 +1197,16 @@ func (m Model) viewSplash() string {
 	}
 	blank := lipgloss.NewStyle().Background(s.P.Bg).Width(w).Render("")
 
-	wordmark := fill(s.Base.Bold(true), "forge")
+	// Block-pixel "forge" logo with left→right shimmer sweep (plan 08c M10).
+	// logoFrame returns one string per row; each row is then full-width Bg-filled via
+	// fill() so no transparent cell escapes to the terminal background.
+	logoRows := logoFrame(m.animFrame, s.P)
+	logoLines := make([]string, len(logoRows))
+	for i, row := range logoRows {
+		logoLines[i] = fill(lipgloss.NewStyle(), row)
+	}
+	wordmark := lipgloss.JoinVertical(lipgloss.Left, logoLines...)
+
 	composer := m.composerView()
 	if ac := m.autocompleteView(); ac != "" {
 		composer = lipgloss.JoinVertical(lipgloss.Left, ac, composer)

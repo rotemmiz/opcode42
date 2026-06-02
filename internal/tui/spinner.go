@@ -63,26 +63,34 @@ func animTickCmd() tea.Cmd {
 
 // ── animating predicate ────────────────────────────────────────────────────────
 
-// animating reports whether any animation is currently in progress for the open
-// session.  The tick reschedules only when this returns true, so at idle no
-// further ticks are queued and the render loop is never woken unnecessarily.
+// animating reports whether any animation is currently in progress.  The tick
+// reschedules only when this returns true, so at idle no further ticks are queued
+// and the render loop is never woken unnecessarily.
 //
 // "Animating" means one of:
+//   - The splash screen is visible (ScreenSplash) — the logo shimmer sweep runs
+//     continuously while on the home screen (plan 08c M10).  The tick cadence is
+//     the same 100ms as the spinner; the shimmer advances slowly (46 frames per
+//     full sweep) so CPU impact is negligible.
 //   - A tool part in the current session has status "running" or "pending"
-//     (tool spinner in toolRow).
-//   - The most recent assistant message in the current session has a text part
-//     with no output yet (streaming in progress — we detect this by checking for
-//     a non-empty text part whose sibling tool parts are all still running; the
-//     simplest reliable proxy is: any assistant message has a part whose text is
-//     non-empty but the message has at least one running tool, OR the last
-//     assistant message's last text part is empty/growing — we use the presence
-//     of any running tool as the proxy for "streaming turn in progress").
+//     (tool spinner in toolRow / scannerFrame spinner label).
+//
+// Idle-safety: on ScreenSession with no running tools this returns false, stopping
+// the tick.  The splash case only fires while screen == ScreenSplash; switching
+// to a session screen that has no active tools immediately goes idle again.
 //
 // Rationale: the SSE stream delivers message.part.updated events continuously
 // during a turn; as long as there is a running tool the assistant is active.
 // Once all tools reach "completed"/"error" the animation stops naturally on the
 // next animTickMsg check.
 func (m Model) animating() bool {
+	// Logo shimmer: keep ticking while the splash/home screen is visible so the
+	// shimmer sweep advances each frame.  ScreenSplash is the initial state and
+	// re-entered when the user closes all sessions (modal.go, model.go).
+	if m.screen == ScreenSplash {
+		return true
+	}
+
 	sid := m.cfg.SessionID
 	if sid == "" {
 		return false

@@ -144,10 +144,13 @@ func makeToolPartState(status string) json.RawMessage {
 // newTestModel builds a minimal Model with the given session ID for animating()
 // predicate tests.  It does not need a full New() since these tests only call
 // animating(), not Update().  The store maps must be initialized.
+// screen is set to ScreenSession so the splash-screen fast-path does not fire
+// and the tests exercise the tool-status branch only.
 func newTestModel(sessionID string) Model {
 	return Model{
-		cfg:   Config{SessionID: sessionID},
-		store: newStore(),
+		cfg:    Config{SessionID: sessionID},
+		store:  newStore(),
+		screen: ScreenSession,
 	}
 }
 
@@ -232,16 +235,20 @@ func isTick(t *testing.T, cmd tea.Cmd) bool {
 	return cmd != nil
 }
 
-// TestAnimTickIdleNoReschedule asserts that an animTickMsg at idle returns a
-// nil cmd (no reschedule).  We use New() to properly initialize the textarea
-// and other Model fields so resizeComposer does not panic.
+// TestAnimTickIdleNoReschedule asserts that an animTickMsg at idle (ScreenSession,
+// no running tools) returns a nil cmd (no reschedule).  We use New() to properly
+// initialize the textarea and other Model fields so resizeComposer does not panic,
+// then move to ScreenSession so the logo-shimmer fast-path does not fire.
 func TestAnimTickIdleNoReschedule(t *testing.T) {
 	m := New(Config{URL: "http://127.0.0.1:4096", SessionID: "s1"})
-	// No running tools → animating() == false.
+	// Switch to session screen: the splash logo-shimmer path keeps animating() true
+	// even with no tools, so we must be on a session screen to test the idle case.
+	m.screen = ScreenSession
+	// No running tools → animating() == false → tick should not reschedule.
 	result, cmd := m.Update(animTickMsg{})
 	_ = result
 	if cmd != nil {
-		t.Error("animTickMsg at idle should return nil cmd (no reschedule)")
+		t.Error("animTickMsg at idle (ScreenSession, no tools) should return nil cmd (no reschedule)")
 	}
 }
 
@@ -249,6 +256,7 @@ func TestAnimTickIdleNoReschedule(t *testing.T) {
 // returns a non-nil tick cmd and increments animFrame.
 func TestAnimTickAnimatingReschedules(t *testing.T) {
 	m := New(Config{URL: "http://127.0.0.1:4096", SessionID: "s1"})
+	m.screen = ScreenSession // session screen; animating() is driven by tool status
 	m.store.messages["s1"] = []Message{
 		{ID: "msg1", SessionID: "s1", Role: "assistant"},
 	}
