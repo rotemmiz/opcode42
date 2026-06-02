@@ -1188,10 +1188,12 @@ func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return body
 	}
-	// Always fill every cell with the theme background — mirrors opencode's opentui
-	// compositor which never leaves a cell transparent. Without this, forge-dark's
-	// light-gray foregrounds (#d6dade) render on a white terminal → near-illegible.
-	filled := lipgloss.NewStyle().Background(m.styles.P.Bg).Width(m.width).Height(m.height).Render(body)
+	// Composite onto a full-screen canvas painted with the theme background. This
+	// truncates each row to width (no wrapping → the frame never exceeds m.height,
+	// so the terminal doesn't scroll the footer/sidebar) and paints every gap/empty
+	// cell with the base bg (mirrors opencode's opentui per-cell compositor). A plain
+	// lipgloss Background wrap can't do this — its inner resets leave a black void.
+	filled := paintBackground(body, m.width, m.height, m.styles.P.Bg)
 	// Composite the toast overlay onto the bottom-right of the Bg-filled frame.
 	// overlayToasts replaces the rightmost N columns of the last K rows with the
 	// toast box; each toast cell carries its own BgElev background so it renders
