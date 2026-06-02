@@ -8,11 +8,14 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CallSplit
+import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,6 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,6 +82,9 @@ fun ChatScreen(
     var showInfoSheet by remember { mutableStateOf(false) }
     var showOverflow by remember { mutableStateOf(false) }
     var showModelPicker by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var showShareDialog by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
 
     // The strip shows the user's explicit pick if any, else the last-run state from the stream.
     val displayAgent = selectedAgent ?: uiState.agentMode
@@ -161,9 +169,22 @@ fun ChatScreen(
                             expanded = showOverflow,
                             onDismiss = { showOverflow = false },
                             isDarkTheme = isDarkTheme,
+                            isShared = uiState.session?.share != null,
+                            onRename = {
+                                showOverflow = false
+                                showRenameDialog = true
+                            },
                             onFork = {
                                 showOverflow = false
                                 viewModel.forkSession { newId -> onNavigateToSession(newId) }
+                            },
+                            onSummarize = {
+                                showOverflow = false
+                                viewModel.summarize()
+                            },
+                            onShare = {
+                                showOverflow = false
+                                showShareDialog = true
                             },
                             onDelete = {
                                 showOverflow = false
@@ -271,6 +292,30 @@ fun ChatScreen(
             }
         }
 
+        if (showRenameDialog) {
+            RenameSessionDialog(
+                current = uiState.session?.title,
+                onConfirm = { title ->
+                    viewModel.renameSession(title)
+                    showRenameDialog = false
+                },
+                onDismiss = { showRenameDialog = false },
+            )
+        }
+
+        if (showShareDialog) {
+            ShareSessionDialog(
+                url = uiState.session?.share?.url,
+                onShare = { viewModel.shareSession() },
+                onUnshare = {
+                    viewModel.unshareSession()
+                    showShareDialog = false
+                },
+                onCopy = { url -> clipboard.setText(AnnotatedString(url)) },
+                onDismiss = { showShareDialog = false },
+            )
+        }
+
         if (showModelPicker) {
             ModelPickerSheet(
                 providers = providers,
@@ -296,7 +341,11 @@ private fun OverflowMenu(
     expanded: Boolean,
     onDismiss: () -> Unit,
     isDarkTheme: Boolean,
+    isShared: Boolean,
+    onRename: () -> Unit,
     onFork: () -> Unit,
+    onSummarize: () -> Unit,
+    onShare: () -> Unit,
     onDelete: () -> Unit,
     onToggleTheme: () -> Unit,
 ) {
@@ -306,9 +355,24 @@ private fun OverflowMenu(
         containerColor = SurfaceContainerHigh,
     ) {
         DropdownMenuItem(
+            text = { Text("Rename session", color = OnSurface) },
+            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = OnSurfaceVariant) },
+            onClick = onRename,
+        )
+        DropdownMenuItem(
             text = { Text("Fork session", color = OnSurface) },
             leadingIcon = { Icon(Icons.Default.CallSplit, contentDescription = null, tint = OnSurfaceVariant) },
             onClick = onFork,
+        )
+        DropdownMenuItem(
+            text = { Text("Summarize context", color = OnSurface) },
+            leadingIcon = { Icon(Icons.Default.Compress, contentDescription = null, tint = OnSurfaceVariant) },
+            onClick = onSummarize,
+        )
+        DropdownMenuItem(
+            text = { Text(if (isShared) "Sharing… (manage)" else "Share session", color = OnSurface) },
+            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = OnSurfaceVariant) },
+            onClick = onShare,
         )
         DropdownMenuItem(
             text = { Text(if (isDarkTheme) "Light theme" else "Dark theme", color = OnSurface) },

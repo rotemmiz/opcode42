@@ -258,6 +258,64 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /** Effective model for ops that require one (summarize): explicit pick, else the last-run model. */
+    private fun effectiveModel(): ModelRef? =
+        _selectedModel.value ?: run {
+            val p = uiState.value.providerID
+            val m = uiState.value.modelID
+            if (p != null && m != null) ModelRef(providerID = p, modelID = m) else null
+        }
+
+    /** Overflow → Rename: set the session title; the returned session updates the store. */
+    fun renameSession(title: String) {
+        val trimmed = title.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                store.dispatch(AppEvent.SessionUpdated(client.renameSession(sessionId, trimmed, directory)))
+            } catch (e: Exception) {
+                android.util.Log.w("ChatVM", "renameSession failed", e)
+            }
+        }
+    }
+
+    /** Overflow → Summarize: compact the context. No-op (logged) if no model is known yet. */
+    fun summarize() {
+        val model = effectiveModel() ?: run {
+            android.util.Log.w("ChatVM", "summarize skipped: no model selected or running")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                client.summarizeSession(sessionId, model, directory)
+            } catch (e: Exception) {
+                android.util.Log.w("ChatVM", "summarize failed", e)
+            }
+        }
+    }
+
+    /** Overflow → Share: publish a link; the returned session (with share.url) updates the store. */
+    fun shareSession() {
+        viewModelScope.launch {
+            try {
+                store.dispatch(AppEvent.SessionUpdated(client.shareSession(sessionId, directory)))
+            } catch (e: Exception) {
+                android.util.Log.w("ChatVM", "shareSession failed", e)
+            }
+        }
+    }
+
+    /** Revoke the shared link; the returned session updates the store. */
+    fun unshareSession() {
+        viewModelScope.launch {
+            try {
+                store.dispatch(AppEvent.SessionUpdated(client.unshareSession(sessionId, directory)))
+            } catch (e: Exception) {
+                android.util.Log.w("ChatVM", "unshareSession failed", e)
+            }
+        }
+    }
+
     /** Stop a running agent turn (composer stop button, shown while the session is busy). */
     fun abort() {
         viewModelScope.launch {
