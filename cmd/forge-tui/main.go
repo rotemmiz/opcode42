@@ -3,6 +3,7 @@
 // protocol. It owns no agent state — the daemon is the source of truth.
 //
 //	forge-tui --url http://127.0.0.1:4096 --dir "$PWD"
+//	forge-tui --theme forge-light           # pin theme for deterministic capture
 package main
 
 import (
@@ -24,12 +25,14 @@ func main() {
 	password := flag.String("password", "", "Basic auth password")
 	provider := flag.String("provider", "", "prompt model provider id (else resolved from /config)")
 	modelID := flag.String("model", "", "prompt model id")
+	themeFlag := flag.String("theme", "", "theme name override (e.g. forge-dark, forge-light, forge-mono); empty = auto-pick or KV-pinned")
 	flag.Parse()
 
 	model := tui.New(tui.Config{
 		URL: *url, Directory: *dir, SessionID: *session,
 		Username: *username, Password: *password,
 		Provider: *provider, Model: *modelID,
+		Theme: *themeFlag,
 	}).Restore() // restore persisted theme/model/history + enable persistence
 
 	if _, err := tea.NewProgram(model, tea.WithAltScreen()).Run(); err != nil {

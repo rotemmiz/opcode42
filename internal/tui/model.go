@@ -51,6 +51,7 @@ type Config struct {
 	Password  string
 	Provider  string // prompt model provider id (else resolved from /config)
 	Model     string // prompt model id
+	Theme     string // override theme name (empty = auto-pick or KV-pinned; for deterministic capture)
 }
 
 // Model is the Bubble Tea application state.
@@ -184,8 +185,12 @@ func New(cfg Config) Model {
 	}
 	// Auto-pick light vs dark by terminal background — mirrors opencode's
 	// theme_mode_lock behaviour. Restore() will override with any pinned KV theme.
+	// cfg.Theme (--theme flag) wins over both auto-pick and KV.
 	m.termDark = lipgloss.HasDarkBackground()
 	defName := pickDefaultTheme(m.termDark)
+	if cfg.Theme != "" {
+		defName = cfg.Theme
+	}
 	def, _ := theme.ByNameForMode(defName, m.termDark)
 	m = m.applyTheme(defName, def)
 	m.histIdx = -1
@@ -207,24 +212,43 @@ func New(cfg Config) Model {
 func (m Model) applyTheme(name string, p theme.Palette) Model {
 	m.themeName = name
 	m.styles = theme.New(p)
-	txt := lipgloss.NewStyle().Foreground(p.Fg)
-	ph := lipgloss.NewStyle().Foreground(p.FgGhost)
+	txt := lipgloss.NewStyle().Foreground(p.Fg).Background(p.Bg)
+	ph := lipgloss.NewStyle().Foreground(p.FgGhost).Background(p.Bg)
 	m.input.FocusedStyle.Text, m.input.FocusedStyle.Placeholder = txt, ph
 	m.input.BlurredStyle.Text, m.input.BlurredStyle.Placeholder = txt, ph
+	// The textarea pads its current/empty line with CursorLine + Base styles; pin
+	// their Bg too so the composer row fills with the theme background rather than
+	// the terminal default (visible as a dark bar on a light terminal). plan 08c Tier 0.
+	bg := lipgloss.NewStyle().Background(p.Bg)
+	m.input.FocusedStyle.CursorLine, m.input.FocusedStyle.Base = bg, bg
+	m.input.BlurredStyle.CursorLine, m.input.BlurredStyle.Base = bg, bg
+	m.input.FocusedStyle.EndOfBuffer, m.input.BlurredStyle.EndOfBuffer = bg, bg
+	// bubbles' textarea caches an internal *Style pointer (set only by Focus/Blur)
+	// to the active style; after this value-copy of Model that pointer still aims at
+	// the pre-copy FocusedStyle, so our edits above wouldn't take effect on render.
+	// Re-point it to the copy's style by re-applying the current focus state.
+	if m.input.Focused() {
+		_ = m.input.Focus()
+	} else {
+		m.input.Blur()
+	}
 	return m
 }
 
 // Restore loads the persisted theme/model/history from the local KV and turns on
 // persistence. Call once from the real entrypoint (not in tests, which want a
-// hermetic New). CLI --provider/--model still win.
-// Theme resolution order: pinned KV theme > auto-pick by terminal background.
+// hermetic New). CLI --provider/--model/--theme still win.
+// Theme resolution order: cfg.Theme (CLI --theme) > pinned KV theme > auto-pick by terminal background.
 func (m Model) Restore() Model {
 	m.persistEnabled = true
 	kv := loadKV()
 	m.history, m.histIdx = kv.History, -1
 	m.stash = kv.Stash
 	m.diffTreeHidden = kv.HideDiffTree
-	if kv.Theme != "" {
+	if m.cfg.Theme != "" {
+		// CLI --theme flag takes highest priority — deterministic capture / testing.
+		m = m.applyThemeByName(m.cfg.Theme)
+	} else if kv.Theme != "" {
 		// User explicitly pinned a theme — honour it (mirrors opencode's theme_mode_lock).
 		m = m.applyThemeByName(kv.Theme)
 	}
@@ -1082,27 +1106,47 @@ func (m Model) View() string {
 // viewSplash renders the wordmark, the composer, and the connection status.
 func (m Model) viewSplash() string {
 	s := m.styles
-	wordmark := s.Base.Bold(true).Render("forge")
+	// Each splash line is rendered as a single full-width, center-aligned, Bg-painted
+	// style → one SGR run per line, so the whole row (text + padding) carries the
+	// theme background with no mid-line reset. Lipgloss emits a reset after every
+	// styled run, so per-segment backgrounds leave the rest of the row transparent
+	// (terminal-dark bleed on a light terminal); one style per line avoids that
+	// entirely. plan 08c Tier 0.
+	w := m.width
+	if w <= 0 {
+		// No layout yet — fall back to plain stacking (used only before the first
+		// WindowSizeMsg; View() returns body unpainted in that case anyway).
+		return lipgloss.JoinVertical(lipgloss.Center,
+			s.Base.Bold(true).Render("forge"), "", m.composerView(), "",
+			s.Faint.Render("enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit"))
+	}
+	fill := func(st lipgloss.Style, content string) string {
+		return st.Background(s.P.Bg).Width(w).Align(lipgloss.Center).Render(content)
+	}
+	blank := lipgloss.NewStyle().Background(s.P.Bg).Width(w).Render("")
+
+	wordmark := fill(s.Base.Bold(true), "forge")
 	composer := m.composerView()
 	if ac := m.autocompleteView(); ac != "" {
 		composer = lipgloss.JoinVertical(lipgloss.Left, ac, composer)
 	}
-	status := s.Faint.Render(m.statusLine())
-	if m.err != nil {
-		status = lipgloss.NewStyle().Foreground(s.P.Red).Render(m.err.Error())
-	}
-	hint := s.Faint.Render("enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit")
+	// The composer is a fixed-width bordered block; center it on a Bg-filled row.
+	composer = lipgloss.PlaceHorizontal(w, lipgloss.Center, composer,
+		lipgloss.WithWhitespaceBackground(s.P.Bg))
 
-	body := lipgloss.JoinVertical(lipgloss.Center, wordmark, "", composer, "", hint, "", status)
-	if m.width == 0 || m.height == 0 {
+	status := fill(s.Faint, m.statusLine())
+	if m.err != nil {
+		status = fill(lipgloss.NewStyle().Foreground(s.P.Red), m.err.Error())
+	}
+	hint := fill(s.Faint, "enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit")
+
+	body := lipgloss.JoinVertical(lipgloss.Left, wordmark, blank, composer, blank, hint, blank, status)
+	if m.height == 0 {
 		return body
 	}
-	// lipgloss.Place fills the surrounding whitespace cells; without a background
-	// option those cells are transparent and inherit the terminal color. Pass
-	// WithWhitespaceBackground so every padding cell in the splash frame is owned
-	// by the palette Bg. The outer View() Width×Height paint is the final safety
-	// net, but Place fills the body-surrounding space before that.
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, body,
+	// Body rows are already full-width Bg-painted; Place only adds vertical padding,
+	// which WithWhitespaceBackground fills with the theme Bg too.
+	return lipgloss.Place(w, m.height, lipgloss.Center, lipgloss.Center, body,
 		lipgloss.WithWhitespaceBackground(s.P.Bg))
 }
 
