@@ -72,12 +72,15 @@ func animTickCmd() tea.Cmd {
 //     continuously while on the home screen (plan 08c M10).  The tick cadence is
 //     the same 100ms as the spinner; the shimmer advances slowly (46 frames per
 //     full sweep) so CPU impact is negligible.
-//   - A tool part in the current session has status "running" or "pending"
 //     (tool spinner in toolRow / scannerFrame spinner label).
+//   - At least one live (non-expired) toast is in the queue (plan 08c M11).
+//     The animTick drives the toast TTL countdown; toastsLive() stays true until
+//     all toasts expire, at which point the tick self-stops and the queue drains.
 //
-// Idle-safety: on ScreenSession with no running tools this returns false, stopping
-// the tick.  The splash case only fires while screen == ScreenSplash; switching
-// to a session screen that has no active tools immediately goes idle again.
+// Idle-safety: on ScreenSession with no running tools and no live toasts this
+// returns false, stopping the tick.  The splash case only fires while screen ==
+// ScreenSplash; switching to a session screen with no active tools/toasts
+// immediately goes idle again.
 //
 // Rationale: the SSE stream delivers message.part.updated events continuously
 // during a turn; as long as there is a running tool the assistant is active.
@@ -90,7 +93,10 @@ func (m Model) animating() bool {
 	if m.screen == ScreenSplash {
 		return true
 	}
-
+	// Live toasts need the tick to count down their TTL (plan 08c M11).
+	if m.toastsLive() {
+		return true
+	}
 	sid := m.cfg.SessionID
 	if sid == "" {
 		return false

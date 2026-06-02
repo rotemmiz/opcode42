@@ -150,6 +150,12 @@ type Model struct {
 	// Reset to 0 when a new session opens so the sweep always starts from the left.
 	// (plan 08c M9 — spinner.go)
 	animFrame int
+
+	// toasts is the live toast queue (plan 08c M11).  Entries expire after
+	// toastTTL; the animTick drives TTL countdown via toastTick().
+	// pushToast enqueues and toastTick purges; overlayToasts composites the
+	// stack onto the rendered frame bottom-right.
+	toasts []toast
 }
 
 // pickDefaultTheme returns the appropriate default theme name based on whether
@@ -583,12 +589,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case abortedMsg:
+		// Show a toast for interrupt outcomes (plan 08c M11 source #2).
+		// The status line continues to carry the text for accessibility; the toast
+		// is an additional transient notice in the bottom-right corner.
 		if msg.err != nil {
 			m.status = "interrupt failed: " + msg.err.Error()
-		} else {
-			m.status = "interrupted"
+			cmd := m.pushToast(toastError, "interrupt failed")
+			return m, cmd
 		}
-		return m, nil
+		m.status = "interrupted"
+		cmd := m.pushToast(toastInfo, "interrupted")
+		return m, cmd
 
 	case forkedMsg:
 		if msg.err != nil {
@@ -625,7 +636,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case clipboardCopiedMsg:
-		return m, nil
+		// Show a success toast for every clipboard copy (plan 08c M11 source #1).
+		// The inline m.status text is already set by the caller (e.g. "copied turn"
+		// or "copied last response") — the toast augments rather than replaces it.
+		cmd := m.pushToast(toastSuccess, "copied to clipboard")
+		return m, cmd
 
 	case editorDoneMsg:
 		if msg.path != "" {
@@ -849,6 +864,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// The tick is started (kicked) by sseEventMsg and sessionOpenedMsg below,
 	// which are the natural entry points for a new assistant turn.
 	case animTickMsg:
+		// Purge expired toasts on every tick (plan 08c M11).  toastTick() drains
+		// the queue in-place; once empty toastsLive() returns false, animating()
+		// may return false (if no tools are running), and the tick self-stops.
+		m.toastTick()
 		if m.animating() {
 			m.animFrame++
 			return m, animTickCmd()
@@ -1172,7 +1191,12 @@ func (m Model) View() string {
 	// Always fill every cell with the theme background — mirrors opencode's opentui
 	// compositor which never leaves a cell transparent. Without this, forge-dark's
 	// light-gray foregrounds (#d6dade) render on a white terminal → near-illegible.
-	return lipgloss.NewStyle().Background(m.styles.P.Bg).Width(m.width).Height(m.height).Render(body)
+	filled := lipgloss.NewStyle().Background(m.styles.P.Bg).Width(m.width).Height(m.height).Render(body)
+	// Composite the toast overlay onto the bottom-right of the Bg-filled frame.
+	// overlayToasts replaces the rightmost N columns of the last K rows with the
+	// toast box; each toast cell carries its own BgElev background so it renders
+	// correctly over the Bg-filled surface (plan 08c M11).
+	return m.overlayToasts(filled)
 }
 
 // viewSplash renders the wordmark, the composer, and the connection status.
