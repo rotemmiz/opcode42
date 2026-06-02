@@ -242,3 +242,50 @@ func firstLine(s string) string {
 	}
 	return s
 }
+
+// centerScreen places body in the middle of a width×height screen, returning it
+// unplaced when either dimension is still zero (pre-first-resize). Shared by the
+// full-screen overlays (modals, diff reviewer, prompts).
+func centerScreen(width, height int, body string) string {
+	if width == 0 || height == 0 {
+		return body
+	}
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, body)
+}
+
+// windowAround returns the [start,end) slice of count rows that fits height
+// lines with sel kept roughly centered; the whole range when it already fits.
+func windowAround(sel, count, height int) (int, int) {
+	if count <= height {
+		return 0, count
+	}
+	start := sel - height/2
+	if start < 0 {
+		start = 0
+	}
+	if hi := count - height; start > hi {
+		start = hi
+	}
+	return start, start + height
+}
+
+// windowFrom returns the [start,end) slice of count rows starting at offset off
+// (clamped so the last line can reach the bottom), fitting height lines — the
+// top-anchored counterpart to windowAround, for scroll offsets.
+func windowFrom(off, count, height int) (int, int) {
+	maxOff := count - height
+	if maxOff < 0 {
+		maxOff = 0
+	}
+	if off > maxOff {
+		off = maxOff
+	}
+	if off < 0 {
+		off = 0
+	}
+	end := off + height
+	if end > count {
+		end = count
+	}
+	return off, end
+}

@@ -13,10 +13,11 @@ import (
 const historyMax = 100
 
 type kvData struct {
-	Theme    string   `json:"theme,omitempty"`
-	Provider string   `json:"provider,omitempty"`
-	Model    string   `json:"model,omitempty"`
-	History  []string `json:"history,omitempty"`
+	Theme        string   `json:"theme,omitempty"`
+	Provider     string   `json:"provider,omitempty"`
+	Model        string   `json:"model,omitempty"`
+	History      []string `json:"history,omitempty"`
+	HideDiffTree bool     `json:"hideDiffTree,omitempty"` // diff reviewer file-tree pane off
 }
 
 func kvPath() string {
@@ -63,10 +64,11 @@ func (m Model) persist() {
 		return
 	}
 	saveKV(kvData{
-		Theme:    m.themeName,
-		Provider: m.model.Provider,
-		Model:    m.model.Model,
-		History:  m.history,
+		Theme:        m.themeName,
+		Provider:     m.model.Provider,
+		Model:        m.model.Model,
+		History:      m.history,
+		HideDiffTree: m.diffTreeHidden,
 	})
 }
 

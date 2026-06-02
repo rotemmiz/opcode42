@@ -119,6 +119,10 @@ type Model struct {
 	history        []string    // submitted prompts (persisted; recalled with up/down when empty)
 	histIdx        int         // browse cursor into history (-1 = not browsing)
 	persistEnabled bool        // gate local-KV reads/writes (off in tests; on via Restore)
+
+	// Diff reviewer (plan 08b §1).
+	diff           diffState // full-screen diff reviewer (open == active)
+	diffTreeHidden bool      // persisted: file-tree pane preference
 }
 
 // New builds the initial Model, constructing the SDK client.
@@ -186,6 +190,7 @@ func (m Model) Restore() Model {
 	m.persistEnabled = true
 	kv := loadKV()
 	m.history, m.histIdx = kv.History, -1
+	m.diffTreeHidden = kv.HideDiffTree
 	if kv.Theme != "" {
 		m = m.applyThemeByName(kv.Theme)
 	}
@@ -251,6 +256,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.pendingQuestion() != nil {
 			return m.handleQuestionKey(msg)
 		}
+		// The full-screen diff reviewer captures all navigation keys.
+		if m.diff.open {
+			return m.handleDiffKey(msg)
+		}
 		// A modal captures navigation/selection keys.
 		if m.modal != modalNone {
 			return m.handleModalKey(msg)
@@ -262,7 +271,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.String() == "ctrl+x" {
 			m.leader = true
-			m.status = "ctrl+x — l sessions · n new · m model · a agent · g timeline · s status · b sidebar · t tasks · y copy · r thinking · o tools · e editor · ↓ child · ↑ parent · [ ] siblings"
+			m.status = "ctrl+x — l sessions · n new · m model · a agent · g timeline · s status · b sidebar · t tasks · y copy · r thinking · o tools · e editor · d diff · ↓ child · ↑ parent · [ ] siblings"
 			return m, nil
 		}
 		// The slash popup captures nav/accept/dismiss keys; other keys fall
@@ -650,6 +659,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case diffLoadedMsg:
+		if !m.diff.open { // reviewer was closed while the fetch was in flight
+			return m, nil
+		}
+		m.diff.loading = false
+		if msg.err != nil {
+			m.diff.err = msg.err
+			return m, nil
+		}
+		sortFileDiffs(msg.files)
+		m.diff.files = msg.files
+		m.diff.treeRows = buildDiffTreeRows(msg.files) // cache; rows depend only on files
+		if m.diff.sel >= len(msg.files) {
+			m.diff.sel = 0
+		}
+		return m, nil
+
 	case sseClosedMsg:
 		if m.stream != nil {
 			m.stream.Close() // release the closed stream's conn + context
@@ -821,6 +847,8 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "e":
 		return m, openEditorCmd(m.input.Value())
+	case "d":
+		return m.openDiff() // full-screen diff reviewer
 	case "down":
 		return m.enterFirstChild() // descend into the first sub-agent child
 	case "up":
@@ -929,6 +957,8 @@ func (m Model) View() string {
 		body = m.permissionView()
 	case m.pendingQuestion() != nil:
 		body = m.questionView()
+	case m.diff.open:
+		body = m.diffView()
 	case m.modal != modalNone:
 		body = m.modalView()
 	case m.screen == ScreenSession:
