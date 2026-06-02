@@ -1,5 +1,17 @@
 # Plan 08c — TUI visual parity: themes, markdown, syntax, diff, motion
 
+> **Status: SHIPPED (2026-06-02).** All tiers landed across PRs #83–#93. Tier 0 (M0 white-bg fix +
+> light/dark auto-pick), Tier 1 (M1 extended palette, M2 JSON loader + 33 opencode themes = 36 total,
+> M3 `tools/tui-shots` screenshot harness), Tier 2 (M4 glamour markdown, M5+M6 chroma syntax + diff
+> parity, M7 rich tool/message rendering, M8 chrome pass), Tier 3 (M9 gradient-scanner spinner +
+> animTick, M10 block-pixel logo shimmer, M11 toast overlay). **Deferred (intentional):** the
+> `bg-pulse` framebuffer field (M10 stretch, out of scope); diff *intra-line* highlight (M6 nice-to-have,
+> `// TODO(08c M6)`). **Known residual:** bubbles textarea's internal viewport pads short composer
+> lines with an uncolored style we can't reach → a trailing dark bar on the composer row on *light*
+> terminals only (dark is pixel-clean; the user-reported white-bg bug is fixed). See
+> `internal/tui/`: theme/{theme,loader}.go, markdown.go, syntax.go, diff.go, toolrender.go, chrome.go,
+> modal.go, spinner.go, logo.go, toast.go; harness at `tools/tui-shots/`.
+
 > **Scope.** Make the Forge TUI *visually* convincing as an opencode alternative: the theme/token
 > system, markdown + syntax rendering, diff fidelity, chrome (logo/footer/sidebar/dialogs), and
 > motion (spinner/logo/toasts). Where 08a/08b closed **feature** gaps (endpoints, navigation, panes),
