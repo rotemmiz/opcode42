@@ -12,6 +12,13 @@
 > **Status of each is a recommendation, not a commitment.** Build order should be decided per-item
 > against the daemon's progress.
 
+> **Implementation status (2026-06).** The five TUI-appropriate items shipped (one PR each):
+> **§9 sub-agent nav** (#78), **§1 diff viewer** (#79), **§2 PTY pane** (#80), and **§6 stash + §7
+> variant** (#81) — all in `internal/tui/`. The remaining four (**§3 workspaces, §4 provider/OAuth,
+> §5 plugin host, §8 tags**) stay parked: they are daemon-gated or architectural and, per this plan's
+> bottom line, should not be built TUI-first. PTY adopted `github.com/hinshun/vt10x` (over the
+> untagged `charmbracelet/x/vt`); diff/PTY view-state persists in the 08a KV.
+
 ## Links
 - Parent: `plans/08-client-tui.md` (T11 PTY is here). Sibling: `plans/08a-tui-parity-now.md`.
 - Related daemon plans: `plans/05-plugin-host.md` (plugin runtime), `plans/01-daemon-core.md`,
@@ -37,7 +44,7 @@ daemon's own effort on top.
 
 ---
 
-## 1. Diff viewer
+## 1. Diff viewer  ✅ SHIPPED (#79)
 **What opencode does.** A full-screen diff reviewer: `feature-plugins/system/diff-viewer.tsx` +
 `diff-viewer-file-tree.tsx` + `diff-viewer-ui.tsx`. It fetches patches via
 `props.api.client.session.diff(...)` (**`GET /session/{id}/diff`**, already in Forge's SDK) and
@@ -75,7 +82,7 @@ add split later. **Conformance value:** medium (exercises `GET /session/{id}/dif
 
 ---
 
-## 2. PTY pane (T11 — the TUI's interactive terminal)
+## 2. PTY pane (T11 — the TUI's interactive terminal)  ✅ SHIPPED (#80)
 **What opencode does.** The GUI app embeds a real terminal (`packages/app/src/components/terminal.tsx`
 via **`ghostty-web`**) over **`GET /pty/{id}/connect`** (WebSocket), created with `POST /pty`
 (`pty/index.ts`). Forge framing: `0x00` + UTF-8 JSON `{cursor}` control frames alongside raw bytes
@@ -166,7 +173,7 @@ plugins indefinitely. Coordinate with `plans/05`.
 
 ---
 
-## 6. Stash (prompt-draft + git stash)
+## 6. Stash (prompt-draft + git stash)  ✅ SHIPPED (#81)
 **What opencode does.** `component/prompt/stash.tsx` + `dialog-stash.tsx`, keybinds
 `prompt_stash`/`prompt_stash_list`/`prompt_stash_pop`, `stash_delete`. Lets the user park the current
 composer draft (and recall/pop it later) — a named draft store adjacent to history/frecency. (Despite
@@ -183,7 +190,7 @@ exists — it's then nearly drop-in. **Conformance value:** none (local UX).
 
 ---
 
-## 7. Variant  *(daemon-gated — needs semantics first)*
+## 7. Variant  ✅ SHIPPED (#81) — *was tagged daemon-gated; `Model.variants` from GET /provider sufficed, no daemon work needed*
 **What opencode does.** `dialog-variant.tsx`. The `Model` schema carries a `variants` field; a variant
 selects an alternate configuration of the same model (e.g. a reasoning/effort variant). Surfaced as a
 picker tied to the model switch.
@@ -210,7 +217,7 @@ session list. **Recommendation:** lowest priority; daemon-gated and organization
 
 ---
 
-## 9. Sub-agent UX
+## 9. Sub-agent UX  ✅ SHIPPED (#78)
 **What opencode does.** `routes/session/dialog-subagent.tsx` + `subagent-footer.tsx` +
 `session_child_*` keybinds, over **`GET /session/{id}/children`** (child sessions = sub-agent runs).
 Lets you see and cycle into sub-agent child sessions and watch their status
