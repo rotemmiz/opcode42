@@ -87,9 +87,19 @@ func TestSidebar_ShowsTokensAndCost(t *testing.T) {
 	m.store.sessions = []Session{ss}
 
 	out := m.sidebarView()
-	for _, want := range []string{"My Session", "1,234", "tokens", "$0.0123", "Forge"} {
+	// M8 re-style: the sidebar now shows per-direction token rows ("in"/"out")
+	// and a "total" row — matches opencode scene 06 which breaks down token
+	// counts by direction. "tokens" (the old single-row label) is replaced by
+	// "total". All other previously-tested strings remain present.
+	for _, want := range []string{"My Session", "1,234", "total", "$0.0123", "Forge"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("sidebar missing %q in:\n%s", want, out)
+		}
+	}
+	// Also assert the new per-direction labels are rendered.
+	for _, want := range []string{"in", "out", "CONTEXT", "LSP"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("sidebar missing section label %q in:\n%s", want, out)
 		}
 	}
 }
@@ -162,5 +172,114 @@ func TestRenderSession_SidebarLayoutFitsWidth(t *testing.T) {
 	m.sidebarHidden = true
 	if strings.Contains(m.renderSession(), "Forge") {
 		t.Fatal("hidden sidebar should not render")
+	}
+}
+
+// TestStatusBar_ModeChipAndProviderChips verifies the M8 chrome grammar:
+// the status bar must contain the mode chip, model name, and provider —
+// matching opencode's "Build · Big Pickle OpenCode Zen" pattern.
+func TestStatusBar_ModeChipAndProviderChips(t *testing.T) {
+	cases := []struct {
+		name     string
+		cfg      Config
+		agent    string
+		wantMode string
+		wantMod  string
+		wantProv string
+	}{
+		{
+			name:     "default build mode",
+			cfg:      Config{URL: "http://x", Provider: "anthropic", Model: "claude-sonnet-4"},
+			agent:    "",
+			wantMode: "build",
+			wantMod:  "claude-sonnet-4",
+			wantProv: "anthropic",
+		},
+		{
+			name:     "custom agent mode",
+			cfg:      Config{URL: "http://x", Provider: "openai", Model: "gpt-4o"},
+			agent:    "researcher",
+			wantMode: "researcher",
+			wantMod:  "gpt-4o",
+			wantProv: "openai",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := New(tc.cfg)
+			m.agent = tc.agent
+			out := m.statusBarView(120)
+			for _, want := range []string{tc.wantMode, tc.wantMod, tc.wantProv, "ctrl+p", "commands"} {
+				if !strings.Contains(out, want) {
+					t.Errorf("status bar missing %q\nout: %s", want, out)
+				}
+			}
+			// Width invariant must hold.
+			if got := lipgloss.Width(out); got != 120 {
+				t.Errorf("status bar width %d, want 120", got)
+			}
+		})
+	}
+}
+
+// TestStatusBar_BackgroundFill verifies the M8 surface-fill rule: the status bar
+// must render as exactly `width` visible characters wide for all tested widths
+// so the Bg surface covers trailing cells (no bleed-through on light terminals).
+func TestStatusBar_BackgroundFill(t *testing.T) {
+	for _, themeName := range []string{"forge-dark", "forge-light"} {
+		for _, w := range []int{60, 80, 120} {
+			m := New(Config{URL: "http://x", Provider: "anthropic", Model: "claude-sonnet-4"})
+			m = m.applyThemeByName(themeName)
+			bar := m.statusBarView(w)
+			if got := lipgloss.Width(bar); got != w {
+				t.Errorf("theme=%s width=%d: bar visible width %d, want %d", themeName, w, got, w)
+			}
+		}
+	}
+}
+
+// TestSidebar_SectionsPresent verifies the M8 sidebar layout: CONTEXT and LSP
+// sections must always appear, and their labels must be visible regardless of
+// whether token data is available. This mirrors opencode scene 06 where the
+// sidebar always shows both sections.
+func TestSidebar_SectionsPresent(t *testing.T) {
+	cases := []struct {
+		name     string
+		hasToken bool
+	}{
+		{"with tokens", true},
+		{"no tokens", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := New(Config{URL: "http://x", SessionID: "ses_1"})
+			m.width, m.height = 120, 24
+			ss := Session{ID: "ses_1", Title: "T"}
+			if tc.hasToken {
+				ss.Tokens.Input, ss.Tokens.Output = 500, 100
+			}
+			m.store.sessions = []Session{ss}
+			out := m.sidebarView()
+			for _, want := range []string{"CONTEXT", "LSP"} {
+				if !strings.Contains(out, want) {
+					t.Errorf("sidebar (%s) missing section %q", tc.name, want)
+				}
+			}
+		})
+	}
+}
+
+// TestSidebar_BackgroundFill verifies the M8 surface-fill rule: sidebarView()
+// must render as exactly sidebarWidth visible characters wide per line.
+func TestSidebar_BackgroundFill(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	m.width, m.height = 120, 24
+	m.store.sessions = []Session{{ID: "ses_1", Title: "S"}}
+	out := m.sidebarView()
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	for i, line := range lines {
+		if got := lipgloss.Width(line); got != sidebarWidth {
+			t.Errorf("sidebar line %d: visible width %d, want %d", i, got, sidebarWidth)
+		}
 	}
 }

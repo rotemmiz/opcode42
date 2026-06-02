@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -52,12 +53,52 @@ func (m Model) leftColumnWidth() int {
 	return m.width
 }
 
-// statusBarView renders the full-width bottom bar: mode · model on the left,
-// connection + tokens/cost + the commands hint on the right.
+// gitBranch returns the current git branch name for the given directory, or ""
+// when the directory is not a git repo or git is unavailable. Best-effort — any
+// error (no git, no repo, detached HEAD) produces an empty string so callers
+// can skip the branch display rather than show a confusing error.
+func gitBranch(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	branch := strings.TrimSpace(string(out))
+	if branch == "HEAD" {
+		// Detached HEAD — not meaningful to display.
+		return ""
+	}
+	return branch
+}
+
+// statusBarView renders the full-width bottom bar using the opencode grammar:
+//
+//   - Mode-line (left): [mode-chip] · model · provider  — matches opencode's
+//     "Build · Big Pickle OpenCode Zen" pattern (scene 03-home-empty).
+//     ModeChip is the accent-bg style; model is dim/primary; provider is faint.
+//   - Footer (right): connection glyph + status · tokens/cost · ctrl+p hint.
+//
+// Each row is rendered through a single Surface(Bg) style padded to `width` so
+// every cell carries the theme background — no transparent trailing cells.
+// opencode always fills every cell via its opentui compositor; we replicate that
+// here via lipgloss Width(width).Background(Bg). (plan 08c M8 / Tier 0 fill rule)
 func (m Model) statusBarView(width int) string {
 	s := m.styles
-	left := s.Base.Render(m.modeName()) + s.Faint.Render(" · ") + s.Base.Render(m.model.label())
 
+	// Left: mode chip (accent bg) + dim "·" + model name + faint provider.
+	// This matches opencode prompt/index.tsx lines 1571–1583:
+	//   agent-name · model · provider
+	modeChip := s.ModeChip.Render(" " + m.modeName() + " ")
+	left := modeChip
+	if m.model.ok() {
+		// model name in base, provider in faint — mirrors opencode's styling.
+		left += s.Faint.Render(" · ") + s.Base.Render(m.model.Model) +
+			s.Faint.Render(" · ") + s.Faint.Render(m.model.Provider)
+	}
+
+	// Right: connection dot + status, token/cost counts, command hint.
 	right := m.connGlyph() + s.Faint.Render(" "+m.status)
 	if ss := m.currentSession(); ss != nil && ss.Tokens.Total() > 0 {
 		right += s.Faint.Render(" · ") + s.Dim.Render(humanInt(ss.Tokens.Total())+" tok")
@@ -69,11 +110,13 @@ func (m Model) statusBarView(width int) string {
 
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
-		// Too narrow for both segments — keep the right (status) only.
-		return lipgloss.NewStyle().Width(width).Render(right)
+		// Too narrow for both — keep the right (status) only, still surface-filled.
+		return s.Surface(s.P.Bg).Width(width).Render(right)
 	}
 	bar := left + strings.Repeat(" ", gap) + right
-	return lipgloss.NewStyle().Width(width).Render(bar) // no fill — render on the terminal background
+	// Surface fill: every cell in the bar row carries the Bg color so the
+	// status bar reads as an owned surface on any terminal (plan 08c M8).
+	return s.Surface(s.P.Bg).Width(width).Render(bar)
 }
 
 // connGlyph is a colored dot for the connection state.
@@ -88,8 +131,20 @@ func (m Model) connGlyph() string {
 	return lipgloss.NewStyle().Foreground(c).Render("●")
 }
 
-// sidebarView renders the right sidebar at full height: session title, the
-// context (tokens/cost) block, the working directory, and the build tag.
+// sidebarView renders the right sidebar at full height matching opencode's scene
+// 06-markdown-reasoning layout:
+//
+//   - Session title (bold)
+//   - CONTEXT section: token counts (input/output) + cost
+//   - LSP section: server count with a green/muted status dot
+//   - Footer: cwd path + Forge version tag
+//
+// Each section header uses s.Dim (all-caps muted label) and each row is a plain
+// Base+Faint pair — mirrors opencode sidebar.tsx label/value pattern.
+//
+// Surface fill: the whole panel is rendered through Surface(BgPanel) so every
+// padding cell inside the bordered block carries the panel background color
+// rather than the terminal default. (plan 08c M8 / Tier 0 fill rule)
 func (m Model) sidebarView() string {
 	s := m.styles
 	var b strings.Builder
@@ -105,26 +160,64 @@ func (m Model) sidebarView() string {
 		}
 	}
 
+	// Session title row (bold).
 	b.WriteString(s.Section.Render(truncate(title, sidebarWidth-2)) + "\n\n")
 
+	// CONTEXT section — token counts + cost (opencode sidebar scene 06).
 	b.WriteString(s.Dim.Render("CONTEXT") + "\n")
 	if ss := m.currentSession(); ss != nil && ss.Tokens.Total() > 0 {
-		b.WriteString(s.Base.Render(humanInt(ss.Tokens.Total())) + s.Faint.Render(" tokens") + "\n")
+		// Input tokens line.
+		b.WriteString(s.Faint.Render("in  ") + s.Base.Render(humanInt(ss.Tokens.Input)) + "\n")
+		// Output tokens line.
+		b.WriteString(s.Faint.Render("out ") + s.Base.Render(humanInt(ss.Tokens.Output)) + "\n")
+		// Total + cost on one line when cost is non-zero.
+		total := s.Base.Render(humanInt(ss.Tokens.Total())) + s.Faint.Render(" total")
 		if ss.Cost > 0 {
-			b.WriteString(s.Base.Render(fmt.Sprintf("$%.4f", ss.Cost)) + s.Faint.Render(" spent") + "\n")
+			total += s.Faint.Render("  ") + s.Dim.Render(fmt.Sprintf("$%.4f", ss.Cost))
 		}
+		b.WriteString(total + "\n")
 	} else {
 		b.WriteString(s.Faint.Render("—") + "\n")
 	}
 
+	b.WriteString("\n")
+
+	// LSP section — server count with status dot (opencode footer.tsx lines 70-72).
+	// Forge's TUI loads LSP info via the MCP server list; the count is the number
+	// of connected MCP items (best-effort — Forge doesn't have a dedicated LSP endpoint
+	// yet so we show MCP-connected count the same way opencode shows LSP count).
+	b.WriteString(s.Dim.Render("LSP") + "\n")
+	lspCount := 0
+	for _, srv := range m.mcpServers {
+		if srv.Status == "connected" || srv.Status == "" {
+			lspCount++
+		}
+	}
+	dotColor := s.P.FgFaint
+	if lspCount > 0 {
+		dotColor = s.P.Green
+	}
+	dot := lipgloss.NewStyle().Foreground(dotColor).Render("•")
+	b.WriteString(dot + " " + s.Base.Render(strconv.Itoa(lspCount)) + s.Faint.Render(" servers") + "\n")
+
 	body := b.String()
 
-	// Footer pinned to the bottom: directory + build tag.
+	// Footer pinned to the bottom: cwd:branch + Forge version tag.
+	// Matches opencode footer.tsx (directory left, version right) and sidebar.tsx
+	// (OpenCode + InstallationVersion on the bottom row).
 	var foot strings.Builder
 	if dir != "" {
-		foot.WriteString(s.Faint.Render(truncate(collapseHome(dir), sidebarWidth-2)) + "\n")
+		cwd := truncate(collapseHome(dir), sidebarWidth-2)
+		if br := gitBranch(dir); br != "" {
+			cwd += s.Faint.Render(":") + s.Dim.Render(br)
+			cwd = truncate(cwd, sidebarWidth-2) // re-truncate in case branch adds length
+		}
+		foot.WriteString(s.Faint.Render(cwd) + "\n")
 	}
-	foot.WriteString(s.Faint.Render("• ") + s.Base.Render("Forge") + s.Faint.Render(" dev"))
+	foot.WriteString(
+		lipgloss.NewStyle().Foreground(s.P.Green).Render("•") +
+			" " + s.Base.Render("Forge") + s.Faint.Render(" dev"),
+	)
 
 	pad := m.height - lipgloss.Height(body) - lipgloss.Height(foot.String())
 	if pad < 0 {
@@ -138,6 +231,7 @@ func (m Model) sidebarView() string {
 	return s.Surface(s.P.BgPanel).
 		Border(lipgloss.NormalBorder(), false, false, false, true).
 		BorderForeground(s.P.Border).
+		BorderBackground(s.P.BgPanel).
 		Width(sidebarWidth-1).
 		Height(m.height).
 		Padding(0, 1).

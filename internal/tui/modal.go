@@ -439,20 +439,51 @@ func blurInput(ti textinput.Model) textinput.Model {
 }
 
 // modalView renders the active modal as a centered panel over the background.
+//
+// Border: rounded border with BorderActive color (brighter than Border) to
+// signal an "owned surface" — mirrors opencode's dialog-select.tsx which uses a
+// themed border.
+//
+// Surface fill: every row is rendered through Surface(BgElev) padded to the
+// inner content width so the panel background is uniform — no transparent
+// trailing cells on light terminals. (plan 08c M8 Tier 0 fill rule)
+//
+// Filter affordance: a "Search  /" hint below the title signals that typing
+// filters the list — mirrors opencode's dialog-select.tsx filter input rendering.
+//
+// Selected row: s.Selection already provides the amber selection bar;
+// Surface(BgElev) is applied to non-selected rows so they too have a fill.
 func (m Model) modalView() string {
 	s := m.styles
 
-	width := 56
+	// innerWidth is the usable content width inside Padding(1,2): width - 2*2 = width-4.
+	// All rows are padded/truncated to innerWidth for uniform background fill.
+	const (
+		width      = 56
+		innerWidth = width - 4 // width minus 2×horizontal padding (Padding(1,2) → 2 cols each side)
+	)
+
+	// surfaceRow renders a plain (non-selected) row with the panel surface
+	// background so every trailing cell is painted. Each call returns a string
+	// whose visible width == innerWidth. (plan 08c M8)
+	surfaceRow := func(content string) string {
+		return s.Surface(s.P.BgElev).Width(innerWidth).Render(content)
+	}
 
 	// The rename overlay is a single text field, not a list.
 	if m.modal == modalRename {
 		body := lipgloss.JoinVertical(lipgloss.Left,
-			s.Section.Render("Rename session"), "",
-			m.renameInput.View(), "",
-			s.Faint.Render("enter save · esc cancel"),
+			surfaceRow(s.Section.Render("Rename session")),
+			surfaceRow(""),
+			m.renameInput.View(),
+			surfaceRow(""),
+			surfaceRow(s.Faint.Render("enter save · esc cancel")),
 		)
 		panel := lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).BorderForeground(s.P.Border).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(s.P.BorderActive).
+			BorderBackground(s.P.BgElev).
+			Background(s.P.BgElev).
 			Padding(1, 2).Width(width).Render(body)
 		return centerScreen(m.width, m.height, panel)
 	}
@@ -465,28 +496,61 @@ func (m Model) modalView() string {
 	start, end := windowAround(m.modalSel, len(rows), maxRows)
 
 	var lines []string
-	lines = append(lines, s.Section.Render(title), "")
+
+	// Title row + a blank gap line — matches opencode dialog-select.tsx layout
+	// which renders a bold title above the filter input and list body.
+	lines = append(lines, surfaceRow(s.Section.Render(title)))
+	lines = append(lines, surfaceRow(""))
+
+	// Filter affordance: a "/" hint that signals the list is filterable by
+	// typing — mirrors opencode's dialog-select.tsx filter input affordance
+	// (lines 363–389).
+	if isFilterableModal(m.modal) {
+		lines = append(lines, surfaceRow(s.Faint.Render("Search  /")))
+		lines = append(lines, surfaceRow(""))
+	}
+
 	if start > 0 {
-		lines = append(lines, s.Faint.Render("  ↑ more"))
+		lines = append(lines, surfaceRow(s.Faint.Render("↑ more")))
 	}
 	for i := start; i < end; i++ {
 		if i == m.modalSel {
-			lines = append(lines, s.Selection.Width(width-4).Render(" "+rows[i])) // -4: fits inside Padding(1,2)
+			// Selection bar: amber bg, dark bold text — full inner width so the
+			// highlight extends to the right edge of the panel.
+			lines = append(lines, s.Selection.Width(innerWidth).Render(" "+rows[i]))
 		} else {
-			lines = append(lines, s.Base.Render(" "+rows[i]))
+			// Non-selected rows: surface-filled so no transparent trailing cells.
+			lines = append(lines, surfaceRow(s.Base.Render(" "+rows[i])))
 		}
 	}
 	if end < len(rows) {
-		lines = append(lines, s.Faint.Render(" ↓ more"))
+		lines = append(lines, surfaceRow(s.Faint.Render("↓ more")))
 	}
-	lines = append(lines, "", s.Faint.Render(footer))
+	lines = append(lines, surfaceRow(""))
+	lines = append(lines, surfaceRow(s.Faint.Render(footer)))
 
 	panel := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(s.P.Border).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(s.P.BorderActive).
+		BorderBackground(s.P.BgElev).
+		Background(s.P.BgElev).
 		Padding(1, 2).
 		Width(width).
 		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 
 	return centerScreen(m.width, m.height, panel)
+}
+
+// isFilterableModal returns true for dialogs where typing filters the list —
+// matches the subset of opencode dialogs that render a filter input
+// (dialog-model, dialog-theme-list, dialog-agent, dialog-session-list,
+// dialog-stash). Read-only or single-action modals (status, help, MCP,
+// skills, timeline, rename, variant) don't benefit from a search hint.
+func isFilterableModal(k modalKind) bool {
+	switch k {
+	case modalPalette, modalModels, modalThemes, modalAgents, modalSessions, modalStash:
+		return true
+	default:
+		return false
+	}
 }
