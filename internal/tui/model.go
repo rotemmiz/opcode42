@@ -130,6 +130,13 @@ type Model struct {
 
 	// Stashed prompt drafts (plan 08b §6; persisted).
 	stash []string
+
+	// termDark records whether the terminal reported a dark background at
+	// startup (lipgloss.HasDarkBackground()).  Stored so that applyThemeByName
+	// can resolve embedded opencode themes for the correct dark/light variant
+	// when the user changes theme mid-session (mirrors opencode's theme_mode_lock
+	// + dark/light token resolution — context/theme.tsx resolveTheme).
+	termDark bool
 }
 
 // pickDefaultTheme returns the appropriate default theme name based on whether
@@ -177,8 +184,9 @@ func New(cfg Config) Model {
 	}
 	// Auto-pick light vs dark by terminal background — mirrors opencode's
 	// theme_mode_lock behaviour. Restore() will override with any pinned KV theme.
-	defName := pickDefaultTheme(lipgloss.HasDarkBackground())
-	def, _ := theme.ByName(defName)
+	m.termDark = lipgloss.HasDarkBackground()
+	defName := pickDefaultTheme(m.termDark)
+	def, _ := theme.ByNameForMode(defName, m.termDark)
 	m = m.applyTheme(defName, def)
 	m.histIdx = -1
 	c, err := forgeclient.New(cfg.URL, forgeclient.Options{
@@ -229,11 +237,11 @@ func (m Model) Restore() Model {
 }
 
 // applyThemeByName switches to a palette by name (no-op if unknown).
+// Resolves the palette for the terminal's dark/light mode (m.termDark) so that
+// embedded opencode themes use the correct dark or light token variant.
 func (m Model) applyThemeByName(name string) Model {
-	for _, p := range theme.Palettes() {
-		if p.Name == name {
-			return m.applyTheme(p.Name, p.Palette)
-		}
+	if p, ok := theme.ByNameForMode(name, m.termDark); ok {
+		return m.applyTheme(name, p)
 	}
 	return m
 }

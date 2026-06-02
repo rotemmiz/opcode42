@@ -442,28 +442,12 @@ func Mono() Palette {
 }
 
 // Named pairs a theme name with its palette (the theme picker's list).
+// The full registry (including 33 embedded opencode themes) is built by
+// loader.go; Palettes() / ByName() / PalettesForMode() / ByNameForMode()
+// all live there so that embed.FS and JSON parsing stay in one file.
 type Named struct {
 	Name    string
 	Palette Palette
-}
-
-// Palettes is the ordered theme registry; the first is the default.
-func Palettes() []Named {
-	return []Named{
-		{"forge-dark", Default()},
-		{"forge-light", Light()},
-		{"monochrome", Mono()},
-	}
-}
-
-// ByName returns a palette by theme name (Default + false when unknown).
-func ByName(name string) (Palette, bool) {
-	for _, n := range Palettes() {
-		if n.Name == name {
-			return n.Palette, true
-		}
-	}
-	return Default(), false
 }
 
 // Styles are the canonical reusable Lipgloss styles the design defines. Screen
