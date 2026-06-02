@@ -125,7 +125,8 @@ type Model struct {
 	diffTreeHidden bool      // persisted: file-tree pane preference
 
 	// PTY pane (plan 08b §2).
-	pty ptyState // embedded terminal split (open == visible)
+	pty    ptyState // embedded terminal split (open == visible)
+	ptyGen int      // monotonic pane-open counter (stamps async PTY msgs)
 }
 
 // New builds the initial Model, constructing the SDK client.
@@ -245,8 +246,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		// A focused terminal captures every key (ctrl+c included, so the shell can
-		// interrupt) — only ctrl+] escapes, handled inside handlePTYKey.
-		if m.pty.open && m.pty.focused {
+		// interrupt) — only ctrl+] escapes, handled inside handlePTYKey. A pending
+		// permission/question prompt still takes precedence (so it can be answered);
+		// focus returns to the shell once the prompt resolves.
+		if m.pty.open && m.pty.focused && m.pendingPermission() == nil && m.pendingQuestion() == nil {
 			return m.handlePTYKey(msg)
 		}
 		// An open-but-unfocused terminal: ctrl+] closes it.
@@ -693,7 +696,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ptyConnectedMsg:
-		if !m.pty.open { // pane closed while the dial was in flight
+		if msg.gen != m.pty.gen { // a dial from a prior (closed) pane — discard
 			msg.conn.Close()
 			return m, nil
 		}
@@ -703,18 +706,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.pty.id, m.pty.conn = msg.id, msg.conn
-		return m, ptyReadCmd(msg.conn)
+		// Reconcile the size: the layout may have changed while dialing (when
+		// id was empty, resizePTY couldn't push it to the daemon yet).
+		return m, tea.Batch(
+			ptyReadCmd(msg.conn, m.pty.gen),
+			resizePTYCmd(m.ctx, m.client, msg.id, m.pty.cols, m.pty.rows),
+		)
 
 	case ptyOutputMsg:
+		if msg.gen != m.pty.gen { // bytes from a stale connection — drop
+			return m, nil
+		}
 		if m.pty.term != nil {
 			_, _ = m.pty.term.Write(msg.data)
 		}
-		if m.pty.open && m.pty.conn != nil { // keep pumping while connected
-			return m, ptyReadCmd(m.pty.conn)
+		if m.pty.conn != nil { // keep pumping while connected
+			return m, ptyReadCmd(m.pty.conn, m.pty.gen)
 		}
 		return m, nil
 
 	case ptyClosedMsg:
+		if msg.gen != m.pty.gen { // close of a prior connection — ignore
+			return m, nil
+		}
 		m.pty.connecting = false
 		m.pty.conn = nil
 		if msg.err != nil {

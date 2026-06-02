@@ -37,36 +37,45 @@ type ptyState struct {
 	conn       *forgeclient.PTYConn
 	term       vt10x.Terminal // the virtual screen (shared pointer across Model copies)
 	cols, rows int
+	gen        int // monotonic open generation; stamps async msgs so stale ones drop
 }
 
-// PTY lifecycle messages.
+// PTY lifecycle messages. gen identifies the pane open they belong to, so a
+// frame or close from a previous (closed) connection is ignored after reopen.
 type (
 	ptyConnectedMsg struct {
+		gen  int
 		id   string
 		conn *forgeclient.PTYConn
 		err  error
 	}
-	ptyOutputMsg struct{ data []byte }
-	ptyClosedMsg struct{ err error }
+	ptyOutputMsg struct {
+		gen  int
+		data []byte
+	}
+	ptyClosedMsg struct {
+		gen int
+		err error
+	}
 )
 
 // openPTYCmd creates a pseudo-terminal in the session directory and dials its
 // WebSocket (replaying from the start so the grid reflects full state).
-func openPTYCmd(ctx context.Context, c *forgeclient.ForgeClient, cwd string, cols, rows int) tea.Cmd {
+func openPTYCmd(ctx context.Context, c *forgeclient.ForgeClient, cwd string, cols, rows, gen int) tea.Cmd {
 	return func() tea.Msg {
 		info, err := c.CreatePTY(ctx, forgeclient.PTYCreate{Cwd: cwd})
 		if err != nil {
-			return ptyConnectedMsg{err: err}
+			return ptyConnectedMsg{gen: gen, err: err}
 		}
 		_ = c.ResizePTY(ctx, info.ID, cols, rows) // best-effort initial size
 		conn, err := c.ConnectPTY(ctx, info.ID, 0)
-		return ptyConnectedMsg{id: info.ID, conn: conn, err: err}
+		return ptyConnectedMsg{gen: gen, id: info.ID, conn: conn, err: err}
 	}
 }
 
 // ptyReadCmd waits for the next output chunk (re-issued after each, like the SSE
 // listen loop). When the stream closes it surfaces the terminal error.
-func ptyReadCmd(conn *forgeclient.PTYConn) tea.Cmd {
+func ptyReadCmd(conn *forgeclient.PTYConn, gen int) tea.Cmd {
 	return func() tea.Msg {
 		b, ok := <-conn.Output()
 		if !ok {
@@ -75,9 +84,9 @@ func ptyReadCmd(conn *forgeclient.PTYConn) tea.Cmd {
 			case err = <-conn.Err():
 			default:
 			}
-			return ptyClosedMsg{err: err}
+			return ptyClosedMsg{gen: gen, err: err}
 		}
-		return ptyOutputMsg{data: b}
+		return ptyOutputMsg{gen: gen, data: b}
 	}
 }
 
@@ -111,6 +120,7 @@ func (m Model) focusOrOpenPTY() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	cols, rows := m.ptyGridSize()
+	m.ptyGen++ // a fresh generation; output from any prior pane is now stale
 	m.pty = ptyState{
 		open:       true,
 		focused:    true,
@@ -118,8 +128,9 @@ func (m Model) focusOrOpenPTY() (tea.Model, tea.Cmd) {
 		term:       vt10x.New(vt10x.WithSize(cols, rows)),
 		cols:       cols,
 		rows:       rows,
+		gen:        m.ptyGen,
 	}
-	return m, openPTYCmd(m.ctx, m.client, m.cfg.Directory, cols, rows)
+	return m, openPTYCmd(m.ctx, m.client, m.cfg.Directory, cols, rows, m.ptyGen)
 }
 
 // resizePTY reflows the terminal grid to the current layout, returning a cmd to
@@ -305,15 +316,22 @@ func styleCell(fg, bg lipgloss.Color, ok bool) lipgloss.Style {
 	return st
 }
 
+// vtPalette pre-renders the 256 palette indices to lipgloss colors so the hot
+// render path doesn't strconv.Itoa per cell.
+var vtPalette = func() [256]lipgloss.Color {
+	var p [256]lipgloss.Color
+	for i := range p {
+		p[i] = lipgloss.Color(strconv.Itoa(i))
+	}
+	return p
+}()
+
 // vtColor maps a vt10x color to a lipgloss color; ok is false for the terminal
 // default (so the cell inherits the surrounding theme). vt10x emits palette
-// indices [0,256) plus the Default* sentinels (no truecolor).
+// indices [0,256) plus the Default* sentinels (1<<24+, no truecolor).
 func vtColor(c vt10x.Color) (lipgloss.Color, bool) {
-	if c >= vt10x.DefaultFG { // DefaultFG / DefaultBG / DefaultCursor
-		return "", false
-	}
 	if c < 256 {
-		return lipgloss.Color(strconv.Itoa(int(c))), true
+		return vtPalette[c], true
 	}
-	return "", false
+	return "", false // DefaultFG / DefaultBG / DefaultCursor and anything ≥256
 }

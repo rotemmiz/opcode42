@@ -132,6 +132,17 @@ func TestPTY_FocusedCapturesKeys(t *testing.T) {
 	}
 }
 
+func TestPTY_FocusYieldsToPermission(t *testing.T) {
+	m := withPTY()
+	m.pty.focused = true
+	m.store.permissions = []Permission{{ID: "perm_1", Permission: "bash"}}
+	// 'down' must drive the permission selection, not be forwarded to the shell.
+	m, _ = step(t, m, key("down"))
+	if m.permSel != 1 {
+		t.Fatalf("a focused terminal must yield keys to a pending permission; permSel=%d want 1", m.permSel)
+	}
+}
+
 func TestResizePTY_Reflows(t *testing.T) {
 	m := withPTY()
 	oldRows := m.pty.rows
@@ -146,11 +157,30 @@ func TestResizePTY_Reflows(t *testing.T) {
 }
 
 func TestPTYConnected_ClosedWhileDialing(t *testing.T) {
-	m := New(Config{URL: "http://x"}) // pane closed
-	// A connect result arriving after close is dropped (and would close the conn).
-	m, _ = step(t, m, ptyConnectedMsg{id: "pty_1", conn: nil})
+	m := New(Config{URL: "http://x"}) // pane closed (gen 0)
+	// A connect result from a prior pane (gen 1) arriving after close is dropped.
+	m, _ = step(t, m, ptyConnectedMsg{gen: 1, id: "pty_1", conn: nil})
 	if m.pty.open || m.pty.id != "" {
 		t.Fatal("a ptyConnectedMsg after close must not revive the pane")
+	}
+}
+
+func TestPTY_StaleConnectionDiscarded(t *testing.T) {
+	// Open a pane (gen 1), feed it data, then "reopen" by bumping to gen 2.
+	m := withPTY()
+	m.ptyGen, m.pty.gen = 1, 1
+	m, _ = step(t, m, ptyOutputMsg{gen: 1, data: []byte("first")})
+	if !strings.Contains(stripANSI(m.renderGrid(m.pty.cols)), "first") {
+		t.Fatal("matching-generation output should reach the grid")
+	}
+	// Simulate a reopen: a newer pane (gen 2) with its own fresh terminal.
+	m.ptyGen = 2
+	m.pty.gen = 2
+	m.pty.term = vt10x.New(vt10x.WithSize(m.pty.cols, m.pty.rows))
+	// A late frame from the old connection (gen 1) must NOT touch the new grid.
+	m, _ = step(t, m, ptyOutputMsg{gen: 1, data: []byte("stale")})
+	if strings.Contains(stripANSI(m.renderGrid(m.pty.cols)), "stale") {
+		t.Fatal("output from a prior generation must be discarded")
 	}
 }
 
