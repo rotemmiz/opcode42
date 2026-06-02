@@ -13,6 +13,7 @@ import (
 type promptModel struct {
 	Provider string
 	Model    string
+	Variant  string // model variant id (plan 08b §7); "" / "default" = no variant
 }
 
 func (p promptModel) ok() bool { return p.Provider != "" && p.Model != "" }
@@ -21,7 +22,19 @@ func (p promptModel) label() string {
 	if !p.ok() {
 		return "no model"
 	}
-	return p.Provider + "/" + p.Model
+	l := p.Provider + "/" + p.Model
+	if v := p.effectiveVariant(); v != "" {
+		l += " (" + v + ")"
+	}
+	return l
+}
+
+// effectiveVariant is the variant to send on the wire ("" when none/"default").
+func (p promptModel) effectiveVariant() string {
+	if p.Variant == "default" {
+		return ""
+	}
+	return p.Variant
 }
 
 // Composer / submit messages.
@@ -60,9 +73,10 @@ func shellCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID, comman
 
 // promptBody is the POST /session/:id/message request body.
 type promptBody struct {
-	Model promptModelWire `json:"model"`
-	Agent string          `json:"agent,omitempty"`
-	Parts []partInput     `json:"parts"`
+	Model   promptModelWire `json:"model"`
+	Agent   string          `json:"agent,omitempty"`
+	Variant string          `json:"variant,omitempty"` // model variant (plan 08b §7)
+	Parts   []partInput     `json:"parts"`
 }
 
 type promptModelWire struct {
@@ -94,9 +108,10 @@ func loadConfigCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
 func promptCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID, text string, pm promptModel, agent string) tea.Cmd {
 	return func() tea.Msg {
 		body := promptBody{
-			Model: promptModelWire{ProviderID: pm.Provider, ModelID: pm.Model},
-			Agent: agent,
-			Parts: []partInput{{Type: "text", Text: text}},
+			Model:   promptModelWire{ProviderID: pm.Provider, ModelID: pm.Model},
+			Agent:   agent,
+			Variant: pm.effectiveVariant(),
+			Parts:   []partInput{{Type: "text", Text: text}},
 		}
 		err := c.PostJSON(ctx, "/session/"+sessionID+"/message", body, nil)
 		return promptSentMsg{err: err}

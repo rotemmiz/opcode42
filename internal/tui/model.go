@@ -127,6 +127,9 @@ type Model struct {
 	// PTY pane (plan 08b §2).
 	pty    ptyState // embedded terminal split (open == visible)
 	ptyGen int      // monotonic pane-open counter (stamps async PTY msgs)
+
+	// Stashed prompt drafts (plan 08b §6; persisted).
+	stash []string
 }
 
 // New builds the initial Model, constructing the SDK client.
@@ -194,12 +197,13 @@ func (m Model) Restore() Model {
 	m.persistEnabled = true
 	kv := loadKV()
 	m.history, m.histIdx = kv.History, -1
+	m.stash = kv.Stash
 	m.diffTreeHidden = kv.HideDiffTree
 	if kv.Theme != "" {
 		m = m.applyThemeByName(kv.Theme)
 	}
 	if !m.model.ok() && kv.Provider != "" && kv.Model != "" {
-		m.model = promptModel{Provider: kv.Provider, Model: kv.Model}
+		m.model = promptModel{Provider: kv.Provider, Model: kv.Model, Variant: kv.Variant}
 	}
 	return m
 }
@@ -290,7 +294,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.String() == "ctrl+x" {
 			m.leader = true
-			m.status = "ctrl+x — l sessions · n new · m model · a agent · g timeline · s status · b sidebar · t tasks · y copy · r thinking · o tools · e editor · d diff · ` terminal · ↓ child · ↑ parent · [ ] siblings"
+			m.status = "ctrl+x — l sessions · n new · m model · a agent · g timeline · s status · b sidebar · t tasks · y copy · r thinking · o tools · e editor · d diff · ` terminal · w stash · ↓ child · ↑ parent · [ ] siblings"
 			return m, nil
 		}
 		// The slash popup captures nav/accept/dismiss keys; other keys fall
@@ -304,6 +308,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+p":
 			m.modal, m.modalSel = modalPalette, 0
 			return m, nil
+		case "ctrl+t":
+			return m.cycleVariant(), nil // cycle model variants (opencode variant_cycle)
 		case "ctrl+up", "pgup":
 			m.scrollOffset += scrollStep
 			return m, nil
@@ -795,6 +801,12 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, deleteSessionCmd(m.ctx, m.client, ss[m.modalSel].ID)
 			}
 		}
+		if m.modal == modalStash && m.modalSel < len(m.stash) {
+			m = m.deleteStash(m.modalSel)
+			if m.modalSel > 0 && m.modalSel >= m.modalCount() {
+				m.modalSel = m.modalCount() - 1
+			}
+		}
 		return m, nil
 	case "y":
 		if m.modal == modalTimeline {
@@ -911,6 +923,8 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openDiff() // full-screen diff reviewer
 	case "`":
 		return m.focusOrOpenPTY() // embedded terminal (ctrl+] to exit)
+	case "w":
+		return m.stashDraft(), nil // park the current composer draft
 	case "down":
 		return m.enterFirstChild() // descend into the first sub-agent child
 	case "up":

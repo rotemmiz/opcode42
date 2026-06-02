@@ -87,11 +87,8 @@ func TestPalette_SwitchAgentOpensAgentsModal(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, _ = step(t, m, key("ctrl+p"))
-	for i := 0; i < 3; i++ { // 0 New, 1 Session, 2 Model, 3 Agent
+	for paletteItems[m.modalSel].action != paSwitchAgent { // walk down to "Switch agent"
 		m, _ = step(t, m, key("down"))
-	}
-	if paletteItems[m.modalSel].action != paSwitchAgent {
-		t.Fatalf("selection %d is not Switch agent", m.modalSel)
 	}
 	next, cmd := step(t, m, key("enter"))
 	if next.modal != modalAgents || cmd == nil {

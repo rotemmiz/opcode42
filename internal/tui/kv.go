@@ -16,7 +16,9 @@ type kvData struct {
 	Theme        string   `json:"theme,omitempty"`
 	Provider     string   `json:"provider,omitempty"`
 	Model        string   `json:"model,omitempty"`
+	Variant      string   `json:"variant,omitempty"` // active model variant (plan 08b §7)
 	History      []string `json:"history,omitempty"`
+	Stash        []string `json:"stash,omitempty"`        // parked prompt drafts (plan 08b §6)
 	HideDiffTree bool     `json:"hideDiffTree,omitempty"` // diff reviewer file-tree pane off
 }
 
@@ -67,7 +69,9 @@ func (m Model) persist() {
 		Theme:        m.themeName,
 		Provider:     m.model.Provider,
 		Model:        m.model.Model,
+		Variant:      m.model.Variant,
 		History:      m.history,
+		Stash:        m.stash,
 		HideDiffTree: m.diffTreeHidden,
 	})
 }

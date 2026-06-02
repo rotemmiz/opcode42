@@ -24,10 +24,12 @@ const (
 	modalThemes
 	modalTimeline
 	modalStatus
-	modalRename // text-input overlay (rename the current session)
-	modalMCP    // read-only: configured MCP servers (GET /mcp)
-	modalSkills // read-only: available skills (GET /skill)
-	modalHelp   // read-only: keybindings / commands reference
+	modalRename  // text-input overlay (rename the current session)
+	modalMCP     // read-only: configured MCP servers (GET /mcp)
+	modalSkills  // read-only: available skills (GET /skill)
+	modalHelp    // read-only: keybindings / commands reference
+	modalVariant // model-variant picker (plan 08b §7)
+	modalStash   // stashed prompt drafts (plan 08b §6)
 )
 
 // paletteAction identifies a command-palette entry (dispatched by id, not index,
@@ -52,6 +54,9 @@ const (
 	paDelete
 	paDiff
 	paTerminal
+	paVariant
+	paStash
+	paStashList
 	paMCP
 	paSkills
 	paHelp
@@ -67,6 +72,7 @@ var paletteItems = []paletteCmd{
 	{"New session", paNewSession},
 	{"Switch session", paSwitchSession},
 	{"Switch model", paSwitchModel},
+	{"Model variant", paVariant},
 	{"Switch agent", paSwitchAgent},
 	{"Switch theme", paSwitchTheme},
 	{"Timeline", paTimeline},
@@ -77,6 +83,8 @@ var paletteItems = []paletteCmd{
 	{"Interrupt (abort turn)", paAbort},
 	{"Review changes (diff)", paDiff},
 	{"Terminal (PTY)", paTerminal},
+	{"Stash draft", paStash},
+	{"Stashed drafts", paStashList},
 	{"Share session", paShare},
 	{"Unshare session", paUnshare},
 	{"Delete session", paDelete},
@@ -217,6 +225,26 @@ func (m Model) modalItems() (title string, rows []string, footer string) {
 	case modalHelp:
 		rows = helpRows()
 		return "Keybindings", rows, "esc close"
+	case modalVariant:
+		for _, v := range m.activeVariants() {
+			mark := "  "
+			if v == m.model.Variant {
+				mark = "● " // the active variant
+			}
+			rows = append(rows, mark+v)
+		}
+		if len(rows) == 0 {
+			rows = []string{"(this model has no variants)"}
+		}
+		return "Model variant", rows, "enter select · esc close"
+	case modalStash:
+		for _, d := range m.stash {
+			rows = append(rows, truncate(firstLine(d), 52))
+		}
+		if len(rows) == 0 {
+			rows = []string{"(no stashed drafts)"}
+		}
+		return "Stashed drafts", rows, "enter restore · ctrl+d delete · esc close"
 	default:
 		return "", nil, ""
 	}
@@ -322,6 +350,14 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 			return m.openDiff()
 		case paTerminal:
 			return m.focusOrOpenPTY()
+		case paVariant:
+			m.modal, m.modalSel = modalVariant, m.variantSelIndex()
+			return m, nil
+		case paStash:
+			return m.stashDraft(), nil
+		case paStashList:
+			m.modal, m.modalSel = modalStash, 0
+			return m, nil
 		case paMCP:
 			m.modal, m.modalSel = modalMCP, 0
 			return m, loadMCPCmd(m.ctx, m.client)
@@ -345,7 +381,8 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 	case modalModels:
 		m.modal = modalNone
 		if m.modalSel < len(m.choices) {
-			m.model = promptModel(m.choices[m.modalSel])
+			ch := m.choices[m.modalSel]
+			m.model = promptModel{Provider: ch.Provider, Model: ch.Model} // switching model resets the variant
 			m.status = "model · " + m.model.label()
 			m.persist() // remember the model across runs
 		}
@@ -369,6 +406,18 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 			m.status = "reverting…"
 			return m, revertCmd(m.ctx, m.client, m.cfg.SessionID, items[m.modalSel].messageID)
 		}
+	case modalVariant:
+		vs := m.activeVariants()
+		m.modal = modalNone
+		if m.modalSel < len(vs) {
+			m.model.Variant = vs[m.modalSel]
+			m.status = "variant · " + m.model.Variant
+			m.persist()
+		}
+	case modalStash:
+		i := m.modalSel
+		m.modal, m.modalSel = modalNone, 0
+		return m.popStash(i), nil
 	case modalStatus, modalMCP, modalSkills, modalHelp:
 		m.modal = modalNone // read-only — enter just closes
 	case modalRename:

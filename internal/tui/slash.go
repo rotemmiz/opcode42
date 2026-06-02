@@ -38,6 +38,8 @@ var builtinCommands = []slashItem{
 	{name: "/timeline", desc: "Revert to a turn", kind: slashBuiltin},
 	{name: "/diff", desc: "Review session changes", kind: slashBuiltin},
 	{name: "/terminal", desc: "Open an embedded terminal", kind: slashBuiltin},
+	{name: "/variant", desc: "Pick a model variant", kind: slashBuiltin},
+	{name: "/stash", desc: "Stashed prompt drafts", kind: slashBuiltin},
 	{name: "/status", desc: "Connection status", kind: slashBuiltin},
 }
 
@@ -272,6 +274,12 @@ func (m Model) acceptSlash() (tea.Model, tea.Cmd) {
 			return m.openDiff()
 		case "/terminal":
 			return m.focusOrOpenPTY()
+		case "/variant":
+			m.modal, m.modalSel = modalVariant, m.variantSelIndex()
+			return m, nil
+		case "/stash":
+			m.modal, m.modalSel = modalStash, 0
+			return m, nil
 		case "/status":
 			m.modal, m.modalSel = modalStatus, 0
 			return m, nil
