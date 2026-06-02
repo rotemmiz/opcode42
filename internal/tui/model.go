@@ -132,6 +132,19 @@ type Model struct {
 	stash []string
 }
 
+// pickDefaultTheme returns the appropriate default theme name based on whether
+// the terminal has a dark background. This mirrors opencode's theme_mode_lock
+// (kv.json) + dark/light token resolution (context/theme.tsx): on a dark
+// terminal forge-dark fits; on a light/white terminal forge-light is chosen so
+// foreground colors remain legible without imposing a dark fill.
+// The darkBg param lets tests inject a value instead of reading the real terminal.
+func pickDefaultTheme(darkBg bool) string {
+	if darkBg {
+		return "forge-dark"
+	}
+	return "forge-light"
+}
+
 // New builds the initial Model, constructing the SDK client.
 func New(cfg Config) Model {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -162,8 +175,11 @@ func New(cfg Config) Model {
 		renameInput: ri,
 		model:       promptModel{Provider: cfg.Provider, Model: cfg.Model},
 	}
-	def := theme.Palettes()[0] // forge-dark; keeps themeName + styles + composer in sync
-	m = m.applyTheme(def.Name, def.Palette)
+	// Auto-pick light vs dark by terminal background — mirrors opencode's
+	// theme_mode_lock behaviour. Restore() will override with any pinned KV theme.
+	defName := pickDefaultTheme(lipgloss.HasDarkBackground())
+	def, _ := theme.ByName(defName)
+	m = m.applyTheme(defName, def)
 	m.histIdx = -1
 	c, err := forgeclient.New(cfg.URL, forgeclient.Options{
 		Directory: cfg.Directory, Username: cfg.Username, Password: cfg.Password,
@@ -193,6 +209,7 @@ func (m Model) applyTheme(name string, p theme.Palette) Model {
 // Restore loads the persisted theme/model/history from the local KV and turns on
 // persistence. Call once from the real entrypoint (not in tests, which want a
 // hermetic New). CLI --provider/--model still win.
+// Theme resolution order: pinned KV theme > auto-pick by terminal background.
 func (m Model) Restore() Model {
 	m.persistEnabled = true
 	kv := loadKV()
@@ -200,8 +217,11 @@ func (m Model) Restore() Model {
 	m.stash = kv.Stash
 	m.diffTreeHidden = kv.HideDiffTree
 	if kv.Theme != "" {
+		// User explicitly pinned a theme — honour it (mirrors opencode's theme_mode_lock).
 		m = m.applyThemeByName(kv.Theme)
 	}
+	// If no pinned theme the auto-pick applied in New() already selected the right
+	// default; nothing further needed here.
 	if !m.model.ok() && kv.Provider != "" && kv.Model != "" {
 		m.model = promptModel{Provider: kv.Provider, Model: kv.Model, Variant: kv.Variant}
 	}
@@ -1042,17 +1062,13 @@ func (m Model) View() string {
 	default:
 		body = m.viewSplash()
 	}
-	if !m.paintsBackground() {
-		return body // default theme → terminal-native background
+	if m.width == 0 || m.height == 0 {
+		return body
 	}
+	// Always fill every cell with the theme background — mirrors opencode's opentui
+	// compositor which never leaves a cell transparent. Without this, forge-dark's
+	// light-gray foregrounds (#d6dade) render on a white terminal → near-illegible.
 	return lipgloss.NewStyle().Background(m.styles.P.Bg).Width(m.width).Height(m.height).Render(body)
-}
-
-// paintsBackground reports whether the view fills the screen with the theme's
-// background. Only a non-default (light/mono) theme does — the default renders on
-// the terminal's native background so it doesn't paint a mismatched box.
-func (m Model) paintsBackground() bool {
-	return m.width > 0 && m.height > 0 && m.themeName != theme.Palettes()[0].Name
 }
 
 // viewSplash renders the wordmark, the composer, and the connection status.
@@ -1073,7 +1089,13 @@ func (m Model) viewSplash() string {
 	if m.width == 0 || m.height == 0 {
 		return body
 	}
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, body)
+	// lipgloss.Place fills the surrounding whitespace cells; without a background
+	// option those cells are transparent and inherit the terminal color. Pass
+	// WithWhitespaceBackground so every padding cell in the splash frame is owned
+	// by the palette Bg. The outer View() Width×Height paint is the final safety
+	// net, but Place fills the body-surrounding space before that.
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, body,
+		lipgloss.WithWhitespaceBackground(s.P.Bg))
 }
 
 func (m Model) viewSession() string { return m.renderSession() }

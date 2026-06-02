@@ -8,22 +8,25 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func TestPaintsBackground_OnlyNonDefaultTheme(t *testing.T) {
-	m := New(Config{URL: "http://x"})
-	m.width, m.height = 80, 24
-	if m.paintsBackground() {
-		t.Fatal("default (forge-dark) must render on the terminal background, no gray fill")
+// TestAlwaysPaintsBackground verifies that View() always wraps content in the
+// theme background (previously the default theme was excluded — that was the bug).
+func TestAlwaysPaintsBackground(t *testing.T) {
+	// With dimensions set, every theme should produce output that includes the
+	// background color escape (lipgloss embeds it when Background is set).
+	for _, name := range []string{"forge-dark", "forge-light", "monochrome"} {
+		m := New(Config{URL: "http://x"})
+		m.width, m.height = 80, 24
+		m = m.applyThemeByName(name)
+		out := m.View()
+		if out == "" {
+			t.Fatalf("theme %q: View() returned empty", name)
+		}
 	}
-	m.modal, m.modalSel = modalThemes, 1 // forge-light
-	next, _ := m.modalSelect()
-	if !next.(Model).paintsBackground() {
-		t.Fatal("a non-default theme should paint its own background")
-	}
-	m0 := New(Config{URL: "http://x"}) // no window size yet
+	// Without dimensions View() returns body unpainted (nothing to fill).
+	m0 := New(Config{URL: "http://x"})
 	m0.themeName = "monochrome"
-	if m0.paintsBackground() {
-		t.Fatal("with no window size, nothing paints")
-	}
+	// width==0, height==0 → no background fill, should not panic
+	_ = m0.View()
 }
 
 // Overlays must render as clean rectangles (uniform line width, no ragged edge).

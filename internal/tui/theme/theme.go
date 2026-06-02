@@ -138,5 +138,16 @@ func New(p Palette) Styles {
 	}
 }
 
+// Surface returns a style with bg set as the background color and the palette's
+// primary foreground — intended for panel/elevated surfaces that must own their
+// own background. Lipgloss does NOT inherit a parent Background into joined
+// sub-strings, so every block that can be shorter than the full terminal width
+// must pin its own bg; otherwise transparent cells bleed through on light
+// terminals. Use BgPanel for composer/autocomplete panels, BgElev for modals,
+// BgSel for hover rows, or Bg for the base surface.
+func (s Styles) Surface(bg lipgloss.Color) lipgloss.Style {
+	return lipgloss.NewStyle().Background(bg).Foreground(s.P.Fg)
+}
+
 // DefaultStyles returns the Styles for the default palette.
 func DefaultStyles() Styles { return New(Default()) }

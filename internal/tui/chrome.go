@@ -132,7 +132,10 @@ func (m Model) sidebarView() string {
 	}
 	panel := body + strings.Repeat("\n", pad) + foot.String()
 
-	return lipgloss.NewStyle().
+	// Pin the sidebar surface background so every padding/fill cell inside the
+	// panel is owned by BgPanel rather than left transparent — Surface() is the
+	// shared helper for this pattern (plan 08c M0).
+	return s.Surface(s.P.BgPanel).
 		Border(lipgloss.NormalBorder(), false, false, false, true).
 		BorderForeground(s.P.Border).
 		Width(sidebarWidth-1).
