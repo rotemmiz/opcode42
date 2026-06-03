@@ -239,10 +239,17 @@ func liveScenarioPermissionGrant(c *Client) ([]result.Step, error) {
 	defer tap.Close()
 
 	// Grant any permission this run raises. The synchronous prompt blocks on the
-	// ask, so a concurrent watcher resolves the requestID from the ask event and
-	// replies "once" to unblock the run. The watcher is self-bounded (4-minute
-	// stream timeout) so it cannot outlive the run.
-	go grantPending(c)
+	// ask, so a concurrent watcher (on its OWN client — never the shared one, to
+	// avoid racing Client.lastBody) resolves the requestID from the ask event and
+	// replies "once" to unblock the run. The bus has NO event backlog, so the
+	// watcher must be CONNECTED before the prompt fires or it could miss the ask;
+	// startGranter blocks until the SSE stream is established. grantCtx is
+	// cancelled on return so the watcher cannot outlive the scenario.
+	grantCtx, cancelGrant := context.WithCancel(context.Background())
+	defer cancelGrant()
+	if err := startGranter(grantCtx, c.grantClient()); err != nil {
+		return steps, err
+	}
 
 	prompt := "Run the bash command: echo hello. Use the bash tool."
 	step, err := c.Do("prompt", http.MethodPost, "/session/"+sid+"/message",
@@ -256,24 +263,36 @@ func liveScenarioPermissionGrant(c *Client) ([]result.Step, error) {
 	return steps, nil
 }
 
-// grantPending watches the tap for a permission.asked event and replies "once".
-// The requestID is read from the raw ask event via a second short-lived stream
-// read; if no ask arrives the goroutine exits when the scenario closes the tap.
-func grantPending(c *Client) {
-	// Open a dedicated raw stream so we can read the permission requestID from the
-	// ask event's properties (the tap only keeps types).
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
-	defer cancel()
+// grantClient returns an independent client for the same target/dir/auth, so a
+// concurrent helper (grantPending) shares no mutable state (notably lastBody)
+// with the scenario's client.
+func (c *Client) grantClient() *Client {
+	gc := &Client{BaseURL: c.BaseURL, Dir: c.Dir, User: c.User, Pass: c.Pass, Norm: c.Norm, HTTP: c.HTTP}
+	return gc
+}
+
+// startGranter connects to the instance SSE stream (synchronously, so the caller
+// can fire the prompt knowing the watcher will see the ask) and then watches, in
+// a goroutine, for a permission.asked event to reply "once" to. It returns once
+// connected; the goroutine exits on grant, ctx cancel, or stream end.
+func startGranter(ctx context.Context, c *Client) error {
 	req, err := c.buildRequest(ctx, http.MethodGet, "/event", ReqOpts{})
 	if err != nil {
-		return
+		return err
 	}
-	resp, err := c.HTTP.Do(req)
+	resp, err := c.HTTP.Do(req) //nolint:bodyclose // resp.Body is closed by grantWatch's defer
 	if err != nil {
-		return
+		return fmt.Errorf("granter connect: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	sc := bufio.NewScanner(resp.Body)
+	go grantWatch(c, resp.Body)
+	return nil
+}
+
+// grantWatch consumes the SSE body and replies "once" to the first
+// permission.asked. It owns and closes the body.
+func grantWatch(c *Client, body io.ReadCloser) {
+	defer func() { _ = body.Close() }()
+	sc := bufio.NewScanner(body)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
 		data, ok := strings.CutPrefix(strings.TrimRight(sc.Text(), "\r"), "data:")

@@ -80,7 +80,7 @@ run_forge_suite() {
   HOME="$home" OPENCODE_SERVER_USERNAME="$OC_USER" OPENCODE_SERVER_PASSWORD="$OC_PASS" \
     "$bin" --port "$FORGE_PORT" --host 127.0.0.1 >"$home/forged.log" 2>&1 &
   local pid=$!
-  PORT="$FORGE_PORT" wait_health "$FORGE_PORT" || { cat "$home/forged.log" >&2; kill -9 "$pid" 2>/dev/null || true; rm -rf "$home"; return 1; }
+  wait_health "$FORGE_PORT" || { cat "$home/forged.log" >&2; kill -9 "$pid" 2>/dev/null || true; rm -rf "$home"; return 1; }
   ( cd "$REPO_ROOT" && go test ./conformance/ -run "$test" \
       -target="http://127.0.0.1:$FORGE_PORT" -user="$OC_USER" -pass="$OC_PASS" -out="$out" >/dev/null )
   kill -9 "$pid" 2>/dev/null || true
