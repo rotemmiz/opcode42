@@ -434,3 +434,27 @@ reality, and say so explicitly" rule.
     permission/question replies, `/find/file`, `/pty`).
 - **Parallel — Forge gap-closing:** wire the four endpoint families above so the TUI flips from
   opencode to Forge cleanly (each small; the engine managers already exist).
+
+---
+
+## Review pass (2026-06-03) — the gap-closing track has landed; status was stale
+
+User-owned client spec, so this is a light touch — but the Status note above is **out of date** and
+the correction is high-value:
+
+- **The "Forge currently 501s `/agent`, `/provider`, permission/question replies, `/find/file`,
+  `/pty`" claim is no longer true.** All are wired: `/agent`+`/provider`
+  (`internal/server/resource_handlers.go:14,16`), `POST /permission/{id}/reply`
+  (`permission_handlers.go:16`), `POST /question/{id}/reply` (`question_handlers.go:15`),
+  `GET /find/file` (`find_handlers.go:30`), `GET`/`POST /pty` (`pty_handlers.go:27-28`). The
+  parallel "Forge gap-closing track" is effectively **done** — so full TUI↔Forge dual-run parity is
+  no longer blocked on the HTTP surface; it is now blocked only on plan 02 reaching conformance-green
+  (M11) and the LSP/MCP-mutation endpoints.
+- **The TUI is substantially built** (`internal/tui/` ≈ 35 Go files; Phases 0–3 per the addendum),
+  **not a stub.** Any roadmap that lists plan 08 as "not started" is wrong.
+- **Genuinely remaining:** `U12` the in-TUI VT pane (the WS-PTY *transport* exists; the interactive
+  terminal pane needs a VT-emulator dependency) and the `GET /command` conformance exclusion
+  (opencode returns commands in non-deterministic order — keep this as a recorded divergence, and
+  decide whether Forge sorts deterministically as a known-addition).
+- **Validation:** the `--headless` structured-JSON mode + the extended plan-12 read-surface
+  recordings are the right approach; just re-point the dual-run now that the endpoints exist.

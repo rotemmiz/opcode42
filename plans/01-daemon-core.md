@@ -694,6 +694,36 @@ diff <(curl -s http://localhost:4096/openapi.json | jq -S .) \
 
 ---
 
+## Review pass (2026-06-03) — resolved ambiguities & remaining gaps
+
+Plan 01 is **built and green**. Several items above still read as "open" but the implementation has
+since settled them; record the resolution so they stop being treated as undecided.
+
+**Resolved in code (update mental model accordingly):**
+- **Risk #1 (PTY cursor units) — RESOLVED: UTF-16 code units.** `internal/pty/pty.go:4-6`,
+  `internal/pty/doc.go:8-9` count UTF-16 code units via `unicode/utf16` so replay offsets line up
+  with opencode (`pty/index.ts:239-262`). The "rune vs byte" question is closed; cite the conformance
+  finding, not the open risk.
+- **Open question: `/sync/*` + `/experimental/*`** — implemented as a generic **`501 NotImplemented`**
+  for any unimplemented operation (`internal/server/server_test.go:71` asserts the `NotImplemented`
+  error tag). This is the contract; promote it from "revisit in plan 09" to "decided," and make the
+  masterplan cross-cutting ambiguity (v1/sync/experimental) point here.
+
+**Still genuinely open (carry forward, with owners):**
+- **Instance-cache TTL** (open question 2): still "match opencode = no TTL." Real for remote/
+  multi-tenant; keep owned by plan 13, but add a conformance note that idle instances are never
+  evicted so memory growth is expected, not a leak.
+- **Risk #7 (global-event wrapper)** says Forge must send only `event.payload`, not the
+  `{directory,project,workspace,payload}` wrapper. Confirm a regression test exists for
+  `/global/event` payload shape; if not, that is the one missing validation in this plan.
+- **`gofmt`/drift gate.** M7's "diff /openapi.json" test should be hardened to the repo workflow's
+  `make gen` + `git diff --exit-code internal/api/gen/` so generated-stub drift fails CI, not just a
+  manual `diff`.
+
+**Validation:** strong already. The only addition: every endpoint family that returns 501 today
+should have a positive conformance assertion that opencode clients degrade gracefully (don't crash)
+on 501 — otherwise "best-effort" compatibility is unverified.
+
 ## Links to sibling plans
 
 - **Plan 00** (`00-masterplan.md`): Vision, contract, architecture, sequencing.

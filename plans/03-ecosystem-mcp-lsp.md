@@ -907,10 +907,10 @@ gopls errors if any.
    that Forge respects the same flag opencode uses. For the initial release, only auto-install
    gopls (since Forge is a Go project and Go will always be present).
 
-9. **Windows support**: several servers in the table use `.cmd` / `.bat` / `.exe` variants.
-   The Go spawn code must handle this via `runtime.GOOS` checks, matching opencode's
-   `process.platform === "win32"` guards throughout `server.ts`. For now, target
-   Linux/macOS only; Windows is best-effort.
+9. **Windows support — DECIDED (2026-06-03): not supported.** Linux/macOS only; Windows is out of
+   scope, not "best-effort" (masterplan "Decisions locked" #5). Do not spend effort on
+   `.cmd`/`.bat`/`.exe` variants or `win32` guards now. Revisit only if a Windows client is
+   prioritized.
 
 10. **LSP server versioning conflicts**: for projects that have both a `deno.json` and an
     `npm` lockfile, opencode's `Typescript` server excludes deno projects (via
@@ -925,6 +925,42 @@ gopls errors if any.
     pull.
 
 ---
+
+## Review pass (2026-06-03) — status, in-milestone gaps, op-name ambiguity
+
+This is the most thorough plan in the suite (the 11 risks already name the hard parts). Two things
+the review adds: an honest status (M3-1 is only partially done) and one wire-compat ambiguity.
+
+### Status vs the milestones above
+- **M3-1 partially done** (#59/#62): per-instance config parse, **stdio** connect, `GET /mcp`
+  status, and tool merge+dispatch into the agent loop all shipped. **Still unbuilt but listed under
+  M3-1's own deliverables:** (1) **remote** Streamable-HTTP/SSE transport (currently returns
+  `failed: remote MCP servers are not yet supported`); (2) the **`mcp.tools.changed` watcher**;
+  (3) mutating routes — `POST /mcp` add, `/mcp/:name/connect|disconnect` — still **501**.
+  Recorded in `conformance/known-divergences.json` (scenario `mcp`).
+- **M3-2 (OAuth): not started.** **M3-3 → M3-6 (all LSP): not started** — `internal/lsp/` is absent.
+
+### Compatibility gap to promote into a deliverable (not just a divergence note)
+- **MCP tool calls are not permission-gated; opencode gates them.** Built-in tools go through the
+  permission flow but MCP calls bypass it. This is a behavioral divergence, not a missing feature —
+  add "route MCP tool execution through the same permission `evaluate`/`Ask` path as built-ins" as
+  an explicit M3-1 (or M3-2) deliverable and a plan-12 assertion.
+
+### Ambiguity: LSP tool `operation` wire enum
+M3-5's deliverable list names **service methods** (`Hover`, `Definition`, `References`,
+`Implementation`, …) but the agent-facing tool's `operation` parameter is a **fixed string enum**
+that must match opencode exactly (`opencode/packages/opencode/src/tool/lsp.ts:11-22`):
+`goToDefinition`, `findReferences`, `hover`, `workspaceSymbol`, `documentSymbol`, plus the
+call-hierarchy ops. The Acceptance examples already use `goToDefinition`/`findReferences`; make the
+deliverable explicit that the wire enum is opencode's strings (the Go service methods are internal
+and may keep Go-idiomatic names). Getting this wrong silently breaks the agent's tool calls.
+
+### Validation additions
+- Add a conformance assertion that an MCP tool call emits `permission.asked` (once gating lands).
+- Add an assertion that the `lsp` tool rejects any `operation` not in opencode's enum.
+- The 11 risks are good; explicitly schedule risks #5 (process-group cleanup), #6
+  (`TolerantListToolsResultSchema`), #10 (NearestRoot deno exclusion), #11 (pull-vs-push capability
+  gate) as **acceptance-tested**, not just mitigations — each is a silent-failure source.
 
 ## Links to Sibling Plans
 

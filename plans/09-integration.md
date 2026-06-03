@@ -398,6 +398,53 @@ Swift Package. Both are generated from `packages/sdk/openapi.json` via
 
 ---
 
+## Review pass (2026-06-03) — corrections to reality + the missing Testing section
+
+This is the cross-plan integration contract, so accuracy matters most here. Several details drifted
+from the built daemon; corrected below (per CLAUDE.md's reality rule). The diagrams above are kept
+as the design intent — these are the binding overrides.
+
+### Contradictions to fix
+1. **Config is JSONC at opencode paths, not TOML at forge paths.** The Config Propagation section
+   shows `~/.config/forge/config.toml` + `.forge/config.toml` (TOML). Reality and the wire-compat
+   mandate: **`~/.config/opencode/{config.json,opencode.json,opencode.jsonc}`** global +
+   **`opencode.json[c]`** walked from the worktree down (`internal/config/config.go:35-37,50-62,82`).
+   Forge reads opencode's own config files — that is the point. Replace all TOML/forge-path
+   references.
+2. **Permission reply endpoint is wrong in the sequence diagram.** It shows
+   `POST /session/abc/permissions/xyz {"response":"once"}`. Real contract:
+   **`POST /permission/{requestID}/reply`** with body **`{"reply":"once|always|reject"}`**
+   (`internal/server/permission_handlers.go:16`; plan 02). Question replies similarly are
+   `POST /question/{requestID}/reply`.
+3. **Directory layout drift.** Actual `internal/` is `server/` (not `transport/`), `engine/` (not
+   `agent/`), `engine/tool` + `engine/permission` (not top-level `tool/`/`permission/`), `sdk/` (not
+   `pkg/sdk/`). `lsp/`, `plugin/`, and the shared `supervisor/` package **do not exist yet** — the
+   `SubprocessSupervisor` abstraction is still aspirational (MCP spawns its own subprocess directly).
+   Treat the layout table as the target, not the current tree.
+4. **Binary is `forged` (`cmd/forged`)** — plan 09 is correct here; note that **plan 01's
+   verification block (`forge`/`cmd/forge`) is the stale one** and should be reconciled to `forged`.
+
+### Testing & Validation (this plan had none — add it)
+Plan 09's validation was implicit in the phase end-states. Make it explicit as **integration tests
+that exercise the composition root**, distinct from per-plan unit tests (plan 10) and conformance
+(plan 12):
+- **Composition-root wiring test:** boot `cmd/forged` in-process against a temp dir + mock LLM;
+  assert every interface in "Key interface contracts" is non-nil and the instance graph builds.
+- **End-to-end prompt→tool→permission flow:** the sequence diagram above, asserted event-for-event
+  over `/event` (user `message.updated` → part deltas → tool `part.updated` pending →
+  `permission.asked` → `POST /permission/{id}/reply` → tool completed → assistant `message.updated`),
+  with the **corrected** endpoint/payload shapes.
+- **Sync vs async parity:** `POST /session/:id/prompt` (blocks, returns final JSON) and
+  `/prompt_async` (204 + SSE) drive identical engine paths — assert identical final state.
+- **SSE eager-subscribe race:** publish an event during the connect handshake; assert no loss
+  (covers Risk #1, the highest-severity integration risk).
+- **Config hot-reload:** rewrite the JSONC config; assert `config.updated` SSE fires and a
+  subsequent prompt sees the new providers/rules; assert in-flight calls used the snapshot.
+- **Subprocess supervision:** kill an MCP child mid-call; assert backoff restart + `mcp.updated`,
+  no daemon crash. (When `internal/supervisor/` lands, test the shared contract once for MCP/LSP/
+  plugin-host.)
+All of the above gate on the repo `CLAUDE.md` local CI mimic + a dual-run for any new endpoint.
+
 ## Links to Sibling Plans
 
 - [01-daemon-core](01-daemon-core.md) — transport, auth, instance routing, SQLite, SSE bus

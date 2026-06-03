@@ -455,6 +455,39 @@ pass, all golden SSE files match, and the plan 12 conformance suite is green.
 
 ---
 
+## Review pass (2026-06-03) — single source of truth + shape drift
+
+The three-tier pyramid and the plan-12 division of labor ("this plan owns Forge-internal
+correctness; plan 12 owns wire interop") are right. Fixes:
+
+**The one structural risk: golden SSE files must derive from opencode, not be authored.**
+The `sse_golden/` examples here are hand-written. For a wire-compat project that creates a **second,
+competing source of truth** for SSE shapes alongside plan 12's recorded opencode cassettes. Make
+plan 10's golden files **generated from plan 12's recordings** (same normalizer), so a shape change
+in opencode updates both. Otherwise plan 10 validates Forge against Forge's own assumptions.
+
+**Shape/endpoint drift to correct (matches reality + the other plans):**
+- **Config is JSONC, not TOML.** `TestConfigLoad: parse valid TOML` + `testdata/config/valid.toml`
+  → JSONC (`opencode.json[c]`, `internal/config/config.go:35-37`). Same correction as plan 09.
+- **Permission reply endpoint:** the round-trip test uses
+  `POST /session/:id/permissions/:id {"response":"once"}`. Real: **`POST /permission/{id}/reply`**
+  with **`{"reply":"once"}`** (`internal/server/permission_handlers.go:16`).
+- **Health shape:** `TestGlobalHealth` expects `{"ok":true}`; plan 01 + opencode return
+  **`{"healthy":true,"version":...}`**. Reconcile (plan 01 is right).
+- **Package paths:** `internal/agent/mock_llm.go` and `internal/permission` are pre-refactor.
+  Reality: the deterministic mock lives in **`internal/engine/enginetest`**; permission is
+  **`internal/engine/permission`**. Update the package anchors throughout.
+
+**Cross-plan correctness flags:**
+- `TestStructuredOutput` (and the §"What correct means" agent-engine row) assume the
+  `StructuredOutput` tool exists — **it does not yet** (plan 02 review). This test will fail until
+  M9's structured-output work lands; mark it pending, don't count it green.
+- `TestPromptBusy` asserts a second concurrent prompt **gets 409**. The engine's
+  `RunState.EnsureRunning` is **idempotent (joins the active run)**, not a reject — verify opencode's
+  real behavior before pinning 409; this is an unverified assumption.
+- Plugin-host row (05) assumes hooks fire — gated on the call sites that don't exist yet
+  (plan 05 review).
+
 ## Links
 
 - [09-integration](09-integration.md) — component wiring and sequence diagrams

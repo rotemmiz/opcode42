@@ -74,5 +74,11 @@
     "phase": "C",
     "reason": "MCP (plan 03): config (mcp.* local/remote) is parsed per-instance, local (stdio) servers connect lazily, GET /mcp reports {connected|disabled|failed} status, AND their tools are now merged into the agent loop — flattened as sanitize(server)_sanitize(tool), exposed to the model, and dispatched via the executor (registry-miss → MCP). Not yet implemented: (1) remote (StreamableHTTP/SSE) transports → 'failed: remote MCP servers are not yet supported'; (2) needs_auth/needs_client_registration statuses + OAuth; (3) mutating endpoints (POST /mcp add, /mcp/:name/connect|disconnect|auth) remain 501; (4) tools.changed watch/notifications; (5) MCP tool calls are NOT permission-gated (built-ins are; opencode gates MCP too).",
     "track": "TODO: remote transports + OAuth + mutating endpoints + permission-gate MCP calls (plan 03)"
+  },
+  {
+    "scenario": "provider-model-shape",
+    "phase": "C",
+    "reason": "GET /provider serves each model in the raw models.dev shape (flat cost.cache_read/cache_write; attachment/reasoning/temperature/tool_call/modalities as top-level fields) rather than opencode's transformed Model wire shape, whose required fields are providerID, options, headers, api, capabilities, status and a nested cost.cache{read,write} (provider.ts:1045-1075, Model schema). internal/resource/provider.go BuildProviderList passes catalog.Model through untransformed. Surfaced and skipped by the plan-06 M10 handler<->spec conformance test (internal/server/openapi_conformance_test.go).",
+    "track": "TODO: transform catalog models to opencode's Model wire shape (providerID, options, headers, api, capabilities, status, nested cost) in BuildProviderList (plan 04)"
   }
 ]

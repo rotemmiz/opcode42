@@ -576,6 +576,54 @@ A milestone is "done" when:
 
 ---
 
+## Review pass (2026-06-03) — drift gate direction + stale paths
+
+**Status:** M1–M4 (Go SDK + SSE + PTY clients) are built (`sdk/go/forgeclient.go`, `sse.go`,
+`pty.go`, `gen/`). M5–M7 (Kotlin) and M9 (Swift) not started. M8 spec-drift gate exists
+(`scripts/check-spec-drift.sh`). **M10: the response-schema conformance half is now BUILT** —
+`internal/api/gen/conformance.go` (kin-openapi loader over the 3.0 derived spec, additionalProperties
+relaxed per the strictness policy) + `internal/server/openapi_conformance_test.go` (validates live
+GET responses against the contract; offline). It immediately caught a real divergence
+(`/provider` cost shape) now logged in `known-divergences.json`. Still open: route-table-derived
+`/openapi.json` emission (the daemon still serves the reference verbatim) and broadening the
+validated endpoint set.
+
+**The drift gate runs spec→code, not code→spec — be explicit about what it proves.**
+- `/openapi.json` is an alias of `/doc` and serves the **embedded frozen reference verbatim**
+  (`internal/server/server.go:86-88`). Codegen (`internal/api/gen/gen.go`) generates Go interfaces
+  *from* `conformance/openapi-reference.json` via `oapi-codegen`. Both directions flow **out of** the
+  frozen spec.
+- Consequence: the spec-drift check cannot catch a handler whose request/response **shape or
+  behavior** diverges from the spec — it only catches (a) generated-interface drift (`make gen` +
+  `git diff --exit-code internal/api/gen/`) and (b) missing/extra **registered operations**. True
+  request/response conformance is owned by **plan 12's dual-run**, not by this gate. Update the
+  "Drift Tests" section so "drift gate" does not imply behavioral conformance.
+
+**M10 — DECIDED (2026-06-03): BUILD it** (masterplan "Decisions locked" #7). Close the loop so the
+gate catches per-handler shape divergence **offline, without a running opencode**. Concrete approach
+for this repo (avoid a full reverse spec-generator / swaggo):
+- **Route-table emission:** emit the served spec from the registered `reg(method, path, handler)`
+  table rather than a static blob, so `/openapi.json` reflects the operations the daemon *actually*
+  serves (upgrades the coverage check from "assumed" to "derived").
+- **Per-operation response-schema conformance test (the part with teeth):** for each operation,
+  take a representative handler response (from the existing handler tests) and validate it against
+  that operation's response JSON Schema in `conformance/openapi-reference.json` using a schema
+  validator (e.g. `santhosh-tekuri/jsonschema`). Reuse the oapi-codegen-generated models in
+  `internal/api/gen/` as the handler response types so the types already track the spec. A handler
+  that adds an unspec'd field or drops a required one **fails the test**.
+- **Gate wiring:** run both in CI alongside `make gen` + `git diff --exit-code internal/api/gen/`.
+  Complementary to — not a replacement for — plan 12's dual-run (the behavioral oracle vs live
+  opencode).
+
+**Stale path references.** The plan names the frozen file `forge/sdk/openapi.json` and a
+`./forge generate` command. The repo's canonical reference is **`conformance/openapi-reference.json`**
+(synced by `scripts/sync-openapi.sh` from opencode's `packages/sdk/openapi.json`, with a provenance
+file), regenerated via `make gen` (`go generate ./...` → `downconvert` to 3.0 → `oapi-codegen`).
+Update M1/M8 and the Drift Tests block to these real paths/commands.
+
+**Note:** opencode serves its live spec at `/doc` (not `/openapi.json`); Forge's `/openapi.json` is a
+known-addition alias (`conformance/known-additions.json`). Keep that divergence recorded.
+
 ## Links
 
 - [00 — Masterplan](00-masterplan.md) — contract source, wire-compat strategy
