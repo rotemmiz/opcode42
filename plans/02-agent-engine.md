@@ -1013,3 +1013,39 @@ M7 → M8 → **M9 (loop wiring; first end-to-end green)** → M10 → **M3′ (
 M10 compaction (#7). M3′ Anthropic provider landed as a hand-rolled /v1/messages client (llm.Event
 + extended-thinking signature passthrough); the provider factory routes Anthropic-native providers
 to it and everything else to the OpenAI-compatible client.
+
+---
+
+## Review pass (2026-06-03) — M9 was only partially shipped; M11 unrun
+
+**Correction (contradicts the "M9 shipped" note above; recorded per CLAUDE.md's reality rule).**
+The loop is end-to-end functional and `go test ./internal/engine/...` is green, but **four of M9's
+six sub-bullets are not implemented.** Verified in `internal/engine/loop.go` / `engine.go`:
+
+| M9 sub-bullet | Plan line | State in code | Evidence |
+|---|---|---|---|
+| Title generation (step-1 forked small-model stream) | 867 | **missing** | no `generateTitle` anywhere; no session-title setter wired |
+| Structured output (`StructuredOutput` tool for `json_schema`) | 868 | **missing** | `OutputFormat` parses (`message/message.go:22`) but loop always sends `ToolChoiceAuto` (`loop.go:66`); no tool injection, no `STRUCTURED_OUTPUT_SYSTEM_PROMPT` |
+| MAX_STEPS sentinel on last step | (runLoop step 17) | **missing** | `loop.go:19` is `for step := 0; step < maxSteps`; no sentinel message appended |
+| Agent-level `maxSteps` | (runLoop step 11) | **missing** | hard `const maxSteps = 100` (`engine.go:32`); agent's `MaxSteps` (`resource/agent.go:140`) ignored |
+| `resolvePromptParts` (@file/@dir/@symbol) | 869 | **stub** | `engine.go:138` returns parts unchanged — correctly deferred to plan 03/LSP (risk row, line 968) |
+
+opencode anchors for the unbuilt work: `prompt.ts:241-300,1295` (ensureTitle); `prompt.ts:79,
+1403-1404,1443,1454,1466-1467,1747` (structured output); `prompt.ts:1339-1340,1451` (maxSteps +
+MAX_STEPS sentinel). These remain in `prompt/max-steps.txt`.
+
+**M11 (conformance pass) has not run.** The Verification section's claims — "make test-conformance
+replays 5 scripted prompts against both daemons," "≥95% coverage," opencode-TUI attach renders —
+are **aspirational, not yet demonstrated.** No dual-run baseline exists. Until M11 runs, this plan
+is "built, not conformance-verified."
+
+**Ambiguities still genuinely open:**
+- **Title agent/model resolution.** The plan says "small-model stream" but never names how the
+  `title` agent/model is chosen (opencode resolves an explicit `title` agent, `prompt.ts:264`).
+  Pin the resolution source before building title gen.
+- **Structured-output error surface.** opencode raises `StructuredOutputError` on a non-conforming
+  final turn (`prompt.ts:1466-1467`); decide the wire shape Forge emits and add it to the SSE
+  catalog + plan 12.
+- **Verification make-targets.** `make test-unit` / `make test-conformance` are referenced but may
+  not exist; align this section with the real gates in the repo `CLAUDE.md` git workflow
+  (`go test ./...`, `scripts/run-conformance.sh self`, dual-run for new endpoints).

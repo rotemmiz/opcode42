@@ -425,6 +425,34 @@ This is acceptable given Forge's primary target (mobile + remote) rarely uses cu
 
 ---
 
+## Review pass (2026-06-03) — the missing piece is the call sites, not the bridge
+
+Status: only **M1** is in scope now and it is a flag-gated no-op; M2–M8 are Phase D, not started.
+Honest risk table is good. The one structural gap the review adds:
+
+**Hook insertion points do not exist in the Go agent loop yet.** This plan repeatedly references
+"hook call sites in the agent loop (plan 02)," but `internal/engine/loop.go` / the processor have
+**zero** hook-dispatch points today. That makes M1's "all hooks return unmodified output" vacuously
+true (nothing calls the bridge). Before M2 can be a drop-in, M1 must place the (no-op) call sites.
+Enumerate them against opencode's authoritative hook set
+(`opencode/packages/plugin/src/index.ts`) and pin where each fires:
+
+| Hook | Forge insertion point |
+|---|---|
+| `chat.params`, `chat.headers` | request build, before `provider.Stream` (`loop.go:61-68`) |
+| `chat.message` | user-message create (`engine.go` `Prompt`) |
+| `tool.execute.before` / `.after` | around the executor in the processor tool path |
+| `permission.ask` | permission `Ask` path (lets a plugin auto-allow/deny) |
+| `experimental.chat.messages.transform` | around `ToModelMessages` |
+| `experimental.chat.system.transform` | around `buildSystem` |
+| `event` | every bus publish (non-blocking fan-out) |
+| `auth.*`, `provider.models` | provider/auth resolution (plan 04 surface) |
+
+**Validation fix:** M1's acceptance should assert each insertion point exists and routes through the
+no-op bridge (e.g. a test bridge that records invocations), not merely that "no subprocess spawns."
+Otherwise the null-bridge test proves nothing about M2 readiness. The hooks are **mutate-in-place
+output** contracts — preserve that exact shape (input read-only, output mutated) per opencode.
+
 ## Links
 
 - [00 — Masterplan](00-masterplan.md) — sequencing, phase D

@@ -848,6 +848,45 @@ Emit `global.disposed` SSE event before step 1 so connected clients know to reco
 
 ---
 
+## Review pass (2026-06-03) — milestone overlap, config format, OAuth ownership
+
+Phase D, not started — but several milestones are **already built in plan 01**, and a couple of
+specs contradict reality.
+
+**Already done elsewhere — do not rebuild, reframe as "harden":**
+- **13.7 mDNS** — built (`internal/mdns/`, plan 01 M6). Remaining delta is only advertising **both**
+  `_opencode._tcp` and `_http._tcp` (risk row) — scope 13.7 down to that.
+- **13.9 Heartbeat** — built (10s `server.heartbeat`, plan 01 M4).
+- **13.11 Graceful shutdown** — built (`SIGTERM` + dispose, plan 01 M6).
+- **13.1 Auth (partial)** — Basic + `?auth_token=` already work (plan 01); the *new* work here is
+  constant-time compare, `0.0.0.0`-without-password block, and the PTY ticket flow.
+Update the milestone table to mark these as "harden/extend," not greenfield, so they aren't
+re-implemented.
+
+**Config format contradiction.** 13.14 specifies a **YAML** config loader. Reality and the
+wire-compat mandate are **JSONC at opencode paths** (`internal/config/config.go`). A separate YAML
+config would fork the config story. Keep the flag > env > file **precedence**, but the file format is
+JSONC — not YAML. (Same correction as plans 09/10.)
+
+**This plan now owns the OAuth loopback/callback story.** Per the masterplan review, the ownerless
+OAuth callback problem (MCP M3-2 remote auth + provider-auth `oauth/authorize`+`/callback`) is
+assigned here, because the loopback-redirect server interacts directly with remote hardening
+(reachability, TLS, port-forwarding). Add an explicit milestone: a shared OAuth loopback callback
+server that both MCP and provider auth use, with the remote-reachability caveat (plan 03 risk #3)
+addressed (e.g. `--oauth-callback-proxy-url`).
+
+**`/sync/*` — DECIDED: return `501 NotImplemented`** until 13.5/13.6 implement real semantics (no
+no-op `true`). Per masterplan "Decisions locked" #1; resolves open-question #3 below.
+
+**Multi-user — DECIDED: single-user, matching opencode** (masterplan "Decisions locked" #3). The
+13.2 token schema is a single namespace of bearer tokens for the one user; no per-user isolation.
+Resolves open-question #2 below.
+
+**OAuth — DECIDED: deferred, API keys only for now** (masterplan "Decisions locked" #4). When picked
+up, the shared loopback callback server lives here (plan 13), with optional `--oauth-callback-proxy-url`
+for remote reachability. **Note:** verification uses
+`go build -o forge` but the binary is **`forged`** (`cmd/forged`) — align with plan 09.
+
 ## Links to Sibling Plans
 
 - **Plan 00** (`00-masterplan.md`) — sequencing context; this plan is Phase D.

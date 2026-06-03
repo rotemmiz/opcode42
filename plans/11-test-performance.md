@@ -318,6 +318,26 @@ in any benchmark fails the PR. Manual override available for intentional trade-o
 
 ---
 
+## Review pass (2026-06-03) — disciplined; one prerequisite to pin
+
+This plan correctly honors the masterplan non-negotiable (every number is an UNMEASURED target;
+W0 = measure opencode first). The caveats are thorough. Minimal additions:
+
+- **Status: W0 not done.** No baseline has been recorded and no benchmark harness is built yet, so
+  every ratio in the table remains a hypothesis. Until W0 runs, this plan contributes zero validated
+  claims — keep that explicit so no "Nx faster" figure leaks into docs/marketing.
+- **The unsolved prerequisite is a deterministic provider for *opencode*, not Forge.** The "same
+  mock provider" fairness condition requires opencode to be driven by a scripted, zero-network LLM.
+  Forge owns its mock (`internal/engine/enginetest`), but opencode does not expose one — so W0 must
+  first stand up a **local OpenAI-compatible mock HTTP endpoint** that *both* daemons point at (same
+  scripted SSE). Without it the head-to-head conflates daemon overhead with provider middleware.
+  This is the gating task; add it as W0.a before any measurement.
+- **CGO-vs-pure-Go SQLite is already decided** (caveat says "decide per plan 01"): the repo uses
+  **pure-Go `modernc.org/sqlite`** per the masterplan non-negotiables. Record it as decided and
+  measure within that constraint — a CGO comparison is out of scope, not an open choice.
+- **Resource-loader cost** (caveat): plan 04 loaders are eager and now built; measure startup
+  **with** them enabled as the default, since that is the shipping behavior.
+
 ## Links
 
 - [09-integration](09-integration.md) — component wiring; SSE bus architecture

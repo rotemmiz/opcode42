@@ -492,6 +492,40 @@ are implemented.
 
 ---
 
+## Review pass (2026-06-03) — what the gate actually proves; reconcile strictness
+
+This is the plan every other plan's "conformance-green" exit criterion depends on, so its claims must
+be exact.
+
+**1. The spec-drift gate proves coverage, not behavior — say so.** Interop item #1 ("every endpoint
+responds with the correct schema") is **not** verified by the drift gate. `GET /openapi.json` serves
+the **embedded reference verbatim** (`internal/server/server.go:86`), so curling it and diffing
+against the reference is reference-vs-reference. `scripts/check-spec-drift.sh` meaningfully checks
+**which operations are registered** (coverage), not per-handler request/response shapes. **Per-handler
+schema conformance is owned by the dual-run scenario suite**, not the drift gate. Reword §(a) so
+"drift green" is never read as "schemas conform." (Same finding as plan 06; M10 — a handler-derived
+spec — would close it.)
+
+**2. Strictness policy — DECIDED (2026-06-03).** **Missing/changed field = FAIL; extra additive
+field = WARNING and must be listed in `conformance/known-additions.json`.** This is the single
+canonical policy (masterplan "Decisions locked" #2); it supersedes both this plan's earlier "any
+divergence = fail" line and plan 02's "extra fields = warning." Implement the normalizer/differ to
+this rule. The normalizer's exact volatile-field strip set (ids, timestamps, cursors, ports, absolute
+paths, session/message/part ids) is the crux of the whole harness — enumerate it canonically in one
+place.
+
+**3. The doc's known-divergence example is stale.** The inline JSON here (`sync-replay`,
+`experimental-*`, `provider-oauth`, fake issue URL, `phase:"A"`) does not match the **live**
+`conformance/known-divergences.json`, whose entries are richer (`mcp`, `provider-auth`, `websearch`
+with detailed `reason` + `track: "TODO: …"`). Update the example to the live schema so contributors
+copy the right shape.
+
+**4. Status: the gate is not yet complete or green.** Recording + normalize infra and some cassettes
+exist, but the **automated dual-run scenario suite is incomplete** and **no end-to-end green baseline
+has been established** (plan 02 M11 unrun). Until that lands, every plan that says "conformance-green"
+as an exit criterion is blocked on this. This is the single highest-leverage unfinished item in the
+whole suite — prioritize the dual-run runner + the canonical normalizer.
+
 ## Links to All Sibling Plans
 
 - [00-masterplan](00-masterplan.md) — wire-compat as product goal and methodology

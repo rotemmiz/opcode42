@@ -607,3 +607,26 @@ the mobile-side face of plan 12's conformance harness.
 | Binary-search sorted insertion correctness | Medium | Exhaustive unit tests on `reduce()` with edge cases (duplicate IDs, out-of-order delivery) |
 | Kotlin SDK drift from OpenAPI spec | Low | Plan 06 regenerates from `packages/sdk/openapi.json` on every spec update; plan 12 catches drift |
 | Battery drain from always-on foreground service | Medium | Do not use a foreground service; rely on `ProcessLifecycleOwner` + WorkManager; profile with Android Battery Historian |
+
+---
+
+## Review pass (2026-06-03) — user-owned client spec; light touch
+
+This is a **client spec the user drives** (core daemon specs are Claude-driven). The review here only
+records factual status, resolves a masterplan open decision, and flags ambiguities — it does not
+re-prescribe client architecture.
+
+- **Masterplan open decision resolved:** "native-Kotlin vs KMP vs cross-platform" (masterplan
+  line 102) is settled — the app is **native Kotlin + Jetpack Compose** (`android/`). Update the
+  masterplan's open-decision list to mark this decided.
+- **Status:** ~60% — session list/CRUD, chat rendering (markdown/code/diff/tool states), tasks done;
+  **permission UI and auth flows are partial; settings (model/provider/instance switching) not
+  started.** The dual-daemon validation (lines 562–566) cannot fully run for permission/auth flows
+  until those screens land.
+- **Ambiguities to pin (user's call):**
+  - **PTY auth.** Risk table uses `?auth_token=`; plan 06 recommends the `POST /pty/{id}/connect-token`
+    flow for production to avoid credential-in-URL logging. Decide which the app uses.
+  - **Background signal.** Risks assume push (plan 13) is the background path, but plan 13 is not
+    started — until then the app is foreground-SSE only. Make that explicit as the current contract.
+- **Validation is strong** (property-based `reduce`, MockWebServer SSE, dual-daemon). The only gap is
+  that the dual-daemon face is blocked on Forge reaching conformance-green (masterplan: M11 unrun).

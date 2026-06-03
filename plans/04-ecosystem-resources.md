@@ -902,6 +902,26 @@ conformance harness.
 
 ---
 
+## Review pass (2026-06-03) — done, with two carry-forwards
+
+Best-validated plan in the suite (golden files + the opencode-`.opencode/` integration test). Built
+and green. Two real items:
+
+- **Provider auth is partial.** Credential CRUD (`PUT`/`DELETE /auth/{id}` against the shared
+  `~/.local/share/opencode/auth.json`) shipped, but **`GET /provider/auth` (per-provider
+  auth-method listing) and the OAuth flow (`POST /provider/:id/oauth/authorize` + `/callback`)
+  remain 501** (`internal/server/auth_handlers.go:16`; `conformance/known-divergences.json` scenario
+  `provider-auth`). This is the same OAuth callback/loopback problem the masterplan now flags as
+  ownerless across plans 03/04/13 — pick one owner.
+- **Verification couples to the live opencode repo.** The integration test asserts against
+  `/Users/rotemmiz/git/opencode/.opencode/` (e.g. `triage` → `mode:primary, hidden:true,
+  model:opencode/gpt-5.4-nano`). These still match today (verified), but a reference-repo update
+  silently breaks the gate. **Make the `t.TempDir()` copy authoritative** — snapshot the fixture
+  set into `internal/resource/testdata/` so the test pins a known input, and keep the live-repo run
+  as an *optional* opportunistic check, not the gate. This also lets risk #8 (catalog drift, High)
+  be enforced independently: confirm the CI drift check (`make gen` + `git diff --exit-code`) is
+  actually wired for the generated provider catalog, not just described.
+
 ## Links to sibling plans
 
 - **Plan 00** (`00-masterplan.md`) — Vision, architecture, sequencing. This plan is Phase C.
