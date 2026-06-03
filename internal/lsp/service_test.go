@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"context"
 	"os/exec"
 	"sync"
 	"testing"
@@ -19,9 +20,17 @@ type fakeResolver struct {
 func (f fakeResolver) Which(name string) string { return f.paths[name] }
 func (f fakeResolver) EnsureGopls() string      { return f.gopls }
 
+// newSvc builds a service whose connect hook skips the real LSP handshake, so
+// the lifecycle/dedup/broken tests can use a stand-in process (e.g. `sleep`) for
+// a server binary without it needing to speak LSP. The handshake itself is
+// covered by the live gopls integration test.
 func newSvc(t *testing.T, dir string, r BinResolver) *Service {
 	t.Helper()
-	return NewService(dir, config.LSPConfig{Enabled: true}, r)
+	s := NewService(dir, config.LSPConfig{Enabled: true}, r)
+	s.connect = func(_ context.Context, _ ServerDef, _ string, _ *handle) (*Client, error) {
+		return nil, nil // process spawned; no JSON-RPC client attached
+	}
+	return s
 }
 
 func TestActiveServers_DisabledConfig(t *testing.T) {
@@ -145,8 +154,8 @@ func TestSpawnDedupAndDispose(t *testing.T) {
 	if running != 1 {
 		t.Fatalf("dedup should yield exactly one running process, got %d", running)
 	}
-	if got := s.Status(); len(got) != 1 || got[0] != "gopls" {
-		t.Fatalf("Status should report [gopls], got %v", got)
+	if got := s.runningIDs(); len(got) != 1 || got[0] != "gopls" {
+		t.Fatalf("runningIDs should report [gopls], got %v", got)
 	}
 
 	// DisposeAll must terminate the process group and be idempotent.

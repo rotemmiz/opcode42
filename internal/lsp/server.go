@@ -30,6 +30,10 @@ type ServerDef struct {
 	// for gopls, may auto-install) the server binary; it returns "" when the
 	// binary is unavailable, in which case the server is added to the broken set.
 	Command func(root string, resolveBin BinResolver) ([]string, error)
+	// Initialization is the server's LSP initializationOptions /
+	// didChangeConfiguration settings (nil for the built-ins, populated for custom
+	// config-defined servers — lsp.ts:181). Surfaced to workspace/configuration.
+	Initialization map[string]any
 }
 
 // BinResolver locates a server binary on PATH (and, for gopls, may auto-install

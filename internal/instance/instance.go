@@ -95,7 +95,7 @@ func (m *Manager) Get(directory string) *Context {
 		Questions:   question.NewManager(instBus),
 		RunState:    runstate.New(),
 		MCP:         mcp.NewManager(mcp.ParseConfig(cfg)).WithBus(mcpBus{instBus}),
-		LSP:         newLSP(directory, cfg),
+		LSP:         newLSP(directory, cfg, instBus),
 	}
 	m.instances[directory] = c
 	return c
@@ -111,19 +111,21 @@ func loadConfig(directory string) map[string]any {
 	return cfg
 }
 
-// mcpBus adapts the instance bus to mcp.eventPublisher so the MCP manager can
-// emit mcp.tools.changed in opencode's {id,type,properties} shape.
+// mcpBus adapts the instance bus to mcp.eventPublisher / lsp.EventPublisher so
+// the managers can emit events (mcp.tools.changed, lsp.updated) in opencode's
+// {id,type,properties} shape.
 type mcpBus struct{ b *bus.Bus }
 
 func (m mcpBus) Publish(typ string, props any) { m.b.Publish(bus.NewEvent(typ, props)) }
 
-// newLSP builds the instance's LSP service from the loaded config. A malformed
-// `lsp` block (e.g. a custom server missing `extensions`) disables LSP for the
-// instance rather than blocking creation.
-func newLSP(directory string, cfg map[string]any) *lsp.Service {
+// newLSP builds the instance's LSP service from the loaded config, wiring the
+// instance bus so the service emits lsp.updated when a client first spawns. A
+// malformed `lsp` block (e.g. a custom server missing `extensions`) disables LSP
+// for the instance rather than blocking creation.
+func newLSP(directory string, cfg map[string]any, instBus *bus.Bus) *lsp.Service {
 	lspCfg, err := config.ParseLSP(cfg, lsp.BuiltinIDs())
 	if err != nil {
 		lspCfg = config.LSPConfig{}
 	}
-	return lsp.NewService(directory, lspCfg, lsp.NewBinResolver(false))
+	return lsp.NewService(directory, lspCfg, lsp.NewBinResolver(false)).WithBus(mcpBus{instBus})
 }

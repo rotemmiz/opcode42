@@ -104,6 +104,7 @@ func New(opts Options) (http.Handler, error) {
 		registerPermissionRoutes(reg, opts.Instances)
 		registerQuestionRoutes(reg, opts.Instances)
 		registerMCPRoutes(reg, opts.Instances)
+		registerLSPRoutes(reg, opts.Instances)
 	}
 	if opts.Todos != nil && opts.Sessions != nil {
 		registerTodoRoutes(reg, opts)
