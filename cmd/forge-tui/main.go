@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/rotemmiz/forge/internal/tui"
+	"github.com/rotemmiz/forge/scrollregion"
 )
 
 func main() {
@@ -35,10 +36,15 @@ func main() {
 		Theme: *themeFlag,
 	}).Restore() // restore persisted theme/model/history + enable persistence
 
-	// WithMouseCellMotion enables wheel reporting so the stream scrolls back on
-	// scroll-up (handled in Update via tea.MouseMsg). Trade-off: terminals route
-	// the wheel to the app, so native text selection needs the Shift modifier.
-	if _, err := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
+	// Enable alternate scroll mode (DECSET 1007) instead of grabbing the mouse:
+	// the terminal turns the wheel into Up/Down keys (handled by the stream
+	// scroller) while native text selection and copy keep working, because mouse
+	// reporting is never enabled. restore() is called explicitly before any exit
+	// since deferred calls don't run before os.Exit.
+	restore := scrollregion.Guard(os.Stdout)
+	_, err := tea.NewProgram(model, tea.WithAltScreen()).Run()
+	restore()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "forge-tui:", err)
 		os.Exit(1)
 	}

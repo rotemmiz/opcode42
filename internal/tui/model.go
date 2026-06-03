@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/rotemmiz/forge/internal/tui/theme"
+	"github.com/rotemmiz/forge/scrollregion"
 	forgeclient "github.com/rotemmiz/forge/sdk/go"
 )
 
@@ -107,19 +108,19 @@ type Model struct {
 	ac       autocomplete // composer "/" popup state
 
 	// Chrome.
-	agent          string      // active agent (status bar "mode"); empty → default
-	agents         []agentItem // selectable agents (GET /agent)
-	themeName      string      // active theme name (theme switcher)
-	sidebarHidden  bool        // right sidebar visibility (toggle: ctrl+x b)
-	streamWidth    int         // transient: stream column width when the sidebar is shown
-	leader         bool        // ctrl+x leader pressed, awaiting the chord key
-	tasksOpen      bool        // tasks dock visibility (toggle: ctrl+x t)
-	todos          []Todo      // current session's todos (tasks dock)
-	scrollOffset   int         // stream scrollback: lines hidden below the viewport (0 = live tail)
-	view           viewState   // display toggles (timestamps, tool output, thinking)
-	history        []string    // submitted prompts (persisted; recalled with up/down when empty)
-	histIdx        int         // browse cursor into history (-1 = not browsing)
-	persistEnabled bool        // gate local-KV reads/writes (off in tests; on via Restore)
+	agent          string              // active agent (status bar "mode"); empty → default
+	agents         []agentItem         // selectable agents (GET /agent)
+	themeName      string              // active theme name (theme switcher)
+	sidebarHidden  bool                // right sidebar visibility (toggle: ctrl+x b)
+	streamWidth    int                 // transient: stream column width when the sidebar is shown
+	leader         bool                // ctrl+x leader pressed, awaiting the chord key
+	tasksOpen      bool                // tasks dock visibility (toggle: ctrl+x t)
+	todos          []Todo              // current session's todos (tasks dock)
+	scroll         scrollregion.Region // stream scrollback viewport (0 == live tail)
+	view           viewState           // display toggles (timestamps, tool output, thinking)
+	history        []string            // submitted prompts (persisted; recalled with up/down when empty)
+	histIdx        int                 // browse cursor into history (-1 = not browsing)
+	persistEnabled bool                // gate local-KV reads/writes (off in tests; on via Restore)
 
 	// Diff reviewer (plan 08b §1).
 	diff           diffState // full-screen diff reviewer (open == active)
@@ -325,9 +326,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.MouseMsg:
-		return m.handleMouse(msg)
-
 	case tea.KeyMsg:
 		// A focused terminal captures every key (ctrl+c included, so the shell can
 		// interrupt) — only ctrl+] escapes, handled inside handlePTYKey. A pending
@@ -390,22 +388,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "ctrl+t":
 			return m.cycleVariant(), nil // cycle model variants (opencode variant_cycle)
-		case "ctrl+up", "pgup":
-			m.scrollOffset += scrollStep
+		case "pgup", "pgdown", "pgdn":
+			// Page the stream. A page is the viewport height less a line of overlap.
+			m.scroll.Apply(scrollregion.Decode(msg.String()), scrollStep, m.height-1)
 			return m, nil
-		case "ctrl+down", "pgdown", "pgdn":
-			m.scrollOffset -= scrollStep
-			if m.scrollOffset < 0 {
-				m.scrollOffset = 0
-			}
-			return m, nil
-		case "up":
+		case "ctrl+up":
+			// History recall moved off the plain arrows (which now scroll, and which
+			// the wheel sends under alternate scroll mode) onto ctrl+↑/↓.
 			if nm, ok := m.historyRecall(-1); ok {
 				return nm, nil
 			}
-		case "down":
+		case "ctrl+down":
 			if nm, ok := m.historyRecall(+1); ok {
 				return nm, nil
+			}
+		case "up", "down":
+			// Plain ↑/↓ — and the mouse wheel, which arrives as these keys under
+			// alternate scroll mode — scroll the stream while the composer is empty
+			// (the natural reading state). With a draft present they fall through to
+			// the composer (textarea cursor / continued history browse).
+			if strings.TrimSpace(m.input.Value()) == "" {
+				m.scroll.Apply(scrollregion.Decode(msg.String()), scrollStep, m.height-1)
+				return m, nil
 			}
 		case "!":
 			// `!` at the start of an empty composer enters shell mode (opencode
@@ -1111,7 +1115,7 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	}
 	m.input.SetValue("")
 	m = m.resizeComposer() // collapse back to one row
-	m.scrollOffset = 0     // a new prompt snaps the stream back to the live tail
+	m.scroll.ToTail()      // a new prompt snaps the stream back to the live tail
 	if m.cfg.SessionID == "" {
 		return m, createSessionCmd(m.ctx, m.client, text)
 	}
@@ -1120,28 +1124,6 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 
 // scrollStep is the lines moved per scrollback keypress (and per wheel notch).
 const scrollStep = 3
-
-// handleMouse scrolls the stream on wheel up/down, mirroring pgup/pgdn. Wheel
-// events are ignored while an overlay owns the view (a focused terminal, the
-// diff reviewer, a modal, or a pending permission/question) so they don't move
-// the hidden stream underneath. The render side clamps scrollOffset to the
-// scrollback length, so an unbounded += here can't over-scroll past the top.
-func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	if (m.pty.open && m.pty.focused) || m.diff.open || m.modal != modalNone ||
-		m.pendingPermission() != nil || m.pendingQuestion() != nil {
-		return m, nil
-	}
-	switch msg.Button {
-	case tea.MouseButtonWheelUp:
-		m.scrollOffset += scrollStep
-	case tea.MouseButtonWheelDown:
-		m.scrollOffset -= scrollStep
-		if m.scrollOffset < 0 {
-			m.scrollOffset = 0
-		}
-	}
-	return m, nil
-}
 
 // historyRecall walks the prompt history with up (dir -1, older) / down (dir +1,
 // newer). It only starts browsing from an empty composer (so a draft isn't

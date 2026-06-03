@@ -229,25 +229,10 @@ func (m Model) frame(body, footer string) string {
 	if avail < 1 {
 		avail = 1
 	}
-	lines := strings.Split(body, "\n")
-	if len(lines) > avail {
-		// Window the body to `avail` lines, scrolled up from the bottom by
-		// scrollOffset (clamped so we can't scroll past the top/bottom).
-		maxOff := len(lines) - avail
-		off := m.scrollOffset
-		if off > maxOff {
-			off = maxOff
-		}
-		if off < 0 {
-			off = 0
-		}
-		end := len(lines) - off
-		lines = lines[end-avail : end]
-	} else {
-		for len(lines) < avail { // pad so footer sits at the bottom
-			lines = append(lines, "")
-		}
-	}
+	// scrollregion.Window windows the body to `avail` lines at the current scroll
+	// offset (clamped to the top/bottom) and pads a short body so the footer stays
+	// pinned to the bottom row.
+	lines := m.scroll.Window(strings.Split(body, "\n"), avail)
 	return strings.Join(lines, "\n") + "\n" + footer
 }
 

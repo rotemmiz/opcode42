@@ -30,6 +30,14 @@ func key(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyDown}
 	case "up":
 		return tea.KeyMsg{Type: tea.KeyUp}
+	case "ctrl+up":
+		return tea.KeyMsg{Type: tea.KeyCtrlUp}
+	case "ctrl+down":
+		return tea.KeyMsg{Type: tea.KeyCtrlDown}
+	case "pgup":
+		return tea.KeyMsg{Type: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyMsg{Type: tea.KeyPgDown}
 	default:
 		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 	}

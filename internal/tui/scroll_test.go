@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -42,7 +41,7 @@ func frameRows(s string) []string { return strings.Split(s, "\n") }
 func TestView_NeverExceedsViewport(t *testing.T) {
 	m := longSessionModel(t)
 	for _, off := range []int{0, 3, 9, 1000} {
-		m.scrollOffset = off
+		m.scroll.Offset = off
 		rows := frameRows(m.View())
 		if len(rows) != m.height {
 			t.Fatalf("scrollOffset=%d: got %d rows, want exactly %d (overflow → terminal scrolls everything)", off, len(rows), m.height)
@@ -63,7 +62,7 @@ func TestView_FooterPinnedAcrossScroll(t *testing.T) {
 	// token rather than spacing that shifts with the column's inner width.
 	const wantMarker = "ctrl+p commands"
 	bottomFor := func(off int) string {
-		m.scrollOffset = off
+		m.scroll.Offset = off
 		rows := frameRows(m.View())
 		// Search the last 3 rows (composer + status bar live at the very bottom).
 		return stripANSI(strings.Join(rows[len(rows)-3:], "\n"))
@@ -78,9 +77,9 @@ func TestView_FooterPinnedAcrossScroll(t *testing.T) {
 // earlier transcript rows that the live-tail view does not.
 func TestView_ScrollChangesStreamContent(t *testing.T) {
 	m := longSessionModel(t)
-	m.scrollOffset = 0
+	m.scroll.Offset = 0
 	tail := stripANSI(m.View())
-	m.scrollOffset = 1000 // large offset → clamped to the top of the transcript
+	m.scroll.Offset = 1000 // large offset → clamped to the top of the transcript
 	back := stripANSI(m.View())
 	if tail == back {
 		t.Fatal("scrolling changed nothing — stream is not scrollable")
@@ -95,40 +94,50 @@ func TestView_ScrollChangesStreamContent(t *testing.T) {
 	}
 }
 
-// TestMouseWheel_ScrollsStream verifies wheel-up scrolls back and wheel-down
-// returns toward the live tail, mirroring pgup/pgdn, and that wheel-down can't
-// drive scrollOffset negative.
-func TestMouseWheel_ScrollsStream(t *testing.T) {
+// TestKeyScroll_PlainArrowsScrollWhenComposerEmpty verifies the alternate-scroll
+// routing: with an empty composer, plain ↑/↓ (which is also what the mouse wheel
+// sends under DECSET 1007) move the stream's scroll offset, and ↓ can't go past
+// the live tail.
+func TestKeyScroll_PlainArrowsScrollWhenComposerEmpty(t *testing.T) {
 	m := longSessionModel(t)
-	up := func(mm Model) Model {
-		nm, _ := mm.handleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelUp})
-		return nm.(Model)
+	m, _ = step(t, m, key("up"))
+	m, _ = step(t, m, key("up"))
+	if m.scroll.Offset != 2*scrollStep {
+		t.Fatalf("two ↑: Offset=%d want %d", m.scroll.Offset, 2*scrollStep)
 	}
-	down := func(mm Model) Model {
-		nm, _ := mm.handleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
-		return nm.(Model)
+	m, _ = step(t, m, key("down"))
+	if m.scroll.Offset != scrollStep {
+		t.Fatalf("↓: Offset=%d want %d", m.scroll.Offset, scrollStep)
 	}
-	m = up(up(m))
-	if m.scrollOffset != 2*scrollStep {
-		t.Fatalf("two wheel-ups: scrollOffset=%d, want %d", m.scrollOffset, 2*scrollStep)
-	}
-	m = down(m)
-	if m.scrollOffset != scrollStep {
-		t.Fatalf("wheel-down: scrollOffset=%d, want %d", m.scrollOffset, scrollStep)
-	}
-	m = down(down(m)) // past zero
-	if m.scrollOffset != 0 {
-		t.Fatalf("wheel-down past tail: scrollOffset=%d, want 0", m.scrollOffset)
+	m, _ = step(t, m, key("down"))
+	m, _ = step(t, m, key("down"))
+	if m.scroll.Offset != 0 || !m.scroll.AtTail() {
+		t.Fatalf("↓ past tail: Offset=%d want 0", m.scroll.Offset)
 	}
 }
 
-// TestMouseWheel_IgnoredUnderOverlay verifies an open overlay (here: a modal)
-// swallows the wheel so the hidden stream doesn't move beneath it.
-func TestMouseWheel_IgnoredUnderOverlay(t *testing.T) {
+// TestKeyScroll_ArrowsWithDraftDoNotScroll verifies plain ↑/↓ go to the composer
+// (not the stream) once there's a draft, so editing isn't hijacked by scrolling.
+func TestKeyScroll_ArrowsWithDraftDoNotScroll(t *testing.T) {
 	m := longSessionModel(t)
-	m.modal = modalSessions
-	nm, _ := m.handleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelUp})
-	if got := nm.(Model).scrollOffset; got != 0 {
-		t.Fatalf("wheel under modal moved stream: scrollOffset=%d, want 0", got)
+	m.input.SetValue("a draft")
+	m, _ = step(t, m, key("up"))
+	if m.scroll.Offset != 0 {
+		t.Fatalf("↑ with a draft scrolled the stream: Offset=%d want 0", m.scroll.Offset)
+	}
+}
+
+// TestKeyScroll_PageKeys verifies pgup/pgdn page the stream regardless of the
+// composer state.
+func TestKeyScroll_PageKeys(t *testing.T) {
+	m := longSessionModel(t)
+	m.input.SetValue("draft present")
+	m, _ = step(t, m, key("pgup"))
+	if m.scroll.Offset <= 0 {
+		t.Fatalf("pgup did not scroll back: Offset=%d", m.scroll.Offset)
+	}
+	m, _ = step(t, m, key("pgdown"))
+	if !m.scroll.AtTail() {
+		t.Fatalf("pgdown did not return to tail: Offset=%d", m.scroll.Offset)
 	}
 }

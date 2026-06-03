@@ -91,7 +91,7 @@ func (m Model) openSession(id string) (Model, tea.Cmd) {
 	}
 	m.cfg.SessionID = id
 	m.screen = ScreenSession
-	m.scrollOffset = 0 // snap to the live tail of the new stream
+	m.scroll.ToTail() // snap to the live tail of the new stream
 	// loadMessagesCmd's completion also fetches this session's children, so the
 	// sub-agent footer is fresh without a second call here.
 	return m, loadMessagesCmd(m.ctx, m.client, id)

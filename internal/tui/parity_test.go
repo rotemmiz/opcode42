@@ -38,21 +38,23 @@ func TestHistory_RecallWalksAndExits(t *testing.T) {
 	m.history = []string{"first", "second", "third"}
 	m.histIdx = -1
 
-	m, _ = step(t, m, key("up")) // newest
+	// History recall is on ctrl+↑/↓ (plain arrows scroll the stream, and the wheel
+	// arrives as plain arrows under alternate scroll mode).
+	m, _ = step(t, m, key("ctrl+up")) // newest
 	if got := m.input.Value(); got != "third" {
-		t.Fatalf("up #1 = %q, want third", got)
+		t.Fatalf("ctrl+up #1 = %q, want third", got)
 	}
-	m, _ = step(t, m, key("up"))
+	m, _ = step(t, m, key("ctrl+up"))
 	if got := m.input.Value(); got != "second" {
-		t.Fatalf("up #2 = %q, want second", got)
+		t.Fatalf("ctrl+up #2 = %q, want second", got)
 	}
-	m, _ = step(t, m, key("down")) // back toward newest
+	m, _ = step(t, m, key("ctrl+down")) // back toward newest
 	if got := m.input.Value(); got != "third" {
-		t.Fatalf("down = %q, want third", got)
+		t.Fatalf("ctrl+down = %q, want third", got)
 	}
-	m, _ = step(t, m, key("down")) // past newest → live (empty) composer
+	m, _ = step(t, m, key("ctrl+down")) // past newest → live (empty) composer
 	if got := m.input.Value(); got != "" || m.histIdx != -1 {
-		t.Fatalf("down past newest = %q idx=%d, want empty/-1", m.input.Value(), m.histIdx)
+		t.Fatalf("ctrl+down past newest = %q idx=%d, want empty/-1", m.input.Value(), m.histIdx)
 	}
 }
 
