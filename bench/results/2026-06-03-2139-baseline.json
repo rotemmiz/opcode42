@@ -1,0 +1,77 @@
+{
+  "generated_at": "2026-06-03T20:39:44Z",
+  "plan": "11-test-performance W0 baseline",
+  "machine": {
+    "os": "darwin",
+    "arch": "arm64",
+    "num_cpu": 8,
+    "go_version": "go1.26.3",
+    "hostname": "Rotems-Mac-mini.local",
+    "model": "Apple M1"
+  },
+  "config": {
+    "cold_start_iters": 20,
+    "sub_count": 50,
+    "throughput_concurrency": 16,
+    "throughput_seconds": 5,
+    "opencode_version": "1.15.12",
+    "forge_version": "0.0.1"
+  },
+  "targets": [
+    {
+      "target": "forge",
+      "cold_start_ms": {
+        "n": 20,
+        "min_ms": 48.188542,
+        "p50_ms": 64.928625,
+        "p99_ms": 66.33909646,
+        "max_ms": 66.435458,
+        "mean_ms": 58.088804200000006,
+        "stddev_ms": 8.234743197763684
+      },
+      "idle_rss_kb": 27184,
+      "rss_with_subs_kb": 18096,
+      "sub_count": 50,
+      "sub_connected": 50,
+      "sse_connect_ms": {
+        "n": 50,
+        "min_ms": 2.141834,
+        "p50_ms": 3.4763954999999997,
+        "p99_ms": 4.00900149,
+        "max_ms": 4.056041,
+        "mean_ms": 3.28597076,
+        "stddev_ms": 0.5035269319735562
+      },
+      "health_throughput_rps": 40591.74781890886,
+      "session_list_throughput_rps": 24367.243661227192
+    },
+    {
+      "target": "opencode",
+      "cold_start_ms": {
+        "n": 20,
+        "min_ms": 1735.546459,
+        "p50_ms": 1762.7392285,
+        "p99_ms": 2208.8835109799998,
+        "max_ms": 2248.286083,
+        "mean_ms": 1831.6939811,
+        "stddev_ms": 134.24655048342112
+      },
+      "idle_rss_kb": 271536,
+      "rss_with_subs_kb": 290496,
+      "sub_count": 50,
+      "sub_connected": 50,
+      "sse_connect_ms": {
+        "n": 50,
+        "min_ms": 222.71025,
+        "p50_ms": 228.717542,
+        "p99_ms": 233.94757209000002,
+        "max_ms": 234.021542,
+        "mean_ms": 228.65450832000005,
+        "stddev_ms": 3.20878769077415
+      },
+      "health_throughput_rps": 13083.82555142606,
+      "session_list_throughput_rps": 1601.9674722426962
+    }
+  ],
+  "disclaimer": "Measured head-to-head on the machine named above. Numbers are real for this host only; do not generalize or cite a speed multiplier without re-running on the target hardware."
+}

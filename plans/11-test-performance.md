@@ -338,6 +338,28 @@ W0 = measure opencode first). The caveats are thorough. Minimal additions:
 - **Resource-loader cost** (caveat): plan 04 loaders are eager and now built; measure startup
   **with** them enabled as the default, since that is the shipping behavior.
 
+## W0 update (2026-06-03) — first baseline recorded
+
+W0 is **partially done**: a reproducible head-to-head harness now lives in [`bench/`](../bench/) and a
+first baseline has been recorded against the **real opencode daemon** (`opencode` 1.15.12) and `forged`
+on an Apple M1 Mac mini. See [`bench/results/`](../bench/results/) for the dated, machine-described
+numbers and [`bench/README.md`](../bench/README.md) for methodology and caveats.
+
+- **Measured (this pass):** cold start, idle RSS, SSE *connection* fan-out (dial → `server.connected`,
+  N subscribers + RSS-with-subs), and request throughput (`GET /global/health`, `GET /session`). On the
+  M1 baseline, forged measured materially faster/leaner on every metric — but those ratios are valid
+  only for that host + those versions; **do not generalize them**. The harness re-derives ratios from
+  real data on each run.
+- **Still open (correctly deferred, not fabricated):**
+  - W0.a's **deterministic local mock LLM** (scripted OpenAI-compatible endpoint both daemons share) is
+    still the gating prerequisite for the prompt/tool-loop workloads (W2/W3, Suites 5–8). Until it
+    exists, those rows stay unmeasured.
+  - **Per-event** SSE publish→receive fan-out (Suite 3) needs a symmetric trigger both daemons emit on
+    demand; opencode publishes `session.updated` on create, Forge's create path does not yet publish.
+    The current harness measures connection fan-out (symmetric) in the interim.
+- The pure-Go-SQLite constraint and resource-loader-enabled startup from the review pass above are both
+  honored by the harness (forged is measured as it ships).
+
 ## Links
 
 - [09-integration](09-integration.md) — component wiring; SSE bus architecture
