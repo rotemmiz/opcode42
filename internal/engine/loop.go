@@ -12,6 +12,40 @@ import (
 	"github.com/rotemmiz/forge/internal/id"
 )
 
+// Plan-05 hook names routed from the loop. They mirror the corresponding keys
+// in opencode's Hooks interface (opencode/packages/plugin/src/index.ts:222-334)
+// and the pluginbridge constants; kept as locals so the engine need not import
+// the sidecar package (the wiring seam stays additive).
+const (
+	hookChatParams      = "chat.params"
+	hookChatHeaders     = "chat.headers"
+	hookSystemTransform = "experimental.chat.system.transform"
+)
+
+// ChatParamsOutput is the mutable output of the chat.params hook
+// (opencode/packages/plugin/src/index.ts:247-256). A plugin overrides any
+// field; unset pointers leave the provider default. Options are merged into the
+// request's provider options.
+type ChatParamsOutput struct {
+	Temperature *float64       `json:"temperature,omitempty"`
+	TopP        *float64       `json:"topP,omitempty"`
+	TopK        *int           `json:"topK,omitempty"`
+	Options     map[string]any `json:"options,omitempty"`
+}
+
+// ChatHeadersOutput is the mutable output of the chat.headers hook
+// (plugin/src/index.ts:258-261): extra request headers a plugin injects.
+type ChatHeadersOutput struct {
+	Headers map[string]string `json:"headers"`
+}
+
+// SystemTransformOutput is the mutable output of the
+// experimental.chat.system.transform hook (plugin/src/index.ts:294-299): the
+// assembled system-prompt array a plugin may rewrite.
+type SystemTransformOutput struct {
+	System []string `json:"system"`
+}
+
 // runLoop is the master agent loop (prompt.ts:1244-1496 / plan 02 §runLoop): it
 // reorders history, checks the exit condition, streams one assistant turn, and
 // repeats until the model finishes without pending tool calls.
@@ -92,12 +126,41 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 			toolChoice = llm.ToolChoiceRequired
 		}
 
+		// Plan-05 hook call sites (no-op unless the plugin host is enabled). The
+		// input is read-only context; the output struct is mutated in place,
+		// matching opencode's hook contract (plugin/src/index.ts:222-334).
+		// system.transform fires around the assembled system prompt
+		// (agent.ts:397); params/headers fire at request build
+		// (llm/request.ts:105,125).
+		hookInput := map[string]any{
+			"sessionID": sessionID, "agent": latest.User.Agent,
+			"model": map[string]any{"providerID": providerID, "modelID": modelID},
+		}
+		sysOut := SystemTransformOutput{System: system}
+		e.triggerHook(ctx, hookSystemTransform, hookInput, &sysOut)
+		system = sysOut.System
+
+		paramsOut := ChatParamsOutput{}
+		e.triggerHook(ctx, hookChatParams, hookInput, &paramsOut)
+
+		headersOut := ChatHeadersOutput{Headers: map[string]string{}}
+		e.triggerHook(ctx, hookChatHeaders, hookInput, &headersOut)
+
 		req := &llm.Request{
 			Model:         modelID,
 			SystemPrompts: system,
 			Messages:      modelMsgs,
 			Tools:         tools,
 			ToolChoice:    toolChoice,
+			Temperature:   paramsOut.Temperature,
+			TopP:          paramsOut.TopP,
+			TopK:          paramsOut.TopK,
+		}
+		if len(headersOut.Headers) > 0 {
+			req.Headers = headersOut.Headers
+		}
+		if len(paramsOut.Options) > 0 {
+			req.ProviderOptions = paramsOut.Options
 		}
 		events, err := provider.Stream(ctx, req)
 		if err != nil {

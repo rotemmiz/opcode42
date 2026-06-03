@@ -1,0 +1,22 @@
+{
+  "name": "@forge/plugin-host",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Forge plugin host — Node/Bun sidecar that loads opencode-format plugins and bridges their hooks to the Forge Go daemon over JSON-RPC (plan 05).",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "node src/index.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*",
+    "@opencode-ai/sdk": "*"
+  },
+  "peerDependenciesMeta": {
+    "@opencode-ai/plugin": { "optional": true },
+    "@opencode-ai/sdk": { "optional": true }
+  }
+}

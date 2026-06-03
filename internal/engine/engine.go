@@ -29,6 +29,17 @@ import (
 // OpenAI-compatible client configured from the catalog + credentials).
 type ProviderFactory func(ctx context.Context, providerID, modelID string) (llm.Provider, error)
 
+// PluginHooks is the engine's view of the flag-gated plugin host (plan 05). The
+// concrete *pluginbridge.Bridge satisfies it; a nil PluginHooks (the default,
+// plugin-host off) makes every call site a no-op. Trigger mutates out in place
+// per opencode's hook contract; on any failure out is left untouched.
+//
+// Keeping this an interface lets the engine route the plan-05 hook call sites
+// without importing the sidecar package, so the wiring seam stays additive.
+type PluginHooks interface {
+	Trigger(ctx context.Context, name string, input any, out any)
+}
+
 // defaultMaxSteps caps loop iterations when the resolved agent does not set its
 // own maxSteps. opencode falls back to a finite ceiling for an unset agent.steps
 // (prompt.ts:1339-1340); Forge uses 100.
@@ -62,6 +73,9 @@ type Config struct {
 	// appended to the system prompt (plan 04 instructions).
 	SystemInstructions []string
 	Flags              registry.Flags
+	// Plugins routes the plan-05 hook call sites through the flag-gated plugin
+	// host. nil ⇒ no plugin host (the default): every call site is a no-op.
+	Plugins PluginHooks
 	// MaxSteps is the resolved agent's step ceiling for this run. Zero falls back
 	// to defaultMaxSteps. On the last allowed step the loop appends the MAX_STEPS
 	// sentinel so the model answers with text only (prompt.ts:1339-1340,1451).
@@ -204,4 +218,15 @@ func orDefault(v, def string) string {
 		return def
 	}
 	return v
+}
+
+// triggerHook routes one plan-05 plugin hook through the (flag-gated) plugin
+// host. With no host configured it is a no-op and out is unchanged. The hook
+// name strings mirror opencode's Hooks interface
+// (opencode/packages/plugin/src/index.ts:222-334).
+func (e *Engine) triggerHook(ctx context.Context, name string, input any, out any) {
+	if e.cfg.Plugins == nil {
+		return
+	}
+	e.cfg.Plugins.Trigger(ctx, name, input, out)
 }

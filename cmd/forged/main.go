@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -36,6 +37,7 @@ import (
 	"github.com/rotemmiz/forge/internal/instance"
 	"github.com/rotemmiz/forge/internal/mdns"
 	"github.com/rotemmiz/forge/internal/oauth"
+	"github.com/rotemmiz/forge/internal/pluginbridge"
 	"github.com/rotemmiz/forge/internal/server"
 	"github.com/rotemmiz/forge/internal/session"
 	"github.com/rotemmiz/forge/internal/storage"
@@ -53,6 +55,9 @@ type options struct {
 	mdns          bool
 	mdnsDomain    string
 	oauthProxyURL string
+	// pluginHost enables the flag-gated opencode-plugin sidecar (plan 05). Off
+	// by default; never affects the default daemon path.
+	pluginHost bool
 }
 
 func main() {
@@ -63,6 +68,7 @@ func main() {
 	oauthProxyURL := flag.String("oauth-callback-proxy-url", "",
 		"externally reachable base URL fronting the loopback OAuth callback (remote/headless daemons); "+
 			"empty = loopback-only")
+	pluginHost := flag.Bool("plugin-host", false, "enable the opencode-plugin host sidecar (plan 05; off by default)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -82,6 +88,7 @@ func main() {
 		mdns:          *enableMDNS,
 		mdnsDomain:    *mdnsDomain,
 		oauthProxyURL: *oauthProxyURL,
+		pluginHost:    *pluginHost || os.Getenv("FORGE_PLUGIN_HOST") == "1",
 	}, explicit)
 
 	if err := run(opts); err != nil {
@@ -191,6 +198,12 @@ func run(opts options) error {
 	// opencode prints this exact prefix; clients scrape it for the bound port.
 	log.Printf("opencode server listening on http://%s", ln.Addr().String())
 
+	// Register the flag-gated plugin host factory (plan 05). The bridge's SDK
+	// client needs the bound server URL + auth header, both known only now.
+	if opts.pluginHost {
+		registerPluginHost(baseCtx, instances, ln.Addr().String(), authCfg)
+	}
+
 	mdnsSvc := startMDNS(opts, ln)
 	if mdnsSvc != nil {
 		defer mdnsSvc.Shutdown()
@@ -212,6 +225,36 @@ func run(opts options) error {
 	case <-ctx.Done():
 		return shutdown(srv, instances, mdnsSvc, oauthSvc, cancelBase)
 	}
+}
+
+// registerPluginHost wires the per-instance plugin host factory onto the
+// instance manager (plan 05). Each new instance gets a bridge configured with
+// the directory, the bound server URL, and the Basic auth header so plugins'
+// SDK clients can call back into this daemon. The bridge is started here; a
+// start failure is non-fatal (the bridge stays a no-op and the instance runs
+// plugin-free). When the flag is off this function is never called.
+func registerPluginHost(baseCtx context.Context, instances *instance.Manager, addr string, authCfg auth.Config) {
+	serverURL := "http://" + addr
+	authHeader := ""
+	if authCfg.Required() {
+		cred := base64.StdEncoding.EncodeToString([]byte(authCfg.Username + ":" + authCfg.Password))
+		authHeader = "Basic " + cred
+	}
+	instances.SetPluginFactory(func(directory string) *pluginbridge.Bridge {
+		cfg, _ := config.Load(directory)
+		b := pluginbridge.New(pluginbridge.Config{
+			Enabled:     true,
+			Directory:   directory,
+			ServerURL:   serverURL,
+			AuthHeader:  authHeader,
+			PluginSpecs: pluginbridge.ConfigSpecs(cfg),
+		})
+		// Start in the background so instance creation never blocks on the
+		// sidecar boot; hook call sites no-op until host.ready arrives.
+		go func() { _ = b.Start(baseCtx) }()
+		return b
+	})
+	log.Printf("plugin host enabled (plan 05); plugins load per instance")
 }
 
 // loadCatalog resolves the models.dev catalog at startup (live, with on-disk

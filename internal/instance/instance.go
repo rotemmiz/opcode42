@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"context"
 	"sync"
 
 	"github.com/rotemmiz/forge/internal/bus"
@@ -10,6 +11,7 @@ import (
 	"github.com/rotemmiz/forge/internal/engine/runstate"
 	"github.com/rotemmiz/forge/internal/lsp"
 	"github.com/rotemmiz/forge/internal/mcp"
+	"github.com/rotemmiz/forge/internal/pluginbridge"
 	"github.com/rotemmiz/forge/internal/pty"
 )
 
@@ -28,6 +30,11 @@ type Context struct {
 	MCP *mcp.Manager
 	// LSP holds this instance's LSP servers (spawning is lazy, per file).
 	LSP *lsp.Service
+	// Plugins is the flag-gated plugin host for this instance (plan 05). It is
+	// nil unless the daemon was started with the plugin host enabled and a
+	// bridge factory was registered; when nil the engine's hook call sites are
+	// no-ops. The bridge is started lazily on first instance use.
+	Plugins *pluginbridge.Bridge
 }
 
 // Manager is the directory→instance cache. Instances are created on first use
@@ -38,12 +45,29 @@ type Manager struct {
 	mu        sync.Mutex
 	instances map[string]*Context
 	global    *bus.Global
+	// pluginFactory builds a (started) plugin host for a directory when the
+	// daemon has the plugin host enabled. nil ⇒ no plugin host (the default).
+	pluginFactory PluginFactory
 }
+
+// PluginFactory builds and starts a plugin host bridge for one directory. It is
+// registered by the daemon entrypoint only when the plugin host flag is on; a
+// nil return (or an error swallowed inside the factory) leaves the instance
+// plugin-free. Returning a disabled bridge is also fine (every call no-ops).
+type PluginFactory func(directory string) *pluginbridge.Bridge
 
 // NewManager creates an empty instance manager whose instance buses forward to
 // the given global bus.
 func NewManager(global *bus.Global) *Manager {
 	return &Manager{instances: make(map[string]*Context), global: global}
+}
+
+// SetPluginFactory registers the plugin host factory (plan 05). Call before any
+// instance is created; it is consulted once per new instance.
+func (m *Manager) SetPluginFactory(f PluginFactory) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pluginFactory = f
 }
 
 // DisposeAll tears down every instance on shutdown: it emits
@@ -69,6 +93,9 @@ func (m *Manager) DisposeAll() {
 		}
 		if c.LSP != nil {
 			c.LSP.DisposeAll()
+		}
+		if c.Plugins != nil {
+			c.Plugins.Stop(context.Background())
 		}
 	}
 }
@@ -96,6 +123,9 @@ func (m *Manager) Get(directory string) *Context {
 		RunState:    runstate.New(),
 		MCP:         mcp.NewManager(mcp.ParseConfig(cfg)).WithBus(mcpBus{instBus}),
 		LSP:         newLSP(directory, cfg, instBus),
+	}
+	if m.pluginFactory != nil {
+		c.Plugins = m.pluginFactory(directory)
 	}
 	m.instances[directory] = c
 	return c

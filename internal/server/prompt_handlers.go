@@ -77,7 +77,7 @@ func (b promptBody) toInput(sessionID string) engine.PromptInput {
 // against them; an unmatched call defaults to "ask" and blocks on a
 // permission.asked event).
 func buildEngine(opts Options, inst *instance.Context, directory string, rulesets []permission.Ruleset, subagent tool.SubagentRunner, maxSteps int, titles engine.TitleSetter) *engine.Engine {
-	return engine.New(engine.Config{
+	cfg := engine.Config{
 		Store:              opts.Messages,
 		Catalog:            opts.Catalog,
 		Registry:           opts.Registry,
@@ -95,7 +95,14 @@ func buildEngine(opts Options, inst *instance.Context, directory string, ruleset
 		MaxSteps:           maxSteps,
 		Titles:             titles,
 		LSP:                inst.LSP,
-	})
+	}
+	// Route plan-05 plugin hook call sites through the instance's plugin host
+	// when one is present; a typed-nil bridge is left out so PluginHooks stays a
+	// true nil interface (the engine's no-op fast path).
+	if inst.Plugins != nil {
+		cfg.Plugins = inst.Plugins
+	}
+	return engine.New(cfg)
 }
 
 // agentMaxSteps returns the agent's resolved step ceiling, or 0 to use the
