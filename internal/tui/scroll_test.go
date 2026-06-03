@@ -59,12 +59,9 @@ func TestView_NeverExceedsViewport(t *testing.T) {
 // bottom row regardless of scroll position (it must not scroll with the stream).
 func TestView_FooterPinnedAcrossScroll(t *testing.T) {
 	m := longSessionModel(t)
-	// The status bar contains the connection state; use a stable marker from it.
-	wantMarker := stripANSI(m.statusBarView(m.leftColumnWidth()))
-	wantMarker = strings.TrimSpace(strings.SplitN(wantMarker, "·", 2)[0]) // e.g. "connecting…"/dot+state
-	if wantMarker == "" {
-		t.Skip("no stable status marker to assert")
-	}
+	// The status bar always ends with the command hint; assert on that stable
+	// token rather than spacing that shifts with the column's inner width.
+	const wantMarker = "ctrl+p commands"
 	bottomFor := func(off int) string {
 		m.scrollOffset = off
 		rows := frameRows(m.View())

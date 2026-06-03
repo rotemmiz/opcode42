@@ -6,10 +6,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// streamRightGutter is the breathing space kept between the stream text and the
-// sidebar border (mirrors opencode's paddingRight=2 on the message column) so
-// content fills the left column right up to — but not touching — the sidebar.
-const streamRightGutter = 2
+// streamGutter is the breathing space kept on each side of the stream column —
+// content is inset from the left edge and from the sidebar border, mirroring
+// opencode's paddingLeft=2 / paddingRight=2 on the message column (index.tsx).
+// Per-box padding (tool boxes, user bars) sits on top of this outer inset.
+const streamGutter = 2
 
 // fallbackContentWidth is a defensive default used only before the first
 // WindowSizeMsg, when a width/column count is still unknown (≤ 0).
@@ -29,22 +30,29 @@ func (m Model) renderSession() string {
 	}
 	m.streamWidth = leftW // narrows the stream/composer wrap to the left column
 
-	footer := m.composerView() + "\n" + m.statusBarView(leftW)
+	// Everything in the left column renders at the inner width (column less both
+	// gutters); the whole column is then inset by streamGutter on the left below.
+	innerW := leftW - 2*streamGutter
+	if innerW < 1 {
+		innerW = 1
+	}
+
+	footer := m.composerView() + "\n" + m.statusBarView(innerW)
 	if ac := m.autocompleteView(); ac != "" {
 		footer = ac + "\n" + footer // popup sits just above the composer
 	}
-	if dock := m.tasksDockView(leftW); dock != "" {
+	if dock := m.tasksDockView(innerW); dock != "" {
 		footer = dock + "\n" + footer // tasks dock above the composer area
 	}
-	if sf := m.subagentFooterView(leftW); sf != "" {
+	if sf := m.subagentFooterView(innerW); sf != "" {
 		footer = sf + "\n" + footer // sub-agent context strip (plan 08b §9)
 	}
-	if pty := m.ptyPaneView(leftW); pty != "" {
+	if pty := m.ptyPaneView(innerW); pty != "" {
 		footer = pty + "\n" + footer // embedded terminal split (plan 08b §2)
 	}
 
 	sid := m.cfg.SessionID
-	header := s.Section.Render(truncate(m.sessionTitle(sid), leftW))
+	header := s.Section.Render(truncate(m.sessionTitle(sid), innerW))
 	var blocks []string
 	for _, msg := range m.store.messages[sid] {
 		if b := m.renderMessage(msg, m.store.parts[msg.ID]); b != "" {
@@ -53,7 +61,13 @@ func (m Model) renderSession() string {
 	}
 	body := header + "\n\n" + strings.Join(blocks, "\n\n")
 
+	// Inset the whole left column by the gutter on both sides (Width includes the
+	// padding in lipgloss, so the column stays exactly leftW wide and the sidebar
+	// stays flush-right). Blank padding cells are painted by the bg compositor.
 	left := m.frame(body, footer)
+	if leftW > 0 {
+		left = lipgloss.NewStyle().Width(leftW).Padding(0, streamGutter).Render(left)
+	}
 	if sidebar == "" {
 		return left
 	}
@@ -152,16 +166,16 @@ func (m Model) thinking(text string) string {
 // toolRow is defined in toolrender.go (plan 08c M7): per-tool headers,
 // collapsible output panels, and todo-list rendering.
 
-// contentWidth is the width available to stream content: the left column less a
-// small right gutter so text reaches the sidebar without crowding its border. No
-// fixed cap — on a wide terminal the stream fills the whole column up to the
-// sidebar (matching opencode, which sizes content to width − sidebar − padding).
+// contentWidth is the width available to stream content: the left column less the
+// gutter on both sides. No fixed cap — on a wide terminal the stream fills the
+// column between the gutters (matching opencode, which sizes content to
+// width − sidebar − padding). renderSession applies the matching left inset.
 func (m Model) contentWidth() int {
 	w := m.streamWidth // set when a sidebar narrows the stream column
 	if w == 0 {
 		w = m.width
 	}
-	if w -= streamRightGutter; w < 1 {
+	if w -= 2 * streamGutter; w < 1 {
 		return 1
 	}
 	return w
