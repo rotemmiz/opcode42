@@ -78,6 +78,21 @@ func TestStatusBar_WidthAndContent(t *testing.T) {
 	}
 }
 
+// TestStatusBar_NoTokenCostDuplication pins the de-dup rule: token count and cost
+// live solely in the sidebar CONTEXT section; the status bar must not repeat them.
+func TestStatusBar_NoTokenCostDuplication(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	ss := Session{ID: "ses_1"}
+	ss.Tokens.Input, ss.Tokens.Output, ss.Cost = 1200, 800, 0.1234
+	m.store.sessions = []Session{ss}
+	out := stripANSI(m.statusBarView(120))
+	for _, banned := range []string{"tok", "$0.1234"} {
+		if strings.Contains(out, banned) {
+			t.Errorf("status bar should not show %q (it belongs to the sidebar):\n%s", banned, out)
+		}
+	}
+}
+
 func TestSidebar_ShowsTokensAndCost(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.width, m.height = 120, 24

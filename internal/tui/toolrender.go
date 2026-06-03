@@ -240,6 +240,16 @@ func (m Model) statusGlyph(status string) (string, lipgloss.Style) {
 func (m Model) toolRow(p Part) string {
 	s := m.styles
 	st, inp := parseToolState(p.State)
+	bg := s.P.BgPanel
+
+	// Box geometry: a left ┃ bar (1 col, rendered outside Width) + 1 col of
+	// horizontal padding on each side. innerW is the usable text width inside the
+	// box; every inner line is padded to it so the panel background fills the box.
+	cw := m.contentWidth()
+	innerW := cw - 3 // 1 border + 2 horizontal padding
+	if innerW < 10 {
+		innerW = 10
+	}
 
 	// ── Header line ────────────────────────────────────────────────────────────
 	glyph, gstyle := m.statusGlyph(st.Status)
@@ -258,65 +268,63 @@ func (m Model) toolRow(p Part) string {
 		}
 	}
 
-	// Build header: glyph · header · foldIcon
-	// For running tools, color the header text with the gradient scanner so it
-	// visually animates alongside the braille glyph.  Completed/error/pending
-	// tools use the dim style (static, less visual noise).
-	// Background fill is provided by the host row — no extra bg needed here
-	// (plan 08c M9 CRITICAL note on background fill).
-	cw := m.contentWidth()
-	glyphStr := gstyle.Render(glyph)
-	truncHdr := truncate(hdr, cw-lipgloss.Width(glyph)-3-len(foldIcon))
+	// Build header: glyph · header · foldIcon. Every segment carries the panel
+	// background (bg does not survive ANSI resets mid-line — plan 08c Tier 0), and
+	// the whole row is padded to innerW so its background fills the box width.
+	// Running tools sweep the header label with the gradient scanner.
+	glyphStr := gstyle.Background(bg).Render(glyph)
+	sep := lipgloss.NewStyle().Background(bg).Render(" ")
+	truncHdr := truncate(hdr, innerW-lipgloss.Width(glyph)-1-lipgloss.Width(foldIcon))
 	var hdrStr string
 	if st.Status == "running" {
-		// Scanner frame: sweep the header label with Accent ramp.
 		hdrStr = scannerFrame(truncHdr, m.animFrame, s.P)
 	} else {
-		hdrStr = s.Dim.Render(truncHdr)
+		hdrStr = s.Dim.Background(bg).Render(truncHdr)
 	}
-	headerLine := glyphStr + " " + hdrStr + s.Faint.Render(foldIcon)
+	headerRow := glyphStr + sep + hdrStr + s.Faint.Background(bg).Render(foldIcon)
+	headerRow = lipgloss.NewStyle().Background(bg).Width(innerW).Render(headerRow)
 
-	var lines []string
-	lines = append(lines, headerLine)
+	lines := []string{headerRow}
 
 	// ── Error sub-line ─────────────────────────────────────────────────────────
 	if st.Status == "error" && st.Error != "" {
-		errLine := "  " + lipgloss.NewStyle().Foreground(s.P.Red).
-			Render(truncate(firstLine(st.Error), cw-2))
+		errLine := lipgloss.NewStyle().Foreground(s.P.Red).Background(bg).Width(innerW).
+			Render(truncate(firstLine(st.Error), innerW))
 		lines = append(lines, errLine)
 	}
 
-	// ── Collapsed: header only ─────────────────────────────────────────────────
-	if isCollapsed {
-		return strings.Join(lines, "\n")
-	}
-
-	// ── Todo list ──────────────────────────────────────────────────────────────
-	if isTodo && len(inp.Todos) > 0 {
-		todoBlock := m.renderTodos(inp.Todos, cw)
-		if todoBlock != "" {
-			lines = append(lines, todoBlock)
+	// ── Expanded body: todos or output ─────────────────────────────────────────
+	if !isCollapsed {
+		switch {
+		case isTodo && len(inp.Todos) > 0:
+			if todoBlock := m.renderTodos(inp.Todos, innerW); todoBlock != "" {
+				lines = append(lines, todoBlock)
+			}
+		case hasOutput:
+			lines = append(lines, m.renderOutputPanel(st.Output, innerW))
 		}
-		return strings.Join(lines, "\n")
 	}
 
-	// ── Output panel ──────────────────────────────────────────────────────────
-	if hasOutput {
-		panel := m.renderOutputPanel(st.Output, cw)
-		lines = append(lines, panel)
-	}
-
-	return strings.Join(lines, "\n")
+	// Wrap the whole tool in one left-bar box with vertical padding on the panel
+	// background — matches opencode's BlockTool (left ┃, padding 1, panel bg).
+	box := lipgloss.NewStyle().
+		Border(lipgloss.ThickBorder(), false, false, false, true).
+		BorderForeground(s.P.BorderSoft).
+		BorderBackground(bg).
+		Background(bg).
+		Padding(1, 1).
+		Width(cw - 1) // the left border renders outside Width
+	return box.Render(strings.Join(lines, "\n"))
 }
 
-// renderOutputPanel renders tool output in a BgPanel-filled block bounded to
-// maxPanelLines. Each line is padded to panelW so no transparent cells escape.
+// renderOutputPanel renders tool output as BgPanel-filled lines bounded to
+// maxPanelLines, padded to innerW so no transparent cells escape. The enclosing
+// toolRow box supplies the border + indent; this only fills the content lines.
 // plan 08c §2d CRITICAL background fill: single Background(BgPanel) style per
 // line padded to width, so every cell is painted even after ANSI resets.
-func (m Model) renderOutputPanel(output string, contentW int) string {
+func (m Model) renderOutputPanel(output string, innerW int) string {
 	s := m.styles
-	// Indent the panel 2 columns so it reads as a child of the header.
-	panelW := contentW - 2
+	panelW := innerW
 	if panelW < 10 {
 		panelW = 10
 	}
@@ -340,17 +348,13 @@ func (m Model) renderOutputPanel(output string, contentW int) string {
 		// Render each line through the panel style padded to panelW so every cell
 		// carries the BgPanel background (no lipgloss background inheritance across
 		// ANSI reset boundaries — plan 08c Tier 0 CRITICAL note).
-		sb.WriteString("  " + lineStyle.Render(l) + "\n")
+		sb.WriteString(lineStyle.Render(l) + "\n")
 	}
 	if truncated {
 		more := len(allLines) - maxPanelLines
 		hint := fmt.Sprintf("… %d more line%s", more, pluralS(more))
-		sb.WriteString("  " + lipgloss.NewStyle().Foreground(s.P.FgFaint).
+		sb.WriteString(lipgloss.NewStyle().Foreground(s.P.FgFaint).
 			Background(s.P.BgPanel).Width(panelW).Render(hint))
-	} else if len(shown) > 0 {
-		// Remove trailing newline from the last line's "\n"
-		result := sb.String()
-		return strings.TrimRight(result, "\n")
 	}
 	return strings.TrimRight(sb.String(), "\n")
 }
@@ -361,9 +365,9 @@ func (m Model) renderOutputPanel(output string, contentW int) string {
 //	completed  → [✓] green
 //	in_progress → [•] amber
 //	pending    → [ ] faint
-func (m Model) renderTodos(todos []todoItem, contentW int) string {
+func (m Model) renderTodos(todos []todoItem, innerW int) string {
 	s := m.styles
-	panelW := contentW - 2
+	panelW := innerW
 	if panelW < 10 {
 		panelW = 10
 	}
@@ -380,14 +384,10 @@ func (m Model) renderTodos(todos []todoItem, contentW int) string {
 		default: // pending
 			glyph, fg = "[ ]", s.P.FgFaint
 		}
-		row := lipgloss.NewStyle().Foreground(fg).Render(glyph) + " " +
-			lipgloss.NewStyle().Foreground(fg).Background(s.P.BgPanel).
-				Width(panelW-4). // 4 = "[✓] "
-				Render(td.Content)
-		// wrap each todo row in BgPanel so the full width is painted
-		sb.WriteString("  " + lipgloss.NewStyle().Background(s.P.BgPanel).
-			Width(panelW).Render(lipgloss.NewStyle().Foreground(fg).Render(glyph)+" "+td.Content) + "\n")
-		_ = row // unused; using the combined render above
+		// Glyph and text share the same color; render the whole row through one
+		// fg+bg style padded to panelW so every cell carries the panel background.
+		sb.WriteString(lipgloss.NewStyle().Foreground(fg).Background(s.P.BgPanel).
+			Width(panelW).Render(glyph+" "+td.Content) + "\n")
 	}
 	return strings.TrimRight(sb.String(), "\n")
 }

@@ -242,9 +242,9 @@ func TestThinking_ExpandedShowsFullText(t *testing.T) {
 
 // ── 5. Panel background-fill ──────────────────────────────────────────────────
 
-// TestToolPanel_BackgroundFill checks that every line in an expanded tool output
-// panel is exactly panelWidth visible characters wide (no transparent trailing
-// cells). panelWidth = contentWidth - 2 (2-column indent). plan 08c Tier 0.
+// TestToolPanel_BackgroundFill checks that every output line is padded to exactly
+// the inner width passed in (no transparent trailing cells). The enclosing box
+// now supplies the border + indent, so the panel itself fills to innerW. Tier 0.
 func TestToolPanel_BackgroundFill(t *testing.T) {
 	themeNames := []string{"forge-dark", "forge-light"}
 	for _, tn := range themeNames {
@@ -258,23 +258,47 @@ func TestToolPanel_BackgroundFill(t *testing.T) {
 			m = m.applyTheme(tn, p)
 
 			output := "alpha\nbeta\ngamma"
-			panelW := m.contentWidth() - 2
-			panel := m.renderOutputPanel(output, m.contentWidth())
+			innerW := m.contentWidth() - 3 // 1 border + 2 horizontal padding
+			panel := m.renderOutputPanel(output, innerW)
 
 			for i, line := range strings.Split(panel, "\n") {
 				if line == "" {
 					continue
 				}
-				got := lipgloss.Width(line)
-				// Each line is "  " + panelStyle.Width(panelW).Render(content), so
-				// total visible width = 2 + panelW.
-				want := 2 + panelW
-				if got != want {
+				if got := lipgloss.Width(line); got != innerW {
 					t.Errorf("theme=%q line %d: visible width %d, want %d\nline: %q",
-						tn, i, got, want, line)
+						tn, i, got, innerW, line)
 				}
 			}
 		})
+	}
+}
+
+// TestToolRow_Boxed verifies a tool now renders inside a left-bar box: the ┃
+// border glyph is present and the box adds blank (panel-bg) padding rows top and
+// bottom, matching opencode's BlockTool layout.
+func TestToolRow_Boxed(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m.width = 80
+	state := rawState(t, map[string]any{
+		"status": "completed",
+		"input":  map[string]any{"command": "ls -la"},
+		"output": "total 0\ndrwxr-xr-x  staff",
+	})
+	row := m.toolRow(Part{ID: "p1", Tool: "bash", Type: "tool", State: state})
+	if !strings.Contains(row, "┃") {
+		t.Errorf("boxed tool row missing left ┃ border:\n%s", row)
+	}
+	lines := strings.Split(row, "\n")
+	if len(lines) < 4 {
+		t.Fatalf("boxed tool row too short (%d lines); want header + output + top/bottom padding:\n%s", len(lines), row)
+	}
+	// Top and bottom rows are the box's vertical padding: a ┃ then only spaces.
+	for _, idx := range []int{0, len(lines) - 1} {
+		body := strings.TrimPrefix(stripANSI(lines[idx]), "┃")
+		if strings.TrimSpace(body) != "" {
+			t.Errorf("expected blank padding row at line %d, got %q", idx, stripANSI(lines[idx]))
+		}
 	}
 }
 

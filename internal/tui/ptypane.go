@@ -103,7 +103,7 @@ func resizePTYCmd(ctx context.Context, c *forgeclient.ForgeClient, id string, co
 func (m Model) ptyGridSize() (cols, rows int) {
 	cols = m.leftColumnWidth()
 	if cols <= 0 {
-		cols = maxContentWidth
+		cols = fallbackContentWidth
 	}
 	rows = m.height / ptyFraction
 	if rows < ptyMinRows {

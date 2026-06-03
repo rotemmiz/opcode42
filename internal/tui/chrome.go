@@ -13,7 +13,7 @@ import (
 // StatusBar/Sidebar). Both read from the mirrored store; nothing is fabricated —
 // fields the daemon hasn't reported simply render as zero.
 
-const sidebarWidth = 28
+const sidebarWidth = 42
 
 // currentSession returns the open session (or nil).
 func (m Model) currentSession() *Session {
@@ -113,12 +113,9 @@ func (m Model) statusBarView(width int) string {
 	} else {
 		right = m.connGlyph() + s.Faint.Render(" "+m.status)
 	}
-	if ss := m.currentSession(); ss != nil && ss.Tokens.Total() > 0 {
-		right += s.Faint.Render(" · ") + s.Dim.Render(humanInt(ss.Tokens.Total())+" tok")
-		if ss.Cost > 0 {
-			right += s.Faint.Render(" · ") + s.Dim.Render(fmt.Sprintf("$%.4f", ss.Cost))
-		}
-	}
+	// Token count + cost live solely in the sidebar CONTEXT section — the status
+	// bar intentionally does not repeat them (opencode keeps context in the
+	// sidebar and realtime status in the footer; no overlap).
 	right += s.Faint.Render(" · ") + s.Base.Render("ctrl+p") + s.Faint.Render(" commands")
 
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)

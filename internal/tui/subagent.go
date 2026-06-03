@@ -178,7 +178,7 @@ func (m Model) subagentFooterView(width int) string {
 func (m Model) subagentBar(width int, info, hint string) string {
 	s := m.styles
 	if width <= 0 {
-		width = maxContentWidth
+		width = fallbackContentWidth
 	}
 	label := lipgloss.NewStyle().Foreground(s.P.Purple).Bold(true).Render("⦿ " + info)
 	keys := s.Faint.Render(hint)

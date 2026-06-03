@@ -6,8 +6,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// contentWidth caps prose width for readability (the design's stream column).
-const maxContentWidth = 100
+// streamRightGutter is the breathing space kept between the stream text and the
+// sidebar border (mirrors opencode's paddingRight=2 on the message column) so
+// content fills the left column right up to — but not touching — the sidebar.
+const streamRightGutter = 2
+
+// fallbackContentWidth is a defensive default used only before the first
+// WindowSizeMsg, when a width/column count is still unknown (≤ 0).
+const fallbackContentWidth = 80
 
 // renderSession draws the conversation stream for the selected session: a title,
 // the message blocks (user/assistant parts → user-turn/prose/thinking/tool-row),
@@ -146,13 +152,17 @@ func (m Model) thinking(text string) string {
 // toolRow is defined in toolrender.go (plan 08c M7): per-tool headers,
 // collapsible output panels, and todo-list rendering.
 
+// contentWidth is the width available to stream content: the left column less a
+// small right gutter so text reaches the sidebar without crowding its border. No
+// fixed cap — on a wide terminal the stream fills the whole column up to the
+// sidebar (matching opencode, which sizes content to width − sidebar − padding).
 func (m Model) contentWidth() int {
 	w := m.streamWidth // set when a sidebar narrows the stream column
 	if w == 0 {
 		w = m.width
 	}
-	if w == 0 || w > maxContentWidth {
-		w = maxContentWidth
+	if w -= streamRightGutter; w < 1 {
+		return 1
 	}
 	return w
 }
