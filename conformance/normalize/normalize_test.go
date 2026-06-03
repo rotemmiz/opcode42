@@ -190,6 +190,33 @@ func TestConfHomeScrubbedInPermissionPattern(t *testing.T) {
 	}
 }
 
+func TestPermissionArrayIsOrderInsensitive(t *testing.T) {
+	// opencode globs ~/.claude/skills/ in map-iteration order, so two runs emit
+	// the same permission patterns in different positions. They must normalize
+	// identically (E1).
+	n := New()
+	a := normJSON(t, n, `{"permission":[{"action":"allow","pattern":"a"},{"action":"allow","pattern":"b"}]}`)
+	b := normJSON(t, n, `{"permission":[{"action":"allow","pattern":"b"},{"action":"allow","pattern":"a"}]}`)
+	ja, _ := json.Marshal(a)
+	jb, _ := json.Marshal(b)
+	if string(ja) != string(jb) {
+		t.Errorf("reordered permission arrays diverge:\n a=%s\n b=%s", ja, jb)
+	}
+}
+
+func TestPermissionArrayMissingEntryStillDiffers(t *testing.T) {
+	// Sorting must not mask a genuinely missing/extra entry — the multiset must
+	// still change.
+	n := New()
+	full := normJSON(t, n, `{"permission":[{"pattern":"a"},{"pattern":"b"}]}`)
+	short := normJSON(t, n, `{"permission":[{"pattern":"a"}]}`)
+	jf, _ := json.Marshal(full)
+	js, _ := json.Marshal(short)
+	if string(jf) == string(js) {
+		t.Error("a missing permission entry must still produce a difference")
+	}
+}
+
 func TestNormalizeSSE(t *testing.T) {
 	n := New()
 	body := "event: message\n" +

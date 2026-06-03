@@ -28,6 +28,19 @@ const (
 // which differ run-to-run and must be normalized.
 var slugFields = map[string]bool{"slug": true}
 
+// orderInsensitiveFields name array-valued keys whose element ORDER is
+// non-deterministic across runs and so must be sorted before comparison.
+// opencode builds each agent's "permission" array by globbing the machine's
+// ~/.claude/skills/ in map-iteration order, so two fresh opencode runs emit the
+// same SET of skill-derived permission patterns in different positions (the
+// self-diff that otherwise reports ~20 false "blocking" differences in
+// agent-list). The plan (E1) sanctions treating permission-pattern arrays as
+// order-insensitive — the same rationale that keeps the non-deterministic
+// /command list out of the parity gate. Sorting by canonical post-normalization
+// content keeps the diff structural: a genuinely missing or extra entry still
+// changes the multiset and fails.
+var orderInsensitiveFields = map[string]bool{"permission": true}
+
 // verFields hold the daemon's wire-version string (e.g. session "version":
 // "1.15.11"). It is environment/build-specific — opencode stamps its own release
 // and Forge stamps its opencode-compat target — so it is normalized to keep the
@@ -130,6 +143,8 @@ func (n *Normalizer) Normalize(v any) any {
 				t[k] = slugPlaceholder
 			case verFields[k] && isVersion(child):
 				t[k] = verPlaceholder
+			case orderInsensitiveFields[k]:
+				t[k] = sortArray(n.Normalize(child))
 			default:
 				t[k] = n.Normalize(child)
 			}
@@ -224,6 +239,29 @@ func (n *Normalizer) replacePaths(s string) string {
 	// auto title "New session - 2026-...Z" or "Session not found: ses_01J…").
 	s = rfc3339SubRe.ReplaceAllString(s, tsPlaceholder)
 	return prefixedIDSubRe.ReplaceAllString(s, idPlaceholder)
+}
+
+// sortArray returns its argument with array elements sorted by their canonical
+// JSON form, so an order-insensitive field compares equal regardless of the
+// source's emission order. Non-array values pass through untouched.
+func sortArray(v any) any {
+	arr, ok := v.([]any)
+	if !ok {
+		return v
+	}
+	sort.Slice(arr, func(i, j int) bool { return canonical(arr[i]) < canonical(arr[j]) })
+	return arr
+}
+
+// canonical renders v as JSON with object keys sorted (encoding/json's default),
+// giving a stable sort key for sortArray. A marshal error yields "", which only
+// collapses unorderable values together and never panics.
+func canonical(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 func isString(v any) bool {
