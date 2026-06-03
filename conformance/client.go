@@ -64,11 +64,27 @@ type Client struct {
 // NewClient builds a client whose normalizer maps the directory (and its
 // symlink-resolved form) to <path>.
 func NewClient(baseURL, dir string, paths ...string) *Client {
+	return newClient(baseURL, dir, false, paths...)
+}
+
+// NewLiveClient is NewClient with the live normalizer (model-output masking) and
+// a longer HTTP timeout, for the live dual-run scenarios that drive a real LLM.
+func NewLiveClient(baseURL, dir string, paths ...string) *Client {
+	return newClient(baseURL, dir, true, paths...)
+}
+
+func newClient(baseURL, dir string, live bool, paths ...string) *Client {
+	norm := normalize.New(append([]string{dir}, paths...)...)
+	timeout := 30 * time.Second
+	if live {
+		norm = normalize.NewLive(append([]string{dir}, paths...)...)
+		timeout = 5 * time.Minute // a real model round-trip (incl. tool loops) is slow
+	}
 	return &Client{
 		BaseURL: strings.TrimRight(baseURL, "/"),
 		Dir:     dir,
-		Norm:    normalize.New(append([]string{dir}, paths...)...),
-		HTTP:    &http.Client{Timeout: 30 * time.Second},
+		Norm:    norm,
+		HTTP:    &http.Client{Timeout: timeout},
 	}
 }
 

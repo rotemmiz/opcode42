@@ -7,6 +7,11 @@ name: conformance
 # The opencode-vs-forge dual-run (scripts/run-conformance.sh dual) is added in
 # Phase B once the agent engine lands; in Phase A forge 501s the endpoints.
 #
+# The LIVE dual-run (scripts/run-conformance.sh live / live-self) drives a real
+# model and so is NOT a CI gate: it is opt-in and skip-gated on a provider key
+# (without GOOGLE_GENERATIVE_AI_API_KEY it SKIPs cleanly). Run it locally to
+# establish the agent-flow (prompt/tool/permission/compaction/abort) baseline.
+#
 # NOTE: hosted CI is currently usage-limited, so the active gate is a local
 # review subagent run before pushing (see tasks/verify.md). This workflow is the
 # eventual gate.
