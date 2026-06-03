@@ -89,6 +89,7 @@ func buildEngine(opts Options, inst *instance.Context, directory string, ruleset
 		MCP:                inst.MCP,
 		MaxSteps:           maxSteps,
 		Titles:             titles,
+		LSP:                inst.LSP,
 	})
 }
 

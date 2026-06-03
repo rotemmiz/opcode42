@@ -20,6 +20,7 @@ import (
 	"github.com/rotemmiz/forge/internal/engine/runstate"
 	"github.com/rotemmiz/forge/internal/engine/tool"
 	"github.com/rotemmiz/forge/internal/id"
+	"github.com/rotemmiz/forge/internal/lsp"
 	"github.com/rotemmiz/forge/internal/mcp"
 )
 
@@ -47,7 +48,10 @@ type Config struct {
 	// Skills loads named skills for the `skill` tool.
 	Skills tool.SkillSource
 	// MCP exposes this instance's MCP servers' tools to the loop (nil ⇒ none).
-	MCP       *mcp.Manager
+	MCP *mcp.Manager
+	// LSP is this instance's LSP service (nil ⇒ none). The `lsp` tool and
+	// diagnostics wiring land in plan 03 M3-4/M3-5; the foundation just carries it.
+	LSP       *lsp.Service
 	Bus       *bus.Bus
 	RunState  *runstate.RunState
 	Directory string

@@ -8,6 +8,7 @@ import (
 	"github.com/rotemmiz/forge/internal/engine/permission"
 	"github.com/rotemmiz/forge/internal/engine/question"
 	"github.com/rotemmiz/forge/internal/engine/runstate"
+	"github.com/rotemmiz/forge/internal/lsp"
 	"github.com/rotemmiz/forge/internal/mcp"
 	"github.com/rotemmiz/forge/internal/pty"
 )
@@ -25,6 +26,8 @@ type Context struct {
 	RunState    *runstate.RunState
 	// MCP holds this instance's configured MCP servers (connection is lazy).
 	MCP *mcp.Manager
+	// LSP holds this instance's LSP servers (spawning is lazy, per file).
+	LSP *lsp.Service
 }
 
 // Manager is the directory→instance cache. Instances are created on first use
@@ -64,6 +67,9 @@ func (m *Manager) DisposeAll() {
 		if c.MCP != nil {
 			c.MCP.Close()
 		}
+		if c.LSP != nil {
+			c.LSP.DisposeAll()
+		}
 	}
 }
 
@@ -78,6 +84,7 @@ func (m *Manager) Get(directory string) *Context {
 		return c
 	}
 	instBus := bus.NewInstanceBus(directory, m.global)
+	cfg := loadConfig(directory)
 	c := &Context{
 		Directory: directory,
 		Bus:       instBus,
@@ -87,18 +94,30 @@ func (m *Manager) Get(directory string) *Context {
 		Permissions: permission.NewManager(instBus),
 		Questions:   question.NewManager(instBus),
 		RunState:    runstate.New(),
-		MCP:         mcp.NewManager(mcpServers(directory)),
+		MCP:         mcp.NewManager(mcp.ParseConfig(cfg)),
+		LSP:         newLSP(directory, cfg),
 	}
 	m.instances[directory] = c
 	return c
 }
 
-// mcpServers loads the directory's MCP server configs (empty on error, so a bad
-// config never blocks instance creation).
-func mcpServers(directory string) map[string]mcp.Server {
+// loadConfig loads the directory's merged opencode config (nil on error, so a
+// bad config never blocks instance creation).
+func loadConfig(directory string) map[string]any {
 	cfg, err := config.Load(directory)
 	if err != nil {
 		return nil
 	}
-	return mcp.ParseConfig(cfg)
+	return cfg
+}
+
+// newLSP builds the instance's LSP service from the loaded config. A malformed
+// `lsp` block (e.g. a custom server missing `extensions`) disables LSP for the
+// instance rather than blocking creation.
+func newLSP(directory string, cfg map[string]any) *lsp.Service {
+	lspCfg, err := config.ParseLSP(cfg, lsp.BuiltinIDs())
+	if err != nil {
+		lspCfg = config.LSPConfig{}
+	}
+	return lsp.NewService(directory, lspCfg, lsp.NewBinResolver(false))
 }
