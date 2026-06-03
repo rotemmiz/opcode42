@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -67,6 +68,26 @@ func compareSteps(r *Report, exp, act *result.Scenario) {
 		}
 		compareHeaders(r, exp.Name, label, es.Headers, as.Headers)
 		compareSSE(r, exp.Name, label, es.SSE, as.SSE)
+		compareEventTypes(r, exp.Name, label, es.EventTypes, as.EventTypes)
+	}
+}
+
+// compareEventTypes diffs the de-duplicated SSE event-TYPE sequences captured by
+// the live dual-run. It is a plain ordered string compare — the bodies are not
+// diffed here (they are non-deterministic LLM output); only which event kinds
+// appeared, and in what order, is the conformance signal.
+func compareEventTypes(r *Report, scenario, label string, exp, act []string) {
+	if len(exp) != len(act) {
+		r.add(scenario, label,
+			strings.Join(exp, ","), strings.Join(act, ","),
+			fmt.Sprintf("SSE event-type count: %d != %d", len(exp), len(act)))
+		return
+	}
+	for i := range exp {
+		if exp[i] != act[i] {
+			r.add(scenario, label, exp[i], act[i],
+				fmt.Sprintf("SSE event-type #%d: %q != %q", i, exp[i], act[i]))
+		}
 	}
 }
 
@@ -129,7 +150,7 @@ func (r *Report) Print(w io.Writer, divs []Divergence) int {
 	failedScenarios := map[string]bool{}
 
 	for _, f := range r.Findings {
-		known := matchDivergence(divs, f.Scenario)
+		known := matchDivergence(divs, f.Scenario, f.Detail)
 		tag := "DIFF"
 		if known != "" {
 			tag = "KNOWN-DIVERGENCE"
@@ -275,9 +296,15 @@ func typeName(v any) string {
 	}
 }
 
-// Divergence is one entry in the known-divergence registry.
+// Divergence is one entry in the known-divergence registry. Scenario matches the
+// finding's scenario (exact, or a trailing "*" prefix). Detail, when set, further
+// scopes the entry to findings whose detail CONTAINS that substring — so a single
+// known field gap (e.g. "info.mode") is suppressed without masking every other
+// difference in the same scenario. An empty Detail suppresses the whole scenario
+// (the original, coarse behavior).
 type Divergence struct {
 	Scenario string `json:"scenario"`
+	Detail   string `json:"detail,omitempty"`
 	Reason   string `json:"reason"`
 	Phase    string `json:"phase"`
 }
@@ -290,6 +317,9 @@ func loadDivergences(path string) ([]Divergence, error) {
 		}
 		return nil, err
 	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return nil, nil // empty file => no registry, same as missing
+	}
 	var d []Divergence
 	if err := json.Unmarshal(data, &d); err != nil {
 		return nil, fmt.Errorf("decode %s: %w", path, err)
@@ -297,17 +327,25 @@ func loadDivergences(path string) ([]Divergence, error) {
 	return d, nil
 }
 
-// matchDivergence returns the reason if the scenario is a known divergence.
-// A registry entry "foo-*" matches any scenario with the prefix "foo-".
-func matchDivergence(divs []Divergence, scenario string) string {
+// matchDivergence returns the reason if the finding is a known divergence. A
+// registry entry "foo-*" matches any scenario with the prefix "foo-"; an entry
+// with a non-empty Detail only matches when the finding's detail contains it.
+func matchDivergence(divs []Divergence, scenario, detail string) string {
 	for _, d := range divs {
-		if pat, ok := strings.CutSuffix(d.Scenario, "*"); ok {
-			if strings.HasPrefix(scenario, pat) {
-				return d.Reason
-			}
-		} else if d.Scenario == scenario {
-			return d.Reason
+		if !scenarioMatches(d.Scenario, scenario) {
+			continue
 		}
+		if d.Detail != "" && !strings.Contains(detail, d.Detail) {
+			continue
+		}
+		return d.Reason
 	}
 	return ""
+}
+
+func scenarioMatches(pattern, scenario string) bool {
+	if pat, ok := strings.CutSuffix(pattern, "*"); ok {
+		return strings.HasPrefix(scenario, pat)
+	}
+	return pattern == scenario
 }

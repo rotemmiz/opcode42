@@ -17,11 +17,39 @@ import (
 )
 
 const (
-	idPlaceholder   = "<id>"
-	tsPlaceholder   = "<ts>"
-	pathPlaceholder = "<path>"
-	slugPlaceholder = "<slug>"
-	verPlaceholder  = "<ver>"
+	idPlaceholder     = "<id>"
+	tsPlaceholder     = "<ts>"
+	pathPlaceholder   = "<path>"
+	slugPlaceholder   = "<slug>"
+	verPlaceholder    = "<ver>"
+	textPlaceholder   = "<text>"
+	numPlaceholder    = "<num>"
+	tokensPlaceholder = "<tokens>"
+)
+
+// modelOutputTextFields / modelOutputNumFields / modelOutputTokenFields name the
+// fields whose VALUES are a direct function of non-deterministic LLM output, so
+// they differ between two live runs even against the same pinned model. They are
+// masked ONLY in live mode (Normalizer.Live) — the deterministic self-gate never
+// sets it, so this code path cannot weaken the existing agent-free scenarios.
+//
+// Only the leaf value is collapsed; the field's presence, type, and nesting are
+// still compared, so a missing/extra/retyped field still fails the diff. The
+// structural/control fields (type, role, status, tool, finish, reason, parts
+// ordering) are deliberately absent here — a divergence there is a real
+// conformance failure regardless of model output.
+//
+//   - text / reasoning: the model's generated prose. Our prompts are fixed and
+//     identical on both daemons, so masking the (echoed) user text hides nothing
+//     real; the assistant text is genuinely non-deterministic.
+//   - cost: a function of the exact billed token counts.
+//   - tokens: every leaf (input/output/total/reasoning/cache.*) tracks the
+//     model's tokenizer and each daemon's system-prompt size, so the whole
+//     object is collapsed (observed input 9080 vs 1250 for the same prompt).
+var (
+	modelOutputTextFields  = map[string]bool{"text": true, "reasoning": true}
+	modelOutputNumFields   = map[string]bool{"cost": true}
+	modelOutputTokenFields = map[string]bool{"tokens": true}
 )
 
 // slugFields hold server-generated random slugs (e.g. session "slug":"happy-eagle"),
@@ -103,9 +131,12 @@ var (
 )
 
 // Normalizer replaces volatile values. PathReplacements maps absolute path
-// prefixes (e.g. a temp project dir) to a stable placeholder.
+// prefixes (e.g. a temp project dir) to a stable placeholder. Live enables the
+// extra model-output masking used by the live dual-run (text/cost/tokens); it is
+// off by default so the deterministic gate is unaffected.
 type Normalizer struct {
 	PathReplacements map[string]string
+	Live             bool
 }
 
 // New returns a Normalizer. Each path in paths is replaced with "<path>". The
@@ -115,6 +146,16 @@ type Normalizer struct {
 // /tmp/forge-conf-123 surfaces as "tmp/forge-conf-123") — which the absolute
 // prefix would otherwise never match.
 func New(paths ...string) *Normalizer {
+	return &Normalizer{PathReplacements: pathReplacements(paths)}
+}
+
+// NewLive is New plus the live model-output masking (text/reasoning/cost/tokens),
+// for diffing two non-deterministic LLM runs structurally.
+func NewLive(paths ...string) *Normalizer {
+	return &Normalizer{PathReplacements: pathReplacements(paths), Live: true}
+}
+
+func pathReplacements(paths []string) map[string]string {
 	repl := make(map[string]string, len(paths)*2)
 	for _, p := range paths {
 		if p == "" {
@@ -125,7 +166,7 @@ func New(paths ...string) *Normalizer {
 			repl[rel] = pathPlaceholder
 		}
 	}
-	return &Normalizer{PathReplacements: repl}
+	return repl
 }
 
 // Normalize walks a decoded JSON value, replacing volatile fields in place, and
@@ -143,6 +184,12 @@ func (n *Normalizer) Normalize(v any) any {
 				t[k] = slugPlaceholder
 			case verFields[k] && isVersion(child):
 				t[k] = verPlaceholder
+			case n.Live && modelOutputTextFields[k] && isString(child):
+				t[k] = textPlaceholder
+			case n.Live && modelOutputNumFields[k] && isNumber(child):
+				t[k] = numPlaceholder
+			case n.Live && modelOutputTokenFields[k] && isObject(child):
+				t[k] = tokensPlaceholder
 			case orderInsensitiveFields[k]:
 				t[k] = sortArray(n.Normalize(child))
 			default:
@@ -266,6 +313,16 @@ func canonical(v any) string {
 
 func isString(v any) bool {
 	_, ok := v.(string)
+	return ok
+}
+
+func isNumber(v any) bool {
+	_, ok := v.(float64) // encoding/json decodes all JSON numbers as float64
+	return ok
+}
+
+func isObject(v any) bool {
+	_, ok := v.(map[string]any)
 	return ok
 }
 

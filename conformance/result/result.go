@@ -30,13 +30,19 @@ type Scenario struct {
 // Step is one observable interaction: an HTTP request/response and/or a captured
 // SSE event sequence. Bodies and SSE events hold normalized canonical JSON.
 type Step struct {
-	Name    string            `json:"name"`
-	Method  string            `json:"method,omitempty"`
-	Path    string            `json:"path,omitempty"`
-	Status  int               `json:"status,omitempty"`
-	Body    string            `json:"body,omitempty"`
-	SSE     []string          `json:"sse,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"` // captured response headers (e.g. WWW-Authenticate)
+	Name   string   `json:"name"`
+	Method string   `json:"method,omitempty"`
+	Path   string   `json:"path,omitempty"`
+	Status int      `json:"status,omitempty"`
+	Body   string   `json:"body,omitempty"`
+	SSE    []string `json:"sse,omitempty"`
+	// EventTypes is the de-duplicated sequence of SSE event TYPE strings observed
+	// during a live prompt (e.g. message.updated, message.part.updated,
+	// permission.asked). The live dual-run asserts the SHAPE of the event stream
+	// — which event kinds appear, in order — without diffing the non-deterministic
+	// bodies. Empty for the deterministic (agent-free) scenarios.
+	EventTypes []string          `json:"eventTypes,omitempty"`
+	Headers    map[string]string `json:"headers,omitempty"` // captured response headers (e.g. WWW-Authenticate)
 }
 
 // Load reads a result file.

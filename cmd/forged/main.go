@@ -245,12 +245,36 @@ func providerFactory(cat catalog.Catalog) engine.ProviderFactory {
 			apiKey = os.Getenv("FORGE_PROVIDER_API_KEY")
 		}
 		if baseURL == "" {
+			baseURL = builtinBaseURL(providerID)
+		}
+		if baseURL == "" {
 			return nil, fmt.Errorf("no base URL for provider %q (set FORGE_PROVIDER_BASE_URL)", providerID)
 		}
 		if isAnthropic(providerID, npm) {
 			return anthropic.New(anthropic.Options{BaseURL: baseURL, APIKey: apiKey, Model: modelID}), nil
 		}
 		return openai.New(openai.Options{BaseURL: baseURL, APIKey: apiKey, Model: modelID}), nil
+	}
+}
+
+// builtinBaseURL returns an OpenAI-compatible base URL for providers whose
+// models.dev catalog entry advertises no `api` field but that nonetheless expose
+// an OpenAI-compatible endpoint. opencode reaches these through provider-specific
+// AI-SDK packages (e.g. @ai-sdk/google) with the endpoint baked in; Forge's
+// OpenAI-compatible client needs the URL explicitly. The api key still comes from
+// the provider's advertised env vars (GEMINI_API_KEY / GOOGLE_*_API_KEY for
+// google), so only the base URL is supplied here. FORGE_PROVIDER_BASE_URL still
+// takes precedence (it is resolved before this fallback).
+//
+// Reference: Gemini's OpenAI-compatibility layer lives at
+// https://generativelanguage.googleapis.com/v1beta/openai/ and accepts the same
+// POST {base}/chat/completions the openai client emits.
+func builtinBaseURL(providerID string) string {
+	switch providerID {
+	case "google":
+		return "https://generativelanguage.googleapis.com/v1beta/openai"
+	default:
+		return ""
 	}
 }
 

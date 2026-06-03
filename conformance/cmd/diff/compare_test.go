@@ -82,11 +82,22 @@ func TestKnownDivergenceIsWarningNotBlocking(t *testing.T) {
 
 func TestGlobDivergenceMatch(t *testing.T) {
 	divs := []Divergence{{Scenario: "experimental-*", Reason: "best-effort"}}
-	if matchDivergence(divs, "experimental-foo") == "" {
+	if matchDivergence(divs, "experimental-foo", "anything") == "" {
 		t.Error("experimental-* should match experimental-foo")
 	}
-	if matchDivergence(divs, "session-create") != "" {
+	if matchDivergence(divs, "session-create", "anything") != "" {
 		t.Error("experimental-* should not match session-create")
+	}
+}
+
+func TestDetailScopedDivergence(t *testing.T) {
+	// A detail-scoped entry suppresses only matching findings, not the whole scenario.
+	divs := []Divergence{{Scenario: "live-*", Detail: "body.info.mode", Reason: "engine gap"}}
+	if got := matchDivergence(divs, "live-prompt-text", `body.info.mode: "build" != ""`); got == "" {
+		t.Error("detail-scoped entry should match the info.mode finding")
+	}
+	if got := matchDivergence(divs, "live-prompt-text", `body.info.cost: 1 != 2`); got != "" {
+		t.Errorf("detail-scoped entry must not suppress unrelated findings, got %q", got)
 	}
 }
 
