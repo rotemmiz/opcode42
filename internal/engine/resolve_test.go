@@ -82,12 +82,10 @@ func TestResolvePromptParts_FileAndDir(t *testing.T) {
 	if !strings.HasPrefix(file.URL, "file://") || !strings.HasSuffix(file.URL, "/notes.md") {
 		t.Errorf("file URL = %q, want a file:// URL ending in /notes.md", file.URL)
 	}
-	var fsrc fileSource
-	if err := json.Unmarshal(file.Source, &fsrc); err != nil {
-		t.Fatalf("file source decode: %v", err)
-	}
-	if fsrc.Type != "file" || fsrc.Text.Value != "@notes.md" {
-		t.Errorf("file source = %+v, want type=file value=@notes.md", fsrc)
+	// File/dir parts carry no source, matching opencode's resolvePromptParts
+	// output (prompt.ts:208-233).
+	if file.Source != nil {
+		t.Errorf("file part source = %s, want nil (opencode file parts have no source)", file.Source)
 	}
 
 	d := out[2]

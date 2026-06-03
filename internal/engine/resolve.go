@@ -40,14 +40,6 @@ type filePartSourceText struct {
 	End   int    `json:"end"`
 }
 
-// fileSource is the FileSource variant (message-v2.ts:133-137): a file/dir
-// mention resolved to an absolute path.
-type fileSource struct {
-	Type string             `json:"type"` // "file"
-	Path string             `json:"path"`
-	Text filePartSourceText `json:"text"`
-}
-
 // lspRange mirrors the LSP Range shape (line/character, 0-based) carried by a
 // symbol source (message-v2.ts:139-146 uses LSP.Range).
 type lspRange struct {
@@ -119,7 +111,10 @@ func (e *Engine) resolveMention(root string, m mention) *PartInput {
 }
 
 // resolveFileMention resolves an `@file`/`@dir` mention against the filesystem,
-// returning a FileSource file part or nil if the path does not exist.
+// returning a file part or nil if the path does not exist. The part shape mirrors
+// opencode's resolvePromptParts file/dir parts exactly (prompt.ts:208-233):
+// {type, url, filename, mime} with no source (a source is only carried by
+// client-supplied or symbol parts).
 func resolveFileMention(root string, m mention) *PartInput {
 	var abs string
 	switch {
@@ -140,17 +135,11 @@ func resolveFileMention(root string, m mention) *PartInput {
 	if info.IsDir() {
 		mime = "application/x-directory"
 	}
-	src, _ := json.Marshal(fileSource{
-		Type: "file",
-		Path: abs,
-		Text: filePartSourceText{Value: m.value, Start: m.start, End: m.end},
-	})
 	return &PartInput{
 		Type:     "file",
 		MIME:     mime,
 		URL:      string(uri.File(abs)),
 		Filename: m.name,
-		Source:   src,
 	}
 }
 
