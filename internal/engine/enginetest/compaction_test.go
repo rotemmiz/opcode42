@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/rotemmiz/forge/internal/engine"
 	"github.com/rotemmiz/forge/internal/engine/llm"
 	"github.com/rotemmiz/forge/internal/engine/message"
 )
@@ -85,5 +86,52 @@ func TestE2E_Compaction(t *testing.T) {
 	}
 	if !sawTail {
 		t.Fatalf("compaction part has no tail_start_id")
+	}
+}
+
+// TestSummarize_AutoFlag verifies that the request body's auto flag is forwarded
+// through SummarizeInput into the emitted CompactionPart.auto, matching opencode
+// (handlers/session.ts:280 auto: ctx.payload.auto ?? false → compaction.create,
+// surfaced as the required CompactionPart.auto boolean, message-v2.ts:187).
+func TestSummarize_AutoFlag(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		auto bool
+	}{
+		{"auto_true", true},
+		{"default_false", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			summary := NewScript().StepStart().Text("s1", "## Goal\n- summarized").
+				StepFinish("stop", llm.TokenUsage{Input: 500, Output: 50}).Finish().Events()
+			final := NewScript().StepStart().Text("f1", "All done.").
+				StepFinish("stop", llm.TokenUsage{Input: 600, Output: 5}).Finish().Events()
+
+			r := newRig(t, summary, final)
+			r.seedTurn(t, "msg_0001", "msg_0002", "first task", 1)
+			r.seedTurn(t, "msg_0003", "msg_0004", "second task", 3)
+
+			if err := r.eng.Summarize(context.Background(), engine.SummarizeInput{
+				SessionID: r.sessionID, Provider: "openai", Model: "gpt-4o", Auto: tc.auto,
+			}); err != nil {
+				t.Fatalf("summarize: %v", err)
+			}
+
+			msgs, _ := r.store.List(context.Background(), r.sessionID)
+			var found bool
+			for _, m := range msgs {
+				for _, p := range m.Parts {
+					if c, ok := p.(*message.CompactionPart); ok {
+						found = true
+						if c.Auto != tc.auto {
+							t.Fatalf("CompactionPart.auto = %v, want %v", c.Auto, tc.auto)
+						}
+					}
+				}
+			}
+			if !found {
+				t.Fatalf("no compaction part found")
+			}
+		})
 	}
 }

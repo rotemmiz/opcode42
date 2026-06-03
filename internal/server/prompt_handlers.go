@@ -242,6 +242,7 @@ func summarizeHandler(opts Options) http.HandlerFunc {
 		runCtx := context.WithoutCancel(r.Context())
 		err := eng.Summarize(runCtx, engine.SummarizeInput{
 			SessionID: sessionID, Provider: body.ProviderID, Model: body.ModelID,
+			Auto: body.Auto,
 		})
 		if err != nil {
 			var busy *runstate.BusyError

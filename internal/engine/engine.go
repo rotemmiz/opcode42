@@ -198,6 +198,11 @@ type SummarizeInput struct {
 	// Agent overrides the agent used for the summary turn; when empty the
 	// session's last-user agent (or "build") is used (handlers/session.ts:271-272).
 	Agent string
+	// Auto marks the emitted CompactionPart as auto vs manual. opencode forwards
+	// the request body's auto flag (handlers/session.ts:280: auto: ctx.payload.auto
+	// ?? false) into compaction.create, surfacing as the required CompactionPart.auto
+	// boolean (message-v2.ts:187).
+	Auto bool
 }
 
 // Summarize runs an explicit AI compaction of the session, mirroring opencode's
@@ -213,7 +218,7 @@ func (e *Engine) Summarize(ctx context.Context, in SummarizeInput) error {
 		agent = e.lastUserAgent(ctx, in.SessionID)
 	}
 	model := message.Model{ProviderID: in.Provider, ModelID: in.Model}
-	if err := e.createCompaction(ctx, in.SessionID, model, agent, false, false); err != nil {
+	if err := e.createCompaction(ctx, in.SessionID, model, agent, in.Auto, false); err != nil {
 		return err
 	}
 	_, err := e.Loop(ctx, in.SessionID)
