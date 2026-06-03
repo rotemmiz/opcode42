@@ -48,16 +48,21 @@ type promptBody struct {
 }
 
 type promptPart struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-	MIME string `json:"mime"`
-	URL  string `json:"url"`
+	Type     string          `json:"type"`
+	Text     string          `json:"text"`
+	MIME     string          `json:"mime"`
+	URL      string          `json:"url"`
+	Filename string          `json:"filename"`
+	Source   json.RawMessage `json:"source"`
 }
 
 func (b promptBody) toInput(sessionID string) engine.PromptInput {
 	parts := make([]engine.PartInput, 0, len(b.Parts))
 	for _, p := range b.Parts {
-		parts = append(parts, engine.PartInput{Type: p.Type, Text: p.Text, MIME: p.MIME, URL: p.URL})
+		parts = append(parts, engine.PartInput{
+			Type: p.Type, Text: p.Text, MIME: p.MIME, URL: p.URL,
+			Filename: p.Filename, Source: p.Source,
+		})
 	}
 	return engine.PromptInput{
 		SessionID: sessionID, Parts: parts, Agent: b.Agent,

@@ -7,6 +7,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -96,11 +97,16 @@ func New(cfg Config) *Engine {
 }
 
 // PartInput is a draft part on a prompt (id/messageID are server-allocated).
+// File parts may carry a Filename and a Source (file/symbol/resource provenance):
+// these are populated both by the client (structured mentions) and by
+// ResolvePromptParts when it expands `@file`/`@dir`/`@symbol` mentions.
 type PartInput struct {
-	Type string `json:"type"` // "text" | "file"
-	Text string `json:"text,omitempty"`
-	MIME string `json:"mime,omitempty"`
-	URL  string `json:"url,omitempty"`
+	Type     string          `json:"type"` // "text" | "file"
+	Text     string          `json:"text,omitempty"`
+	MIME     string          `json:"mime,omitempty"`
+	URL      string          `json:"url,omitempty"`
+	Filename string          `json:"filename,omitempty"`
+	Source   json.RawMessage `json:"source,omitempty"`
 }
 
 // PromptInput is a request to prompt a session.
@@ -137,7 +143,7 @@ func (e *Engine) Prompt(ctx context.Context, in PromptInput) (message.WithParts,
 	}
 	e.emitMessage(message.Info{User: user})
 
-	for _, pin := range ResolvePromptParts(in.Parts) {
+	for _, pin := range e.ResolvePromptParts(in.Parts) {
 		part := toPart(pin, user.SessionID, user.ID)
 		if part == nil {
 			continue
@@ -161,15 +167,14 @@ func (e *Engine) Loop(ctx context.Context, sessionID string) (message.WithParts,
 // Cancel interrupts a session's active run.
 func (e *Engine) Cancel(sessionID string) { e.cfg.RunState.Cancel(sessionID) }
 
-// ResolvePromptParts normalizes draft parts. For Phase B this passes text/file
-// parts through; @file/@symbol mention resolution is wired with LSP in plan 03.
-func ResolvePromptParts(parts []PartInput) []PartInput { return parts }
-
 func toPart(in PartInput, sessionID, messageID string) message.Part {
 	base := message.PartBase{ID: id.Ascending(id.Part), SessionID: sessionID, MessageID: messageID}
 	switch in.Type {
 	case "file":
-		return &message.FilePart{PartBase: base, Type: "file", MIME: in.MIME, URL: in.URL}
+		return &message.FilePart{
+			PartBase: base, Type: "file", MIME: in.MIME, URL: in.URL,
+			Filename: in.Filename, Source: in.Source,
+		}
 	default:
 		if in.Text == "" {
 			return nil
