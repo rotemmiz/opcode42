@@ -43,21 +43,21 @@ Baseline status taken from `plans/00-masterplan.md` §"Review pass (2026-06-03)"
 | **P02-M9b** loop leftovers | title gen · `json_schema` structured-output tool · MAX_STEPS sentinel · agent-level `maxSteps` wiring (replace hard `const 100`) | `02-agent-engine.md` §M9 | engine | done | P02-M9a | landed #100 |
 | **P12-rec** record infra | recording / normalize harness | `12-test-compatibility.md` | conformance | done | P01 | landed |
 | **P12-suite** scenarios | full scenario suite + dual-run diff gate | `12-test-compatibility.md` | conformance | done | P12-rec | landed #104 (live dual-run + 5 scenarios, skip-gated; Gemini quota caveat) |
-| **P02-M11** conformance | end-to-end SSE conformance pass (Phase B exit gate) | `02-agent-engine.md` §M11 | conformance | todo | P02-M9b, P12-suite | **READY** — gates mobile/TUI repoint; see ambiguity #2 (SSE catalog) |
+| **P02-M11** conformance | end-to-end SSE conformance pass (Phase B exit gate) | `02-agent-engine.md` §M11 | conformance | done | P02-M9b, P12-suite | **landed #111** — authoritative SSE catalog from opencode src; ambiguity #2 RESOLVED. ⇒ PHASE B EXIT GREEN |
 | **P06-P1** sdk pin | clients/server-stubs pinned to `openapi.json` | `06-sdk-generation.md` §Phase 1 | sdk | done | P01 | `make gen` green (verify.md S3) |
-| **P06-P2** sdk self-emit | Forge emits its own spec; diff vs frozen | `06-sdk-generation.md` §Phase 2 | sdk | blocked | P02-M11, P12-suite | ties to conformance |
+| **P06-P2** sdk self-emit | Forge emits its own spec; diff vs frozen | `06-sdk-generation.md` §Phase 2 | sdk | todo | P02-M11, P12-suite | **READY** (deps done) |
 | **P03-M3-1a** mcp stdio | MCP config + stdio connect + tool merge/dispatch | `03-ecosystem-mcp-lsp.md` §M3-1 | mcp | done | P02-M1..M8 | landed (#59/#62) |
 | **P03-M3-1b** mcp remote+watch+gate | StreamableHTTP/SSE transport · `mcp.tools.changed` watcher · MCP-call permission gating | `03-ecosystem-mcp-lsp.md` §M3-1 | mcp | done | P03-M3-1a | landed #102 |
-| **P03-M3-2** mcp oauth | MCP OAuth flow | `03-ecosystem-mcp-lsp.md` §M3-2 | mcp | blocked | P03-M3-1b, P13-oauth | OAuth surface owned by P13 |
+| **P03-M3-2** mcp oauth | MCP OAuth flow | `03-ecosystem-mcp-lsp.md` §M3-2 | mcp | todo | P03-M3-1b, P13-oauth | **READY** (deps done) — reuse P13 OAuth surface; add needs_auth/needs_client_registration statuses + mutating /mcp endpoints |
 | **P03-M3-3** lsp config | LSP config + built-in server table | `03-ecosystem-mcp-lsp.md` §M3-3 | lsp | done | P02-M1..M8 | landed #99 |
 | **P03-M3-4** lsp diagnostics | LSP client — diagnostics | `03-ecosystem-mcp-lsp.md` §M3-4 | lsp | done | P03-M3-3 | landed #103 (client + GET /lsp + lsp.updated) |
 | **P03-M3-5** lsp query+tool | LSP query operations + tool | `03-ecosystem-mcp-lsp.md` §M3-5 | lsp | done | P03-M3-4 | landed #106 (9 ops, exp-flag-gated tool) |
 | **P03-M3-6** lsp/mcp sse | `lsp.updated` SSE + `mcp.tools.changed` wiring | `03-ecosystem-mcp-lsp.md` §M3-6 | lsp | done | P03-M3-5, P03-M3-1b | landed #107 (+ real @file/@dir/@symbol ResolvePromptParts) |
-| **P05** plugin-host | Node/Bun sidecar for opencode TS plugins | `05-plugin-host.md` | plugin | todo | P02-M9a | flag-gated; currently no-op stub |
-| **P13-oauth** provider oauth | end-to-end OAuth callback/loopback (assigned owner) | `13-remote-ops.md` | remote | todo | P02-M9a | masterplan §128.4 assigns OAuth here |
+| **P05** plugin-host | Node/Bun sidecar for opencode TS plugins | `05-plugin-host.md` | plugin | done | P02-M9a | landed #110 (M2–M5 + hooks); Phase-D hook bridges still stubbed |
+| **P13-oauth** provider oauth | end-to-end OAuth callback/loopback (assigned owner) | `13-remote-ops.md` | remote | done | P02-M9a | landed #109 (PKCE loopback, xAI; unblocks P03-M3-2) |
 | **P13-rest** remote hardening | push notifications · packaging · remote-first hardening | `13-remote-ops.md` | remote | todo | P02-M9a | parallel-safe with P13-oauth? see notes |
 | **P07-A** mobile v0 | Android v0 against real opencode daemon | `07-client-mobile.md` §Phase A | mobile | partial | — | UI fidelity passes ongoing (#58–#61) |
-| **P07-B** mobile repoint | repoint Android to Forge daemon | `07-client-mobile.md` §Phase B | mobile | blocked | P02-M11 | needs conformance green |
+| **P07-B** mobile repoint | repoint Android to Forge daemon | `07-client-mobile.md` §Phase B | mobile | todo | P02-M11 | **READY** — conformance green (#111) |
 | **P07-C** mobile parity | full feature parity | `07-client-mobile.md` §Phase C | mobile | blocked | P07-B | |
 | **P08** tui | Phases 0–3 done; remaining polish phases | `08-client-tui.md` | tui | partial | P02-M9a | ~35 files; gap endpoints landed |
 
@@ -75,17 +75,18 @@ These are from masterplan §"Cross-cutting ambiguities" — a worker should **es
 ## Ready set (orchestrator maintains this — recompute each cycle)
 <!-- ORCHESTRATOR: overwrite this block each cycle with the current READY tasks and their tracks. -->
 
-As of Wave-2 completion (2026-06-03, main @ 2271724). **Wave 1 + Wave 2 all merged.**
-The entire MCP+LSP chain (P03 M3-1..M3-6), conformance dual-run (P12-suite), engine M9 (P02-M9b),
-and perf W0 (plan 11) are DONE. READY now (deps satisfied, distinct tracks → parallelizable):
-- **P02-M11** (track conformance) — Phase-B exit gate; end-to-end SSE conformance. *Touches ambiguity #2 (authoritative SSE event catalog) — confirm with human before asserting the full catalog.* Gates P07-B/P06-P2.
-- **P05** (track plugin) — Node/Bun sidecar for opencode TS plugins; currently no-op stub.
-- **P13-oauth** (track remote) — provider OAuth callback/loopback (owns the OAuth surface; unblocks P03-M3-2).
-- **P13-rest** (track remote) — push-notifications/packaging/remote hardening; *same track as P13-oauth → sequential unless split*.
-- **P08** (track tui, partial) — remaining polish phases.
+As of Wave-3 completion (2026-06-04, main @ e23fe49). **Waves 1+2+3 all merged. 🎯 PHASE B EXIT GATE GREEN (P02-M11, #111).**
+Done this wave: P02-M11 (#111), P05 (#110), P13-oauth (#109), P08 slice (#108).
+READY now (deps satisfied, distinct tracks → parallelizable) — **Wave 4 candidates**:
+- **P07-B** (track mobile) — repoint Android to the Forge daemon. Now unblocked by conformance-green. High value (mobile is the primary client).
+- **P06-P2** (track sdk) — Forge emits its own openapi spec; diff vs frozen. Unblocked.
+- **P03-M3-2** (track mcp) — MCP OAuth: reuse P13's OAuth surface; add needs_auth/needs_client_registration statuses + mutating /mcp endpoints (POST /mcp add, connect/disconnect/auth, currently 501).
+- **P13-rest** (track remote) — push-notifications / packaging / remote-first hardening.
+- **P08 / U13** (track tui, partial) — TUI↔Forge dual-run parity now unblocked (P02-M11 done); plus remaining 08c bg-pulse (optional).
 
-Still BLOCKED: P03-M3-2 (mcp oauth → P13-oauth), P06-P2 (sdk self-emit → P02-M11), P07-B/C (mobile → P02-M11).
-Distinct tracks → P02-M11, P05, P13-oauth, P08 are parallel-safe as a Wave 3 (4 workers). **Not yet dispatched — awaiting human go-ahead on scope + the ambiguity-#2 SSE-catalog decision that P02-M11 needs.**
+Still BLOCKED: P07-C (mobile parity → P07-B).
+Distinct tracks → P07-B, P06-P2, P03-M3-2, P13-rest, P08 are parallel-safe (up to 5 workers). **Not yet dispatched — awaiting human go-ahead on Wave-4 scope.**
+Pre-existing stale PRs unrelated to these waves: #96 (tui graphics-fineness), #71 (WIP android mDNS) — flag to human, not orchestrator-owned.
 
 ## Run log
 <!-- Append one line per dispatch/merge: `2026-06-03 P03-M3-3 dispatched (worktree wt-lsp)` etc. -->
@@ -115,3 +116,5 @@ Distinct tracks → P02-M11, P05, P13-oauth, P08 are parallel-safe as a Wave 3 (
 2026-06-03 P05 MERGED → #110 (cb2cb1b): plugin host — unix-socket JSON-RPC 2.0 sidecar (Bun/Node auto-detect), plugin discovery + tool registration, Go bridge (blocking Trigger hooks + event fan-out + crash isolation), flag-gated off (--plugin-host/FORGE_PLUGIN_HOST=1). Self-merged; rebased 2x over P13 cmd/forged seam (additive); review fixed a startup-hang on pre-ready crash. Phase-D hooks (auth/provider, tool.before/after, permission.ask, compaction) still stubbed. P05 done.
   ⚠️ HARNESS FLAKE (flagged by P13 + P05 independently): scripts/run-conformance.sh self has a nondeterministic opencode-vs-opencode session-LIST ordering flake on base main (CI self-diff passes; local intermittent). Conformance owner (P02-M11) should add order-insensitive normalization (à la E1 permission normalizer) — verify at M11 merge; else tiny follow-up.
 2026-06-03 P02-M11 (#111) opened, rebased on main, CI-green; agent handled BOTH cross-track followups (known-divergences refresh for #109; NormalizeSetJSON masks the session-list flake) but STOPPED at review with 1 unaddressed should-fix: summarize `auto` flag parsed (prompt_handlers.go:213) yet dropped (engine.SummarizeInput lacks Auto → hardcoded auto=false) → wire divergence on CompactionPart.auto. Dispatched continuation agent a87628164fbe9cfc4 to fix that one finding + self-merge #111.
+2026-06-04 P02-M11 MERGED → #111 (e23fe49): end-to-end SSE conformance — authoritative event catalog enumerated+cited from opencode source (server.heartbeat correctly excluded as transport-injected), session.status/idle ordering, mode/path.root fixes, NormalizeSetJSON masks the session-list flake, known-divergences refreshed for #109. Continuation agent fixed the summarize `auto`-flag drop (engine.SummarizeInput.Auto → createCompaction). Agent stopped at clean review; orchestrator merged. 🎯 PHASE B EXIT GATE GREEN. ⇒ WAVE 3 COMPLETE (#108/#109/#110/#111).
+  Both cross-track followups (known-divergences refresh, session-list flake) were handled inside #111 — no separate follow-up needed.
