@@ -35,6 +35,11 @@ type Executor struct {
 	// MCP dispatches MCP tool calls when a name isn't a built-in tool (nil ⇒ no
 	// MCP). Satisfied by *mcp.Manager.
 	MCP MCPCaller
+	// StructuredTool, when set, is the synthetic StructuredOutput tool's name. A
+	// call to it is captured (not dispatched to the registry or MCP) and answered
+	// with a canned success; the processor records the input as the run's
+	// structured output (prompt.ts:1747-1773).
+	StructuredTool string
 }
 
 // MCPCaller dispatches a flattened MCP tool name; found is false when no MCP
@@ -47,6 +52,16 @@ var _ processor.ToolExecutor = (*Executor)(nil)
 
 // Execute runs the named tool after a permission check.
 func (e *Executor) Execute(ctx context.Context, call processor.ToolCall) (processor.ToolResult, error) {
+	// The synthetic StructuredOutput tool has no registry/MCP backing: the AI SDK
+	// validates its input against the schema before dispatch, so a call reaching
+	// here is the model's final structured answer (prompt.ts:1755-1773).
+	if e.StructuredTool != "" && call.Name == e.StructuredTool {
+		return processor.ToolResult{
+			Output:   "Structured output captured successfully.",
+			Title:    "Structured Output",
+			Metadata: map[string]any{"valid": true},
+		}, nil
+	}
 	t, ok := e.Registry.Get(call.Name)
 	if !ok {
 		// Not a built-in: try the instance's MCP tools.

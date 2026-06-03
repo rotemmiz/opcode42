@@ -40,6 +40,11 @@ func TestPrompt_InjectsProjectInstructions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Give the session a non-default title so the forked title-generation stream
+	// (step-0) does not race into the asserted provider call/request order.
+	if err := sessions.SetTitle(context.Background(), sess.ID, "named"); err != nil {
+		t.Fatal(err)
+	}
 	mock := enginetest.NewMockProvider(
 		enginetest.NewScript().StepStart().Text("t", "ok").
 			StepFinish("stop", llm.TokenUsage{Input: 1, Output: 1}).Finish().Events(),

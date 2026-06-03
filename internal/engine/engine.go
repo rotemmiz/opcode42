@@ -27,9 +27,10 @@ import (
 // OpenAI-compatible client configured from the catalog + credentials).
 type ProviderFactory func(ctx context.Context, providerID, modelID string) (llm.Provider, error)
 
-// maxSteps caps loop iterations as a runaway guard (agent maxSteps is wired in
-// plan 04; this is the hard ceiling).
-const maxSteps = 100
+// defaultMaxSteps caps loop iterations when the resolved agent does not set its
+// own maxSteps. opencode falls back to a finite ceiling for an unset agent.steps
+// (prompt.ts:1339-1340); Forge uses 100.
+const defaultMaxSteps = 100
 
 // Config wires an Engine. The bus/permissions/directory are per-instance; the
 // store/sessions/catalog/registry/providers are shared.
@@ -56,6 +57,25 @@ type Config struct {
 	// appended to the system prompt (plan 04 instructions).
 	SystemInstructions []string
 	Flags              registry.Flags
+	// MaxSteps is the resolved agent's step ceiling for this run. Zero falls back
+	// to defaultMaxSteps. On the last allowed step the loop appends the MAX_STEPS
+	// sentinel so the model answers with text only (prompt.ts:1339-1340,1451).
+	MaxSteps int
+	// Titles sets a session title once, used by step-0 title generation. nil
+	// disables title generation (e.g. inside a subagent).
+	Titles TitleSetter
+	// TitleModel overrides the model used for title generation. When nil the
+	// session's own provider/model is used (prompt.ts:264-270).
+	TitleModel *message.Model
+}
+
+// TitleSetter persists a generated session title. SetTitle must be a no-op when
+// the session no longer carries the default title (the loop calls it
+// unconditionally; the implementation guards on isDefaultTitle).
+type TitleSetter interface {
+	SetTitle(ctx context.Context, sessionID, title string) error
+	IsDefaultTitle(title string) bool
+	Title(ctx context.Context, sessionID string) (string, error)
 }
 
 // Engine runs prompts for one instance (working directory).
@@ -88,6 +108,10 @@ type PromptInput struct {
 	Model     string
 	System    string
 	Tools     map[string]bool
+	// Format requests a structured response. When Format.Type == "json_schema"
+	// the loop injects the StructuredOutput tool and forces tool use
+	// (prompt.ts:1403-1467).
+	Format *message.OutputFormat
 }
 
 // Prompt creates the user message + parts, then runs the loop, returning the
@@ -101,7 +125,7 @@ func (e *Engine) Prompt(ctx context.Context, in PromptInput) (message.WithParts,
 		ID: id.Ascending(id.Message), SessionID: in.SessionID, Role: message.RoleUser,
 		Agent:  orDefault(in.Agent, "build"),
 		Model:  message.Model{ProviderID: in.Provider, ModelID: in.Model},
-		System: in.System, Tools: in.Tools,
+		System: in.System, Tools: in.Tools, Format: in.Format,
 	}
 	user.Time.Created = now
 	if err := e.cfg.Store.PutMessage(ctx, message.Info{User: user}); err != nil {

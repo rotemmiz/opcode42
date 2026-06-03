@@ -41,6 +41,11 @@ func TestPrompt_TaskToolSpawnsSubagent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Non-default title so the forked step-0 title stream does not add a fourth
+	// provider call to the asserted parent+child+parent count.
+	if err := sessions.SetTitle(context.Background(), parent.ID, "named"); err != nil {
+		t.Fatal(err)
+	}
 
 	usage := llm.TokenUsage{Input: 1, Output: 1}
 	// Call order across the shared mock: parent step-1 (task call), child step-1

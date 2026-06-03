@@ -37,8 +37,10 @@ func (r subagentRunner) Run(ctx context.Context, req tool.TaskRequest) (string, 
 		provider, model = agent.Model.ProviderID, agent.Model.ModelID
 	}
 
-	// nil subagent on the child engine bounds recursion (no nested subagents).
-	eng := buildEngine(r.opts, r.inst, r.directory, agentRulesets(agent), nil)
+	// nil subagent on the child engine bounds recursion (no nested subagents);
+	// nil titles skips title generation for child sessions (opencode returns
+	// early for sessions with a parentID, prompt.ts:247).
+	eng := buildEngine(r.opts, r.inst, r.directory, agentRulesets(agent), nil, agentMaxSteps(agent), nil)
 	out, err := eng.Prompt(ctx, engine.PromptInput{
 		SessionID: child.ID, Provider: provider, Model: model,
 		Agent: agentNameOrDefault(agent.Name), System: agent.Prompt,

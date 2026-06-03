@@ -38,6 +38,11 @@ var ErrNotFound = errors.New("session not found")
 // (session/session.ts:148).
 var forkedTitleRe = regexp.MustCompile(`^(.+) \(fork #(\d+)\)$`)
 
+// defaultTitleRe matches a freshly-created default title (titlePrefix + RFC3339
+// millis). Title generation only overwrites a title still matching this, the
+// way opencode's isDefaultTitle gates auto-titling (session/session.ts:53-57).
+var defaultTitleRe = regexp.MustCompile(`^New session - \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$`)
+
 // Info is the session wire shape. Optional fields are omitted when empty to
 // match opencode's optionalOmitUndefined schema (session/session.ts:208-224).
 type Info struct {
@@ -171,6 +176,33 @@ func (s *Store) Get(ctx context.Context, sessionID string) (Info, error) {
 		return Info{}, ErrNotFound
 	}
 	return info, err
+}
+
+// Title returns the current title of the session, or ErrNotFound.
+func (s *Store) Title(ctx context.Context, sessionID string) (string, error) {
+	info, err := s.Get(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	return info.Title, nil
+}
+
+// SetTitle updates the session's title and bumps time_updated. It is a no-op for
+// a missing session (RowsAffected == 0); callers fire it as best-effort during
+// title generation.
+func (s *Store) SetTitle(ctx context.Context, sessionID, title string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.ExecContext(ctx,
+		"UPDATE session SET title = ?, time_updated = ? WHERE id = ?",
+		title, time.Now().UnixMilli(), sessionID)
+	return err
+}
+
+// IsDefaultTitle reports whether title is a still-untouched auto-generated
+// default (the prefix + RFC3339-millis timestamp Create stamps).
+func (s *Store) IsDefaultTitle(title string) bool {
+	return defaultTitleRe.MatchString(title)
 }
 
 // List returns sessions newest-first, matching opencode's default page:

@@ -23,6 +23,19 @@ type MockProvider struct {
 	calls      int
 	capability llm.Capability
 	requests   []*llm.Request
+	// route, when set, picks the script for a request, overriding the call-index
+	// default. It lets a test answer a forked title/summary stream independently
+	// of the main turn, whose call order races. A nil result from route falls
+	// back to the call-index script.
+	route func(req *llm.Request) []llm.Event
+}
+
+// WithRoute installs a per-request script selector (see MockProvider.route).
+func (m *MockProvider) WithRoute(fn func(req *llm.Request) []llm.Event) *MockProvider {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.route = fn
+	return m
 }
 
 // NewMockProvider builds a provider that replays the given scripts in order.
@@ -57,7 +70,13 @@ func (m *MockProvider) Requests() []*llm.Request {
 // Stream returns the next scripted event sequence on a fresh channel.
 func (m *MockProvider) Stream(ctx context.Context, req *llm.Request) (<-chan llm.Event, error) {
 	m.mu.Lock()
-	events := m.scriptFor(m.calls)
+	var events []llm.Event
+	if m.route != nil {
+		events = m.route(req)
+	}
+	if events == nil {
+		events = m.scriptFor(m.calls)
+	}
 	m.calls++
 	m.requests = append(m.requests, req)
 	m.mu.Unlock()

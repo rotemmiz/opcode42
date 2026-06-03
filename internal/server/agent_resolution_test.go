@@ -76,6 +76,11 @@ func TestPrompt_RestrictiveAgentTriggersPermission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Non-default title so the forked step-0 title stream does not consume a
+	// script slot / race the asserted permission flow.
+	if err := sessions.SetTitle(context.Background(), sess.ID, "named"); err != nil {
+		t.Fatal(err)
+	}
 	instances := instance.NewManager(bus.NewGlobal())
 	usage := llm.TokenUsage{Input: 1, Output: 1}
 	mock := enginetest.NewMockProvider(

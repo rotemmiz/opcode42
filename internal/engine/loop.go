@@ -16,6 +16,10 @@ import (
 // reorders history, checks the exit condition, streams one assistant turn, and
 // repeats until the model finishes without pending tool calls.
 func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithParts, error) {
+	maxSteps := e.cfg.MaxSteps
+	if maxSteps <= 0 {
+		maxSteps = defaultMaxSteps
+	}
 	for step := 0; step < maxSteps; step++ {
 		if ctx.Err() != nil {
 			break
@@ -30,6 +34,13 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 			break
 		}
 
+		// Fork title generation on the first iteration over the first user turn,
+		// before exit/compaction handling, mirroring opencode's step-1 fork
+		// (prompt.ts:1295). Fire-and-forget; guards on the default title.
+		if step == 0 {
+			e.maybeGenerateTitle(ctx, sessionID, filtered)
+		}
+
 		// A pending compaction task is processed before any normal turn or the
 		// exit check (prompt.ts:1310-1329).
 		if cp := pendingCompaction(filtered, latest.User.ID); cp != nil {
@@ -42,6 +53,10 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 		if e.shouldExit(latest) {
 			break
 		}
+
+		// On the final allowed step the model gets the MAX_STEPS sentinel and no
+		// tools; it must answer with text only (prompt.ts:1339-1340,1451).
+		isLastStep := step == maxSteps-1
 
 		providerID := latest.User.Model.ProviderID
 		modelID := latest.User.Model.ModelID
@@ -58,12 +73,31 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 
 		tools := e.cfg.Registry.Definitions(registry.FilterInput{ProviderID: providerID, ModelID: modelID, Flags: e.cfg.Flags})
 		tools = append(tools, e.mcpDefinitions(ctx, tools)...)
+		system := e.buildSystem(modelID, latest.User.System)
+		modelMsgs := message.ToModelMessages(filtered, message.SerializeModel{ProviderID: providerID, ModelID: modelID}, message.SerializeOptions{})
+		if isLastStep {
+			modelMsgs = append(modelMsgs, llm.ModelMessage{
+				Role: llm.RoleAssistant, Content: []llm.ContentPart{{Kind: llm.ContentText, Text: maxStepsSentinel}},
+			})
+		}
+
+		toolChoice := llm.ToolChoiceAuto
+		structured := wantsStructuredOutput(latest.User.Format)
+		if structured {
+			// json_schema format: inject the StructuredOutput tool, push the
+			// structured-output system prompt, and force a tool call
+			// (prompt.ts:1403-1467).
+			tools = append(tools, structuredOutputTool(latest.User.Format))
+			system = append(system, structuredOutputSystemPrompt)
+			toolChoice = llm.ToolChoiceRequired
+		}
+
 		req := &llm.Request{
 			Model:         modelID,
-			SystemPrompts: e.buildSystem(modelID, latest.User.System),
-			Messages:      message.ToModelMessages(filtered, message.SerializeModel{ProviderID: providerID, ModelID: modelID}, message.SerializeOptions{}),
+			SystemPrompts: system,
+			Messages:      modelMsgs,
 			Tools:         tools,
-			ToolChoice:    llm.ToolChoiceAuto,
+			ToolChoice:    toolChoice,
 		}
 		events, err := provider.Stream(ctx, req)
 		if err != nil {
@@ -85,12 +119,34 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 		if e.cfg.MCP != nil {
 			executor.MCP = e.cfg.MCP
 		}
-		proc := processor.New(processor.Config{
+		procCfg := processor.Config{
 			Store: e.cfg.Store, Bus: e.cfg.Bus, Catalog: e.cfg.Catalog,
 			Executor: executor, Asker: e.cfg.Permissions, SessionID: sessionID,
-		}, assistant)
+		}
+		if structured {
+			executor.StructuredTool = structuredOutputToolName
+			procCfg.StructuredTool = structuredOutputToolName
+		}
+		proc := processor.New(procCfg, assistant)
 
-		switch proc.Run(ctx, events) {
+		outcome := proc.Run(ctx, events)
+
+		if structured {
+			if out, ok := proc.Structured(); ok {
+				// The model produced its structured answer: record it and stop
+				// (prompt.ts:1458-1462).
+				e.finishStructured(ctx, assistant, out)
+				return e.withParts(ctx, assistant), nil
+			}
+			// A finished turn that never called StructuredOutput is a failure
+			// (prompt.ts:1466-1473).
+			if assistant.Finish != "" && assistant.Finish != "tool-calls" && assistant.Error == nil {
+				e.failStructured(ctx, assistant)
+				return e.withParts(ctx, assistant), nil
+			}
+		}
+
+		switch outcome {
 		case processor.OutcomeStop:
 			return e.withParts(ctx, assistant), nil
 		case processor.OutcomeCompact:

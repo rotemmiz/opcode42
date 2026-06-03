@@ -152,11 +152,19 @@ func (p *Processor) completeCall(ctx context.Context, callID string, res ToolRes
 		p.mu.Unlock()
 		return
 	}
+	input := inputOf(part)
 	start := startOf(part)
-	st := message.ToolStateCompleted{Status: message.ToolCompleted, Input: inputOf(part),
+	st := message.ToolStateCompleted{Status: message.ToolCompleted, Input: input,
 		Output: res.Output, Title: res.Title, Metadata: orEmptyMap(res.Metadata), Attachments: res.Attachments}
 	st.Time.Start, st.Time.End = start, time.Now().UnixMilli()
 	part.State = mustState(st)
+	// A successful StructuredOutput call carries the run's final structured
+	// answer: capture its input and end the loop (prompt.ts:1458-1462).
+	if p.cfg.StructuredTool != "" && part.Tool == p.cfg.StructuredTool {
+		p.structured = input
+		p.hasStructured = true
+		p.shouldBreak = true
+	}
 	p.mu.Unlock()
 	p.updatePart(ctx, part)
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/rotemmiz/forge/internal/engine"
+	"github.com/rotemmiz/forge/internal/engine/message"
 	"github.com/rotemmiz/forge/internal/engine/permission"
 	"github.com/rotemmiz/forge/internal/engine/runstate"
 	"github.com/rotemmiz/forge/internal/engine/tool"
@@ -38,11 +39,12 @@ type promptBody struct {
 		ProviderID string `json:"providerID"`
 		ModelID    string `json:"modelID"`
 	} `json:"model"`
-	Agent   string          `json:"agent"`
-	NoReply bool            `json:"noReply"`
-	System  string          `json:"system"`
-	Tools   map[string]bool `json:"tools"`
-	Parts   []promptPart    `json:"parts"`
+	Agent   string                `json:"agent"`
+	NoReply bool                  `json:"noReply"`
+	System  string                `json:"system"`
+	Tools   map[string]bool       `json:"tools"`
+	Format  *message.OutputFormat `json:"format,omitempty"`
+	Parts   []promptPart          `json:"parts"`
 }
 
 type promptPart struct {
@@ -60,7 +62,7 @@ func (b promptBody) toInput(sessionID string) engine.PromptInput {
 	return engine.PromptInput{
 		SessionID: sessionID, Parts: parts, Agent: b.Agent,
 		Provider: b.Model.ProviderID, Model: b.Model.ModelID,
-		System: b.System, Tools: b.Tools,
+		System: b.System, Tools: b.Tools, Format: b.Format,
 	}
 }
 
@@ -69,7 +71,7 @@ func (b promptBody) toInput(sessionID string) engine.PromptInput {
 // the resolved agent's permission rules (the executor evaluates tool calls
 // against them; an unmatched call defaults to "ask" and blocks on a
 // permission.asked event).
-func buildEngine(opts Options, inst *instance.Context, directory string, rulesets []permission.Ruleset, subagent tool.SubagentRunner) *engine.Engine {
+func buildEngine(opts Options, inst *instance.Context, directory string, rulesets []permission.Ruleset, subagent tool.SubagentRunner, maxSteps int, titles engine.TitleSetter) *engine.Engine {
 	return engine.New(engine.Config{
 		Store:              opts.Messages,
 		Catalog:            opts.Catalog,
@@ -85,7 +87,18 @@ func buildEngine(opts Options, inst *instance.Context, directory string, ruleset
 		SystemInstructions: resource.SystemInstructions(directory, loadConfig(directory)),
 		Skills:             skillResolver{directory: directory},
 		MCP:                inst.MCP,
+		MaxSteps:           maxSteps,
+		Titles:             titles,
 	})
+}
+
+// agentMaxSteps returns the agent's resolved step ceiling, or 0 to use the
+// engine default (resource.Agent.Steps subsumes the deprecated maxSteps alias).
+func agentMaxSteps(a resource.Agent) int {
+	if a.Steps != nil {
+		return *a.Steps
+	}
+	return 0
 }
 
 // resolveAgent loads the directory's agents and returns the one named by the
@@ -150,7 +163,7 @@ func promptHandler(opts Options, async bool) http.HandlerFunc {
 		inst := opts.Instances.Get(directory)
 		runner := subagentRunner{opts: opts, inst: inst, directory: directory,
 			provider: body.Model.ProviderID, model: body.Model.ModelID}
-		eng := buildEngine(opts, inst, directory, agentRulesets(agent), runner)
+		eng := buildEngine(opts, inst, directory, agentRulesets(agent), runner, agentMaxSteps(agent), opts.Sessions)
 
 		// Detach from the request context: a client disconnect must NOT abort the
 		// run — only POST /abort cancels it (via the run lock), matching opencode.

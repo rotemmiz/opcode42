@@ -74,6 +74,10 @@ type Config struct {
 	Executor  ToolExecutor    // nil for text-only runs
 	Asker     PermissionAsker // nil disables the doom-loop ask
 	SessionID string
+	// StructuredTool names the synthetic tool whose successful call carries the
+	// run's structured output (the StructuredOutput tool injected for a
+	// json_schema response format). Empty disables capture (prompt.ts:1404,1458).
+	StructuredTool string
 }
 
 // Processor turns one assistant turn's event stream into parts + SSE.
@@ -81,15 +85,17 @@ type Processor struct {
 	cfg       Config
 	assistant *message.AssistantMessage
 
-	mu           sync.Mutex
-	currentText  *message.TextPart
-	reasoning    map[string]*message.ReasoningPart
-	tools        map[string]*message.ToolPart // by callID
-	toolOrder    []string
-	pending      map[string]ToolCall // calls awaiting executor resolution
-	wg           sync.WaitGroup
-	needsCompact bool
-	shouldBreak  bool
+	mu            sync.Mutex
+	currentText   *message.TextPart
+	reasoning     map[string]*message.ReasoningPart
+	tools         map[string]*message.ToolPart // by callID
+	toolOrder     []string
+	pending       map[string]ToolCall // calls awaiting executor resolution
+	wg            sync.WaitGroup
+	needsCompact  bool
+	shouldBreak   bool
+	structured    any  // captured StructuredOutput input
+	hasStructured bool // whether structured was captured this run
 }
 
 // New builds a Processor for the given (already-persisted) assistant message.
@@ -123,6 +129,14 @@ func (p *Processor) Run(ctx context.Context, events <-chan llm.Event) Outcome {
 	default:
 		return OutcomeContinue
 	}
+}
+
+// Structured returns the captured StructuredOutput input and whether a
+// StructuredOutput call completed successfully this run (prompt.ts:1458-1462).
+func (p *Processor) Structured() (any, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.structured, p.hasStructured
 }
 
 func (p *Processor) handle(ctx context.Context, ev llm.Event) {
