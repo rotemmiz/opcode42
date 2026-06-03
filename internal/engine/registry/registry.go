@@ -19,7 +19,12 @@ import (
 type Flags struct {
 	// WebSearch enables the websearch tool (provider/flag-gated in opencode).
 	WebSearch bool
-	// LSP, RepoClone, RepoOverview, Plan are reserved for later milestones/plans.
+	// LSPTool enables the lsp tool. opencode gates it behind the
+	// OPENCODE_EXPERIMENTAL_LSP_TOOL env flag (registry.ts:264,
+	// runtime-flags.ts:47), so it is OFF by default; wire it from that env var to
+	// match opencode's default tool surface.
+	LSPTool bool
+	// RepoClone, RepoOverview, Plan are reserved for later milestones/plans.
 }
 
 // Registry holds the available tools.
@@ -81,6 +86,12 @@ func (r *Registry) active(in FilterInput) []string {
 			}
 		case "websearch":
 			if !in.Flags.WebSearch {
+				continue
+			}
+		case "lsp":
+			// Gated behind OPENCODE_EXPERIMENTAL_LSP_TOOL (registry.ts:264); off by
+			// default to match opencode's default tool surface.
+			if !in.Flags.LSPTool {
 				continue
 			}
 		}

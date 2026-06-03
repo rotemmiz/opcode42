@@ -176,6 +176,50 @@ func TestSpawnDedupAndDispose(t *testing.T) {
 	}
 }
 
+func TestHasClients(t *testing.T) {
+	dir := t.TempDir()
+	touch(t, dir, "go.mod")
+	goFile := touch(t, dir, "main.go")
+	mdFile := touch(t, dir, "README.md")
+
+	s := newSvc(t, dir, fakeResolver{gopls: "/usr/bin/gopls"})
+
+	// A .go file has a matching server (gopls) → true, no spawn required.
+	if !s.HasClients(goFile) {
+		t.Fatalf("HasClients(.go) = false, want true")
+	}
+	// No server matches .md → false.
+	if s.HasClients(mdFile) {
+		t.Fatalf("HasClients(.md) = true, want false")
+	}
+	// HasClients must not spawn anything.
+	if got := s.runningIDs(); len(got) != 0 {
+		t.Fatalf("HasClients spawned %v, want none", got)
+	}
+}
+
+func TestHasClients_BrokenSkipped(t *testing.T) {
+	dir := t.TempDir()
+	touch(t, dir, "go.mod")
+	goFile := touch(t, dir, "main.go")
+
+	// gopls unavailable → EnsureClients marks it broken; HasClients then skips it.
+	s := newSvc(t, dir, fakeResolver{gopls: ""})
+	_, _ = s.EnsureClients(goFile)
+	if s.HasClients(goFile) {
+		t.Fatalf("HasClients should be false once the only matching server is broken")
+	}
+}
+
+func TestHasClients_Disabled(t *testing.T) {
+	dir := t.TempDir()
+	goFile := touch(t, dir, "main.go")
+	s := NewService(dir, config.LSPConfig{}, fakeResolver{}) // LSP disabled
+	if s.HasClients(goFile) {
+		t.Fatalf("HasClients with LSP disabled should be false")
+	}
+}
+
 func mustUnmarshal(t *testing.T, v *config.LSPEntry, raw string) {
 	t.Helper()
 	if err := v.UnmarshalJSON([]byte(raw)); err != nil {

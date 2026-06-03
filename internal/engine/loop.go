@@ -116,6 +116,11 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 		}
 		executor.Subagent = e.cfg.Subagent
 		executor.Skiller = e.cfg.Skills
+		// Guard like Questions: a nil *lsp.Service must stay a nil interface so the
+		// lsp tool's `LSP == nil` check holds.
+		if e.cfg.LSP != nil {
+			executor.LSP = e.cfg.LSP
+		}
 		if e.cfg.MCP != nil {
 			executor.MCP = e.cfg.MCP
 		}

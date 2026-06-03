@@ -68,7 +68,7 @@ func TestLiveGopls(t *testing.T) {
 	// Touch the file in full mode and assert the compile error is surfaced.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	s.TouchFile(ctx, src, DiagModeFull)
+	s.TouchFile(ctx, src, string(DiagModeFull))
 
 	diags := s.Diagnostics()
 	got := diags[filepath.Clean(src)]

@@ -31,6 +31,9 @@ type Context struct {
 	// Skiller loads a named skill's instructions for the `skill` tool; nil when
 	// no skill source is available.
 	Skiller SkillSource
+	// LSP is the per-instance LSP service the `lsp` tool queries; nil when no LSP
+	// service is available (the tool then reports it is unavailable).
+	LSP LSPService
 }
 
 // Result is a tool's output. Output is the model-facing text; Title is a short

@@ -311,6 +311,36 @@ func (s *Service) spawn(def ServerDef, root string) (*handle, error) {
 	}, nil
 }
 
+// HasClients reports whether any active server would handle file, without
+// spawning. It mirrors opencode's hasClients (lsp.ts:330-344): for each server
+// whose extensions include file's extension (or has no extension filter), it
+// resolves the root and skips broken keys; the first match returns true. The
+// lsp tool uses this as a fast pre-check before TouchFile (tool/lsp.ts:77).
+func (s *Service) HasClients(file string) bool {
+	ext := filepath.Ext(file)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.disposed {
+		return false
+	}
+	for _, def := range s.servers {
+		// opencode: `if (server.extensions.length && !includes(extension)) continue`
+		// — a server with no extension filter matches everything.
+		if len(def.Extensions) > 0 && !def.matchesExtension(ext) {
+			continue
+		}
+		root := def.Root(file, s.directory)
+		if root == "" {
+			continue
+		}
+		if _, broken := s.broken[spawnKey(def.ID, root)]; broken {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 // StatusItem is one running server's wire status, matching opencode's LSPStatus
 // (lsp.ts:53-59 / openapi LSPStatus): id, name, root (relative to the instance
 // directory), and a connected/error status. Forge only retains connected
@@ -370,16 +400,18 @@ func (s *Service) runningIDs() []string {
 // TouchFile lazily spawns the matching servers for file (triggering the
 // handshake + lsp.updated), opens the file on each client, and — when mode is
 // non-empty — waits for that file's diagnostics. Ports LSP.touchFile
-// (lsp.ts:346-366). Errors opening/spawning are swallowed (best-effort, like
+// (lsp.ts:346-366). mode is a string ("", "document", "full") so the lsp tool
+// (which must not import this package's types) can satisfy its LSPService
+// interface directly. Errors opening/spawning are swallowed (best-effort, like
 // opencode's catch) so a flaky server doesn't fail the caller.
-func (s *Service) TouchFile(ctx context.Context, file string, mode DiagnosticsMode) {
+func (s *Service) TouchFile(ctx context.Context, file string, mode string) {
 	_, _ = s.EnsureClients(file)
 	for _, c := range s.clientsForFile(file) {
 		if _, err := c.Open(ctx, file); err != nil {
 			continue
 		}
 		if mode != "" {
-			c.WaitForDiagnostics(ctx, file, mode)
+			c.WaitForDiagnostics(ctx, file, DiagnosticsMode(mode))
 		}
 	}
 }

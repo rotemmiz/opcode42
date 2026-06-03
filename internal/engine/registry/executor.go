@@ -32,6 +32,9 @@ type Executor struct {
 	Subagent tool.SubagentRunner
 	// Skiller loads named skills for the `skill` tool (nil to disable).
 	Skiller tool.SkillSource
+	// LSP is the per-instance LSP service the `lsp` tool queries (nil to disable).
+	// Satisfied by *lsp.Service.
+	LSP tool.LSPService
 	// MCP dispatches MCP tool calls when a name isn't a built-in tool (nil ⇒ no
 	// MCP). Satisfied by *mcp.Manager.
 	MCP MCPCaller
@@ -108,6 +111,7 @@ func (e *Executor) Execute(ctx context.Context, call processor.ToolCall) (proces
 	res, err := t.Run(ctx, call.Input, tool.Context{
 		SessionID: call.SessionID, MessageID: call.MessageID, CallID: call.CallID,
 		Directory: e.Directory, Questioner: e.Questioner, Subagent: e.Subagent, Skiller: e.Skiller,
+		LSP: e.LSP,
 	})
 	if err != nil {
 		return processor.ToolResult{}, err
@@ -130,6 +134,10 @@ func permKeyPattern(name string, input map[string]any) (string, string) {
 		return permission.KeyGlob, str(input, "pattern")
 	case "grep":
 		return permission.KeyGrep, str(input, "pattern")
+	case "lsp":
+		// opencode gates the lsp tool with patterns/always "*" (tool/lsp.ts:56-61),
+		// regardless of operation — every lsp call asks the "lsp" permission.
+		return permission.KeyLSP, "*"
 	case "webfetch":
 		return permission.KeyWebFetch, str(input, "url")
 	case "websearch":
