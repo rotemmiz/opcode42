@@ -96,3 +96,5 @@ plugin, remote/tui). Start with a smaller fan-out (2–3) until the loop is prov
   - B2 LSP client/diagnostics (plan 03 M3-4) — agent ad34fce615fc99e3c — owns internal/lsp/, adds go.lsp.dev deps.
   - Track D dual-run + scenarios (plan 12 / 02 M11) — agent aeca38799e1407058 — owns conformance/, verifies Forge↔Gemini auth gap first.
   - Track F perf W0 (plan 11) — agent ac6050bd4aa832f21 — new bench harness, measures opencode baseline first.
+2026-06-03 B2 MERGED → #103 (a9ef55b): LSP JSON-RPC client + diagnostics, GET /lsp + lsp.updated SSE. Deps added: go.lsp.dev/{jsonrpc2,protocol,uri}. P03-M3-4 done.
+2026-06-03 B3 dispatched (sequential after B2) — agent a2a9cd5b66cb74d87 — LSP query ops + internal/engine/tool/lsp.go (operation enum, 1→0-based, HasClients). P03-M3-5.
