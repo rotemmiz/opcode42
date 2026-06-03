@@ -332,6 +332,11 @@ func (s *Service) Status() []StatusItem {
 	for _, h := range s.running {
 		root := h.root
 		if rel, err := filepath.Rel(s.directory, h.root); err == nil {
+			// opencode uses Node path.relative, which returns "" (not ".") when the
+			// root IS the instance directory. Match that exact wire value.
+			if rel == "." {
+				rel = ""
+			}
 			root = rel
 		}
 		out = append(out, StatusItem{
@@ -370,12 +375,11 @@ func (s *Service) runningIDs() []string {
 func (s *Service) TouchFile(ctx context.Context, file string, mode DiagnosticsMode) {
 	_, _ = s.EnsureClients(file)
 	for _, c := range s.clientsForFile(file) {
-		version, err := c.Open(ctx, file)
-		if err != nil {
+		if _, err := c.Open(ctx, file); err != nil {
 			continue
 		}
 		if mode != "" {
-			c.WaitForDiagnostics(ctx, file, mode, version)
+			c.WaitForDiagnostics(ctx, file, mode)
 		}
 	}
 }

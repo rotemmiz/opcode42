@@ -59,7 +59,9 @@ func TestLiveGopls(t *testing.T) {
 		t.Fatalf("Status should report exactly one server, got %v", status)
 	}
 	st := status[0]
-	if st.ID != "gopls" || st.Name != "gopls" || st.Status != "connected" || st.Root != "." {
+	// Root is "" (not ".") when the server root IS the instance dir, matching
+	// Node's path.relative used by opencode (lsp.ts:323).
+	if st.ID != "gopls" || st.Name != "gopls" || st.Status != "connected" || st.Root != "" {
 		t.Fatalf("unexpected status item: %+v", st)
 	}
 

@@ -126,7 +126,7 @@ func TestClientPullDiagnostics(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	c.WaitForDiagnostics(ctx, file, DiagModeDocument, 0)
+	c.WaitForDiagnostics(ctx, file, DiagModeDocument)
 
 	got := c.Diagnostics()[filepath.Clean(file)]
 	if len(got) != 1 || got[0].Message != "pull-err" {

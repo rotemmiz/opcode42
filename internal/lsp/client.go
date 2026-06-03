@@ -471,7 +471,7 @@ func (c *Client) Open(ctx context.Context, file string) (int32, error) {
 // timeout elapses. Ports client.ts waitForDocumentDiagnostics:540-560 /
 // waitForFullDiagnostics:562-582 (simplified: race a fresh-push wait against a
 // pull attempt, looping until matched or timeout).
-func (c *Client) WaitForDiagnostics(ctx context.Context, file string, mode DiagnosticsMode, version int32) {
+func (c *Client) WaitForDiagnostics(ctx context.Context, file string, mode DiagnosticsMode) {
 	abs := c.resolve(file)
 	deadline := diagnosticsDocumentWait
 	if mode == DiagModeFull {
@@ -492,21 +492,65 @@ func (c *Client) WaitForDiagnostics(ctx context.Context, file string, mode Diagn
 		if remaining <= 0 {
 			return
 		}
-		// Wait for a fresh push (then re-pull) or a registration change; on a bare
-		// timeout, stop.
-		if c.waitForFreshPush(ctx, abs, version, started, remaining) {
-			continue
-		}
-		if !c.waitForRegistrationChange(ctx, deadline-time.Since(started)) {
+		// Race a fresh push against a diagnostic-registration change. Only a
+		// registration change re-loops (it can enable a previously-unsupported
+		// pull); a fresh push has already populated pushDiags, and a bare timeout
+		// stops. This mirrors opencode's `next !== "registration"` return
+		// (client.ts:558,580) and — critically — avoids re-looping on the same
+		// stale push, which would busy-spin for a push-only server until deadline.
+		if c.waitForChange(ctx, abs, started, remaining) != changeRegistration {
 			return
 		}
+	}
+}
+
+// diagChange is the outcome of waiting for fresh diagnostics during a touch.
+type diagChange int
+
+const (
+	changeTimeout diagChange = iota
+	changePush
+	changeRegistration
+)
+
+// waitForChange waits until either a fresh push (newer than 'after', after the
+// debounce) arrives for file, or a diagnostic capability (un)registration
+// happens, or timeout. It returns which occurred. Ports the Promise.race of
+// pushWait vs waitForRegistrationChange (client.ts:554-557).
+func (c *Client) waitForChange(ctx context.Context, file string, after time.Time, timeout time.Duration) diagChange {
+	if timeout <= 0 {
+		return changeTimeout
+	}
+	pushCh := make(chan struct{}, 1)
+	regCh := make(chan struct{}, 1)
+	go func() {
+		if c.waitForFreshPush(ctx, file, after, timeout) {
+			pushCh <- struct{}{}
+		}
+	}()
+	go func() {
+		if c.waitForRegistrationChange(ctx, timeout) {
+			regCh <- struct{}{}
+		}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-pushCh:
+		return changePush
+	case <-regCh:
+		return changeRegistration
+	case <-timer.C:
+		return changeTimeout
+	case <-ctx.Done():
+		return changeTimeout
 	}
 }
 
 // waitForFreshPush waits until file's recorded push is at/after 'after' and the
 // debounce window has elapsed, or until the timeout. Returns true if a fresh
 // push arrived. Ports waitForFreshPush:503-538.
-func (c *Client) waitForFreshPush(ctx context.Context, file string, _ int32, after time.Time, timeout time.Duration) bool {
+func (c *Client) waitForFreshPush(ctx context.Context, file string, after time.Time, timeout time.Duration) bool {
 	if timeout <= 0 {
 		return false
 	}
