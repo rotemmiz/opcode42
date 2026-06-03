@@ -30,6 +30,7 @@ func registerPromptRoutes(reg func(method, path string, h http.HandlerFunc), opt
 	reg(http.MethodPost, "/session/{sessionID}/prompt_async", promptHandler(opts, true))
 	reg(http.MethodGet, "/session/{sessionID}/message", listMessagesHandler(opts))
 	reg(http.MethodPost, "/session/{sessionID}/abort", abortHandler(opts))
+	reg(http.MethodPost, "/session/{sessionID}/summarize", summarizeHandler(opts))
 }
 
 // promptBody is the POST /session/:id/message request shape (openapi).
@@ -201,6 +202,57 @@ func promptHandler(opts Options, async bool) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+// summarizeBody is the POST /session/:id/summarize request shape (openapi
+// session.summarize): {providerID, modelID, auto?}.
+type summarizeBody struct {
+	ProviderID string `json:"providerID"`
+	ModelID    string `json:"modelID"`
+	Auto       bool   `json:"auto"`
+}
+
+// summarizeHandler runs an explicit AI compaction of the session and returns
+// `true` (handlers/session.ts:264-283). It mirrors opencode: resolve the
+// session's current agent, enqueue a compaction task, run the loop (which emits
+// session.compacted), and respond 200 with the boolean.
+func summarizeHandler(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID := chi.URLParam(r, "sessionID")
+		if !requireSession(w, r, opts, sessionID) {
+			return
+		}
+		var body summarizeBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "BadRequest", "invalid JSON body")
+			return
+		}
+		if body.ProviderID == "" || body.ModelID == "" {
+			writeError(w, http.StatusBadRequest, "BadRequest", "providerID and modelID are required")
+			return
+		}
+		directory := DirectoryFromContext(r.Context())
+		inst := opts.Instances.Get(directory)
+		agent := resolveAgent(directory, "")
+		runner := subagentRunner{opts: opts, inst: inst, directory: directory,
+			provider: body.ProviderID, model: body.ModelID}
+		eng := buildEngine(opts, inst, directory, agentRulesets(agent), runner, agentMaxSteps(agent), opts.Sessions)
+
+		runCtx := context.WithoutCancel(r.Context())
+		err := eng.Summarize(runCtx, engine.SummarizeInput{
+			SessionID: sessionID, Provider: body.ProviderID, Model: body.ModelID,
+		})
+		if err != nil {
+			var busy *runstate.BusyError
+			if errors.As(err, &busy) {
+				writeError(w, http.StatusConflict, "BusyError", err.Error())
+				return
+			}
+			writeError(w, http.StatusBadRequest, "BadRequest", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, true)
 	}
 }
 

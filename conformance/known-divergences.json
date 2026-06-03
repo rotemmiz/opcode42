@@ -12,8 +12,9 @@
   },
   {
     "scenario": "provider-oauth",
-    "phase": "A-B",
-    "reason": "OAuth provider auth flow deferred; /provider/:id/oauth/authorize not implemented"
+    "phase": "B",
+    "reason": "Provider OAuth is implemented for built-in providers (plan 13, #109): PKCE auth-code flow over a shared 127.0.0.1 loopback callback with CSRF state, token exchange → shared auth.json (xAI is the first provider; --oauth-callback-proxy-url for headless). Not yet byte-parity-gated by a dual-run scenario (the flow opens a browser + needs live provider creds). Deferred: token refresh and additional providers.",
+    "track": "done for built-in providers (plan 13); refresh + more providers later"
   },
   {
     "scenario": "provider-list",
@@ -60,8 +61,8 @@
   {
     "scenario": "provider-auth",
     "phase": "C",
-    "reason": "Credential CRUD is implemented: PUT/DELETE /auth/{providerID} read+write opencode's shared ~/.local/share/opencode/auth.json (api/oauth/wellknown records), so a key added in Forge flips /provider.connected and is shared with opencode. Deferred: GET /provider/auth (the per-provider auth-method listing) and the OAuth flow (POST /provider/:id/oauth/authorize + /callback) remain 501 — OAuth is provider-specific and intricate.",
-    "track": "TODO: GET /provider/auth method listing + OAuth authorize/callback (plan 04 M7/M8)"
+    "reason": "Credential CRUD is implemented: PUT/DELETE /auth/{providerID} read+write opencode's shared ~/.local/share/opencode/auth.json (api/oauth/wellknown records), so a key added in Forge flips /provider.connected and is shared with opencode. The OAuth authorize/callback flow is now implemented for built-in providers (plan 13, #109: PKCE auth-code over a shared loopback callback, token exchange → auth.json). Deferred: GET /provider/auth (the per-provider auth-method listing), token refresh, and additional OAuth providers.",
+    "track": "OAuth done for built-in providers (plan 13); GET /provider/auth method listing + refresh later (plan 04 M7/M8)"
   },
   {
     "scenario": "websearch-tool",

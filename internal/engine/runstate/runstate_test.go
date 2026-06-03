@@ -3,6 +3,7 @@ package runstate
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -75,6 +76,66 @@ func TestCancel_InterruptsRun(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("cancel did not interrupt the run")
+	}
+}
+
+// TestEnsureRunning_HooksFireOncePerRun verifies OnBusy fires before work and
+// OnIdle after it completes, exactly once each, for the run that actually starts.
+func TestEnsureRunning_HooksFireOncePerRun(t *testing.T) {
+	rs := New()
+	var busy, idle int32
+	var order []string
+	var mu sync.Mutex
+	record := func(s string) { mu.Lock(); order = append(order, s); mu.Unlock() }
+
+	_, err := rs.EnsureRunning(context.Background(), "ses_1",
+		func(context.Context) (message.WithParts, error) {
+			record("work")
+			return message.WithParts{}, nil
+		},
+		Hooks{
+			OnBusy: func() { atomic.AddInt32(&busy, 1); record("busy") },
+			OnIdle: func() { atomic.AddInt32(&idle, 1); record("idle") },
+		})
+	if err != nil {
+		t.Fatalf("EnsureRunning err: %v", err)
+	}
+	if b, i := atomic.LoadInt32(&busy), atomic.LoadInt32(&idle); b != 1 || i != 1 {
+		t.Fatalf("hooks fired busy=%d idle=%d, want 1/1", b, i)
+	}
+	mu.Lock()
+	got := strings.Join(order, ",")
+	mu.Unlock()
+	if got != "busy,work,idle" {
+		t.Fatalf("hook order = %q, want busy,work,idle", got)
+	}
+}
+
+// TestEnsureRunning_HooksNotReFiredForCoalesced verifies a caller that joins an
+// in-flight run does not re-fire busy/idle (only the run that starts owns them).
+func TestEnsureRunning_HooksNotReFiredForCoalesced(t *testing.T) {
+	rs := New()
+	var busy int32
+	release := make(chan struct{})
+	work := func(context.Context) (message.WithParts, error) {
+		<-release
+		return message.WithParts{}, nil
+	}
+	hooks := Hooks{OnBusy: func() { atomic.AddInt32(&busy, 1) }}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = rs.EnsureRunning(context.Background(), "ses_1", work, hooks)
+		}()
+	}
+	time.Sleep(20 * time.Millisecond)
+	close(release)
+	wg.Wait()
+	if b := atomic.LoadInt32(&busy); b != 1 {
+		t.Fatalf("OnBusy fired %d times, want 1 (coalesced callers must not re-fire)", b)
 	}
 }
 

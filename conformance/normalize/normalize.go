@@ -226,6 +226,46 @@ func (n *Normalizer) NormalizeJSON(data []byte) ([]byte, error) {
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
+// NormalizeSetJSON is NormalizeJSON for a response whose top-level value is a
+// non-deterministic accumulating LIST — specifically GET /session, which opencode
+// serves as a GLOBAL list spanning every directory and grows as sibling scenarios
+// (and prior daemon state) create sessions (see confDirRe note; scenario.go's
+// session-list note). After per-field normalization every session entry collapses
+// to the SAME placeholder object, so the only thing that varies run-to-run is the
+// element COUNT — a harness artifact, not a wire signal. Collapsing the array to
+// its set of DISTINCT normalized entries (sorted canonically) removes that count
+// non-determinism while preserving the real check: the created session's shape.
+// A genuinely different entry shape changes the set and still fails. Non-array
+// roots fall back to plain NormalizeJSON.
+func (n *Normalizer) NormalizeSetJSON(data []byte) ([]byte, error) {
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		return nil, err
+	}
+	v = n.Normalize(v)
+	if arr, ok := v.([]any); ok {
+		seen := map[string]bool{}
+		uniq := make([]any, 0, len(arr))
+		for _, el := range arr {
+			c := canonical(el)
+			if seen[c] {
+				continue
+			}
+			seen[c] = true
+			uniq = append(uniq, el)
+		}
+		sort.Slice(uniq, func(i, j int) bool { return canonical(uniq[i]) < canonical(uniq[j]) })
+		v = uniq
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
 // NormalizeSSE parses an SSE response body (a sequence of "data: {...}" lines)
 // and returns the normalized, canonical JSON for each event in order. Non-data
 // lines (event:, id:, comments, blanks) are ignored.

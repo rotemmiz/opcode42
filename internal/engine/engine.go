@@ -23,6 +23,7 @@ import (
 	"github.com/rotemmiz/forge/internal/id"
 	"github.com/rotemmiz/forge/internal/lsp"
 	"github.com/rotemmiz/forge/internal/mcp"
+	"github.com/rotemmiz/forge/internal/worktree"
 )
 
 // ProviderFactory builds a streaming provider for a provider/model pair (e.g. an
@@ -100,6 +101,11 @@ type TitleSetter interface {
 // Engine runs prompts for one instance (working directory).
 type Engine struct {
 	cfg Config
+	// root is the VCS worktree enclosing cfg.Directory ("/" for a non-git dir),
+	// stamped onto every assistant message's path.root to mirror opencode's
+	// path: { cwd: ctx.directory, root: ctx.worktree } (prompt.ts:1354). Computed
+	// once at construction rather than stat'ing the filesystem per turn.
+	root string
 }
 
 // New builds an Engine, defaulting the run state if unset.
@@ -107,7 +113,7 @@ func New(cfg Config) *Engine {
 	if cfg.RunState == nil {
 		cfg.RunState = runstate.New()
 	}
-	return &Engine{cfg: cfg}
+	return &Engine{cfg: cfg, root: worktree.Root(cfg.Directory)}
 }
 
 // PartInput is a draft part on a prompt (id/messageID are server-allocated).
@@ -171,11 +177,78 @@ func (e *Engine) Prompt(ctx context.Context, in PromptInput) (message.WithParts,
 	return e.Loop(ctx, in.SessionID)
 }
 
-// Loop runs the agent loop under the session run lock (idempotent).
+// Loop runs the agent loop under the session run lock (idempotent). The run-lock
+// busy/idle transitions drive the session.status (+ deprecated session.idle) SSE
+// events, mirroring opencode's run-state onBusy/onIdle (run-state.ts:58-63,
+// status.ts:77-86).
 func (e *Engine) Loop(ctx context.Context, sessionID string) (message.WithParts, error) {
 	return e.cfg.RunState.EnsureRunning(ctx, sessionID, func(runCtx context.Context) (message.WithParts, error) {
 		return e.runLoop(runCtx, sessionID)
+	}, runstate.Hooks{
+		OnBusy: func() { e.emitStatus(sessionID, "busy") },
+		OnIdle: func() { e.emitStatus(sessionID, "idle") },
 	})
+}
+
+// SummarizeInput requests an explicit (user-driven) compaction of a session.
+type SummarizeInput struct {
+	SessionID string
+	Provider  string
+	Model     string
+	// Agent overrides the agent used for the summary turn; when empty the
+	// session's last-user agent (or "build") is used (handlers/session.ts:271-272).
+	Agent string
+}
+
+// Summarize runs an explicit AI compaction of the session, mirroring opencode's
+// summarize handler (handlers/session.ts:264-283): it enqueues a non-auto
+// compaction task and runs the loop, which produces the summary:true assistant
+// message and emits session.compacted.
+func (e *Engine) Summarize(ctx context.Context, in SummarizeInput) error {
+	if in.Provider == "" || in.Model == "" {
+		return fmt.Errorf("summarize: provider and model are required")
+	}
+	agent := in.Agent
+	if agent == "" {
+		agent = e.lastUserAgent(ctx, in.SessionID)
+	}
+	model := message.Model{ProviderID: in.Provider, ModelID: in.Model}
+	if err := e.createCompaction(ctx, in.SessionID, model, agent, false, false); err != nil {
+		return err
+	}
+	_, err := e.Loop(ctx, in.SessionID)
+	return err
+}
+
+// lastUserAgent returns the agent of the session's most recent user message, or
+// "build" when none is found (matches opencode's defaultAgent fallback).
+func (e *Engine) lastUserAgent(ctx context.Context, sessionID string) string {
+	msgs, err := e.cfg.Store.Stream(ctx, sessionID) // newest-first
+	if err == nil {
+		for _, m := range msgs {
+			if m.Info.User != nil && m.Info.User.Agent != "" {
+				return m.Info.User.Agent
+			}
+		}
+	}
+	return "build"
+}
+
+// emitStatus publishes session.status with the given status type and, when idle,
+// the deprecated session.idle event opencode still emits (status.ts:79-82).
+func (e *Engine) emitStatus(sessionID, statusType string) {
+	if e.cfg.Bus == nil {
+		return
+	}
+	e.cfg.Bus.Publish(bus.NewEvent("session.status", map[string]any{
+		"sessionID": sessionID,
+		"status":    map[string]any{"type": statusType},
+	}))
+	if statusType == "idle" {
+		e.cfg.Bus.Publish(bus.NewEvent("session.idle", map[string]any{
+			"sessionID": sessionID,
+		}))
+	}
 }
 
 // Cancel interrupts a session's active run.

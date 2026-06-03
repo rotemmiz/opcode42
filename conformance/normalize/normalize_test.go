@@ -234,3 +234,59 @@ func TestNormalizeSSE(t *testing.T) {
 		t.Errorf("event 0:\n want %s\n got  %s", want0, events[0])
 	}
 }
+
+func TestNormalizeSetJSONDedupsIdenticalSessionEntries(t *testing.T) {
+	n := New()
+	// A global session list whose entries differ only by volatile fields (id,
+	// slug, created) — after normalization they are identical, so the set
+	// collapses to one entry regardless of how many sessions accumulated.
+	twoEntries := `[
+		{"id":"ses_01JCABCDEFGHJKMNPQRSTVWXYZ","slug":"happy-eagle","time":{"created":1717000000000}},
+		{"id":"ses_01JCABCDEFGHJKMNPQRSTVWXY0","slug":"brave-otter","time":{"created":1717000001000}}
+	]`
+	sevenEntries := `[
+		{"id":"ses_01JD000000000000000000000A","slug":"a-a","time":{"created":1717000002000}},
+		{"id":"ses_01JD000000000000000000000B","slug":"b-b","time":{"created":1717000003000}},
+		{"id":"ses_01JD000000000000000000000C","slug":"c-c","time":{"created":1717000004000}}
+	]`
+	a, err := n.NormalizeSetJSON([]byte(twoEntries))
+	if err != nil {
+		t.Fatalf("NormalizeSetJSON(two): %v", err)
+	}
+	b, err := n.NormalizeSetJSON([]byte(sevenEntries))
+	if err != nil {
+		t.Fatalf("NormalizeSetJSON(three): %v", err)
+	}
+	if string(a) != string(b) {
+		t.Errorf("different-count lists of identical entries must normalize equal:\n %s\n %s", a, b)
+	}
+	// And the collapsed set is a single entry (the placeholder shape).
+	var arr []any
+	if err := json.Unmarshal(a, &arr); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(arr) != 1 {
+		t.Fatalf("set must collapse identical entries to 1, got %d", len(arr))
+	}
+}
+
+func TestNormalizeSetJSONKeepsDistinctEntries(t *testing.T) {
+	n := New()
+	// Two entries that differ in a STRUCTURAL field (title) stay distinct, so a
+	// genuine shape difference is not masked by the set normalization.
+	in := `[
+		{"id":"ses_01JCABCDEFGHJKMNPQRSTVWXYZ","title":"alpha"},
+		{"id":"ses_01JCABCDEFGHJKMNPQRSTVWXY0","title":"beta"}
+	]`
+	out, err := n.NormalizeSetJSON([]byte(in))
+	if err != nil {
+		t.Fatalf("NormalizeSetJSON: %v", err)
+	}
+	var arr []any
+	if err := json.Unmarshal(out, &arr); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(arr) != 2 {
+		t.Fatalf("distinct entries must be preserved, got %d", len(arr))
+	}
+}

@@ -159,7 +159,7 @@ func (c *Client) Probe(stepName, method, path string, o ReqOpts) (result.Step, e
 		Method: method,
 		Path:   c.Norm.Path(path),
 		Status: resp.StatusCode,
-		Body:   c.normalizeBody(respBody),
+		Body:   c.normalizeBody(method, path, respBody),
 	}
 	if len(o.Capture) > 0 {
 		step.Headers = map[string]string{}
@@ -221,13 +221,29 @@ func (c *Client) SSE(stepName, path string, wait time.Duration, maxEvents int) (
 }
 
 // normalizeBody normalizes a JSON response body; non-JSON bodies are returned
-// trimmed and verbatim.
-func (c *Client) normalizeBody(raw []byte) string {
+// trimmed and verbatim. The GET /session list is a global, accumulating list
+// whose element COUNT is non-deterministic run-to-run (every entry normalizes to
+// the same placeholder object), so it is set-normalized (dedup distinct entries)
+// to keep the self-diff stable — see Normalizer.NormalizeSetJSON.
+func (c *Client) normalizeBody(method, path string, raw []byte) string {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return ""
 	}
-	if norm, err := c.Norm.NormalizeJSON(raw); err == nil {
-		return string(norm)
+	norm := c.Norm.NormalizeJSON
+	if method == http.MethodGet && sessionListPath(path) {
+		norm = c.Norm.NormalizeSetJSON
+	}
+	if out, err := norm(raw); err == nil {
+		return string(out)
 	}
 	return strings.TrimSpace(string(raw))
+}
+
+// sessionListPath reports whether path is the global session-list endpoint
+// (GET /session), ignoring any query string (e.g. ?directory=...).
+func sessionListPath(path string) bool {
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		path = path[:i]
+	}
+	return path == "/session"
 }

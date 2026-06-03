@@ -23,6 +23,16 @@ func (e *BusyError) Error() string { return fmt.Sprintf("session %s is busy", e.
 // Work is the unit a run executes: the loop body, returning the final message.
 type Work func(ctx context.Context) (message.WithParts, error)
 
+// Hooks observe a run's busy/idle lifecycle. OnBusy fires once, when this run
+// actually starts (not for coalesced callers that join an in-flight run); OnIdle
+// fires once, when it completes. They mirror opencode's runner onBusy/onIdle
+// (run-state.ts:58-63), which drive the session.status / session.idle SSE events.
+// Both are optional.
+type Hooks struct {
+	OnBusy func()
+	OnIdle func()
+}
+
 // RunState tracks active runs keyed by session id.
 type RunState struct {
 	mu     sync.Mutex
@@ -41,8 +51,10 @@ func New() *RunState { return &RunState{active: map[string]*sessionRun{}} }
 
 // EnsureRunning runs work under the session's run lock. If a run is already
 // active for the session, it waits for and returns that run's result instead of
-// starting a new one (idempotent — concurrent prompts coalesce).
-func (rs *RunState) EnsureRunning(parent context.Context, sessionID string, work Work) (message.WithParts, error) {
+// starting a new one (idempotent — concurrent prompts coalesce). Optional hooks
+// observe the busy/idle transitions of the run this call actually starts;
+// coalesced callers that join an in-flight run do not re-fire them.
+func (rs *RunState) EnsureRunning(parent context.Context, sessionID string, work Work, hooks ...Hooks) (message.WithParts, error) {
 	rs.mu.Lock()
 	if run, ok := rs.active[sessionID]; ok {
 		rs.mu.Unlock()
@@ -54,9 +66,22 @@ func (rs *RunState) EnsureRunning(parent context.Context, sessionID string, work
 	rs.active[sessionID] = run
 	rs.mu.Unlock()
 
+	var h Hooks
+	if len(hooks) > 0 {
+		h = hooks[0]
+	}
+	if h.OnBusy != nil {
+		h.OnBusy()
+	}
+
 	go func() {
 		defer close(run.done)
 		defer cancel()
+		// onIdle fires after the run completes and the slot is cleared, mirroring
+		// opencode's runner.onIdle ordering (run-state.ts:59-61).
+		if h.OnIdle != nil {
+			defer h.OnIdle()
+		}
 		run.result, run.err = work(ctx)
 		rs.mu.Lock()
 		// Only clear if still ours (a later run could have replaced us after done).

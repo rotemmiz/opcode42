@@ -143,9 +143,9 @@ Rules:
 
 // createCompaction appends a compaction user message (the "task" the loop picks
 // up on its next iteration) modeled on the most recent real user message
-// (compaction.ts create). overflow marks an auto-compaction forced by context
-// overflow.
-func (e *Engine) createCompaction(ctx context.Context, sessionID string, model message.Model, agent string, overflow bool) error {
+// (compaction.ts create). auto marks an automatic (overflow-driven) compaction
+// vs an explicit user-requested summarize; overflow marks the overflow trigger.
+func (e *Engine) createCompaction(ctx context.Context, sessionID string, model message.Model, agent string, auto, overflow bool) error {
 	now := time.Now().UnixMilli()
 	u := &message.UserMessage{ID: id.Ascending(id.Message), SessionID: sessionID, Role: message.RoleUser, Agent: agent, Model: model}
 	u.Time.Created = now
@@ -155,7 +155,7 @@ func (e *Engine) createCompaction(ctx context.Context, sessionID string, model m
 	e.emitMessage(message.Info{User: u})
 	part := &message.CompactionPart{
 		PartBase: message.PartBase{ID: id.Ascending(id.Part), SessionID: sessionID, MessageID: u.ID},
-		Type:     "compaction", Auto: true, Overflow: overflow,
+		Type:     "compaction", Auto: auto, Overflow: overflow,
 	}
 	if err := e.cfg.Store.PutPart(ctx, part); err != nil {
 		return err
@@ -200,7 +200,9 @@ func (e *Engine) processCompaction(ctx context.Context, sessionID string, filter
 	summary := &message.AssistantMessage{
 		ID: id.Ascending(id.Message), SessionID: sessionID, Role: message.RoleAssistant,
 		ParentID: compactionUser.ID, ProviderID: providerID, ModelID: modelID,
-		Agent: "compaction", Summary: true, Path: message.Path{CWD: e.cfg.Directory, Root: e.cfg.Directory},
+		// mode "compaction" mirrors opencode's summary message (compaction.ts:416-417).
+		Mode:  "compaction",
+		Agent: "compaction", Summary: true, Path: message.Path{CWD: e.cfg.Directory, Root: e.root},
 	}
 	summary.Time.Created = time.Now().UnixMilli()
 	if err := e.cfg.Store.PutMessage(ctx, message.Info{Assistant: summary}); err != nil {

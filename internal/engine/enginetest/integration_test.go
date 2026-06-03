@@ -268,6 +268,70 @@ func TestE2E_ToolCall(t *testing.T) {
 	}
 }
 
+// Scenario 3 (M11): a prompt emits the run-lock lifecycle SSE — session.status
+// (busy) once the run starts and session.idle (+ a final session.status idle)
+// when it completes — mirroring opencode's run-state onBusy/onIdle
+// (run-state.ts:58-63, status.ts:77-86). The assistant message also carries the
+// resolved agent as mode and the worktree root as path.root.
+func TestE2E_SessionStatusLifecycle(t *testing.T) {
+	script := NewScript().StepStart().Text("t1", "ok").
+		StepFinish("stop", llm.TokenUsage{Input: 1, Output: 1}).Finish().Events()
+	r := newRig(t, script)
+
+	out := r.prompt(t, "hello")
+	events := r.drain()
+	types := eventTypes(events)
+	t.Logf("SSE lifecycle: %v", types)
+
+	// Exactly one session.idle (terminal), at least one session.status (busy +
+	// idle), and ordering: busy precedes idle, idle is the last lifecycle event.
+	if countType(events, "session.idle") != 1 {
+		t.Fatalf("want 1 session.idle, got %d (%v)", countType(events, "session.idle"), types)
+	}
+	if countType(events, "session.status") < 1 {
+		t.Fatalf("want >=1 session.status, got %d", countType(events, "session.status"))
+	}
+	firstBusy, lastIdle := -1, -1
+	for i, e := range events {
+		if e.Type == "session.status" {
+			if props, ok := e.Properties.(map[string]any); ok {
+				if st, _ := props["status"].(map[string]any); st != nil && st["type"] == "busy" && firstBusy < 0 {
+					firstBusy = i
+				}
+			}
+		}
+		if e.Type == "session.idle" {
+			lastIdle = i
+		}
+	}
+	if firstBusy < 0 {
+		t.Fatalf("no session.status{busy} emitted: %v", types)
+	}
+	if lastIdle < firstBusy {
+		t.Fatalf("session.idle (%d) must follow session.status{busy} (%d)", lastIdle, firstBusy)
+	}
+	if lastIdle != len(events)-1 {
+		t.Fatalf("session.idle must be the last event, got index %d of %d", lastIdle, len(events))
+	}
+
+	// Assistant carries mode = agent name (default "build") and path.root = "/"
+	// (the temp dir is not a git worktree), mirroring opencode.
+	a := out.Info.Assistant
+	if a == nil || a.Mode != "build" {
+		t.Fatalf("assistant mode = %q, want build", modeOf(a))
+	}
+	if a.Path.Root != "/" {
+		t.Fatalf("assistant path.root = %q, want / (non-git temp dir)", a.Path.Root)
+	}
+}
+
+func modeOf(a *message.AssistantMessage) string {
+	if a == nil {
+		return "<nil>"
+	}
+	return a.Mode
+}
+
 func hasToolResult(msgs []llm.ModelMessage) bool {
 	for _, m := range msgs {
 		for _, c := range m.Content {

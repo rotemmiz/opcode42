@@ -220,7 +220,7 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 		case processor.OutcomeCompact:
 			// Context overflowed: enqueue an auto-compaction task; the next
 			// iteration summarizes the head and resumes (compaction.ts).
-			if err := e.createCompaction(ctx, sessionID, latest.User.Model, latest.User.Agent, true); err != nil {
+			if err := e.createCompaction(ctx, sessionID, latest.User.Model, latest.User.Agent, true, true); err != nil {
 				return e.withParts(ctx, assistant), err
 			}
 			continue
@@ -248,7 +248,10 @@ func (e *Engine) newAssistant(sessionID string, user *message.UserMessage) *mess
 	a := &message.AssistantMessage{
 		ID: id.Ascending(id.Message), SessionID: sessionID, Role: message.RoleAssistant,
 		ParentID: user.ID, ProviderID: user.Model.ProviderID, ModelID: user.Model.ModelID,
-		Agent: user.Agent, Path: message.Path{CWD: e.cfg.Directory, Root: e.cfg.Directory},
+		// mode mirrors opencode's assistant.mode = agent.name (prompt.ts:1351); the
+		// user message's resolved agent is the run's mode.
+		Mode:  user.Agent,
+		Agent: user.Agent, Path: message.Path{CWD: e.cfg.Directory, Root: e.root},
 	}
 	a.Time.Created = time.Now().UnixMilli()
 	return a

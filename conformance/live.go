@@ -28,22 +28,40 @@ const (
 )
 
 // liveEventCatalog is the set of SSE event TYPES the live dual-run compares. It
-// is intentionally the INTERSECTION of what both daemons emit during a prompt —
-// the core message/part/permission lifecycle that Forge and opencode share. It
-// deliberately excludes opencode's richer session.next.* telemetry events
-// (session.next.step.started, .text.started, .tool.called, …), which Forge does
-// not emit: the authoritative cross-daemon SSE catalog is an open contract
-// question (tasks/progress.md "Ambiguities" #2), so a full-stream equality diff
-// is not yet a valid gate. Capturing only the shared catalog keeps the live diff
-// honest — it asserts the lifecycle both daemons agree on without failing on the
-// telemetry gap. Expand this set (and re-baseline) once #2 is resolved.
+// is the SHARED lifecycle catalog — the subset of opencode's authoritative SSE
+// event catalog (enumerated from openapi.json's Event union; see
+// TestLiveEventCatalogIsAuthoritative in catalog_test.go) that Forge's engine
+// also emits for the core agent flow. The cross-daemon diff asserts these event
+// kinds appear in the same order on both daemons.
+//
+// Ambiguity #2 ("cassettes vs masterplan list") is RESOLVED: opencode source is
+// authoritative (the openapi Event union, generated from the Bus/sync event
+// definitions). This set is gated against that catalog — every entry here must
+// be a real opencode event type, enforced by the catalog test. It deliberately
+// EXCLUDES opencode's experimental session.next.* telemetry stream
+// (session-event.ts; gated behind opencode's experimentalEventSystem flag and
+// not part of the stable wire contract Forge targets), which Forge does not
+// emit. Those are tracked as a known, intentional divergence (catalog_test.go +
+// the live divergence registry), not faked.
+//
+// session.status is INTENTIONALLY omitted from the ordering diff even though
+// Forge now emits it (and the catalog test asserts it is authoritative): opencode
+// re-publishes session.status{busy} at the TOP of every loop iteration
+// (prompt.ts:1253, status.ts:77 publishes unconditionally), so on a multi-step
+// run it appears repeatedly, NON-consecutively, interleaved with message events.
+// The tap collapses only CONSECUTIVE duplicates, so gating session.status would
+// make ordering diff on every tool-call turn count — a harness artifact, not a
+// wire divergence. session.idle (terminal, fires once) and session.compacted
+// (fires once on summarize) are the safe, deterministic lifecycle markers to gate.
 var liveEventCatalog = map[string]bool{
+	"session.idle":         true,
 	"message.updated":      true,
 	"message.part.updated": true,
 	"permission.asked":     true,
 	"permission.replied":   true,
 	"question.asked":       true,
 	"question.replied":     true,
+	"session.compacted":    true,
 }
 
 // LiveScenario is one named live-prompt interaction. Like Scenario it records
