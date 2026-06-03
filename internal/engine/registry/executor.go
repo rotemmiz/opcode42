@@ -43,8 +43,11 @@ type Executor struct {
 }
 
 // MCPCaller dispatches a flattened MCP tool name; found is false when no MCP
-// tool matches the name.
+// tool matches the name. HasTool reports whether a name resolves to a connected
+// MCP tool, so the executor can run the permission gate (and report "unknown
+// tool" for a genuine miss) before dispatching.
 type MCPCaller interface {
+	HasTool(ctx context.Context, name string) bool
 	CallTool(ctx context.Context, name string, args map[string]any) (output string, found bool, err error)
 }
 
@@ -64,9 +67,23 @@ func (e *Executor) Execute(ctx context.Context, call processor.ToolCall) (proces
 	}
 	t, ok := e.Registry.Get(call.Name)
 	if !ok {
-		// Not a built-in: try the instance's MCP tools.
+		// Not a built-in: try the instance's MCP tools. opencode gates MCP tool
+		// execution through the same permission ask path as built-ins, keyed on
+		// the flattened tool name with patterns/always "*" (session/tools.ts:135).
+		// The gate runs only once the name resolves to a real MCP tool, so a
+		// genuinely-unknown name still falls through to "unknown tool".
 		if e.MCP != nil {
-			if out, found, err := e.MCP.CallTool(ctx, call.Name, call.Input); found {
+			if e.MCP.HasTool(ctx, call.Name) {
+				if e.Asker != nil {
+					if err := e.Asker.Ask(ctx, permission.AskInput{
+						SessionID: call.SessionID, Permission: call.Name, Patterns: []string{"*"},
+						Always: []string{"*"}, Rulesets: e.Rulesets, Tool: call.Name,
+						Metadata: map[string]any{"tool": call.Name, "sessionID": call.SessionID},
+					}); err != nil {
+						return processor.ToolResult{}, err
+					}
+				}
+				out, _, err := e.MCP.CallTool(ctx, call.Name, call.Input)
 				if err != nil {
 					return processor.ToolResult{}, err
 				}

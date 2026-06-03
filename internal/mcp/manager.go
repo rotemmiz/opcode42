@@ -11,6 +11,7 @@ import (
 	"time"
 
 	mcpgo "github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -46,6 +47,7 @@ type conn interface {
 	Initialize(ctx context.Context, req mcp.InitializeRequest) (*mcp.InitializeResult, error)
 	ListTools(ctx context.Context, req mcp.ListToolsRequest) (*mcp.ListToolsResult, error)
 	CallTool(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error)
+	OnNotification(handler func(mcp.JSONRPCNotification))
 	Close() error
 }
 
@@ -54,7 +56,13 @@ type conn interface {
 // instance's lifetime.
 type Manager struct {
 	servers map[string]Server
-	dial    func(ctx context.Context, s Server) (conn, error)
+	// dial connects a server's transport. ready reports whether the returned
+	// conn is already Started+Initialized (remote, which must handshake to pick a
+	// transport) so dialAndList does not re-Initialize it.
+	dial func(ctx context.Context, s Server) (c conn, ready bool, err error)
+	// bus, when set, receives mcp.tools.changed events when a connected server's
+	// tool list changes (nil in unit tests that don't assert the event).
+	bus eventPublisher
 
 	once    sync.Once
 	mu      sync.Mutex
@@ -64,9 +72,39 @@ type Manager struct {
 	tools   map[string][]mcp.Tool // server name → its tools
 }
 
+// eventPublisher is the subset of *bus.Bus the manager needs to emit
+// mcp.tools.changed (kept as an interface to avoid an import cycle and to let
+// tests substitute a recorder).
+type eventPublisher interface {
+	Publish(typ string, props any)
+}
+
 // NewManager builds a manager for the given server configs.
 func NewManager(servers map[string]Server) *Manager {
-	return &Manager{servers: servers, dial: stdioDial}
+	return &Manager{servers: servers, dial: dialTransport}
+}
+
+// WithBus attaches an event publisher so the manager emits mcp.tools.changed
+// when a connected server notifies that its tool list changed. Returns the
+// manager for chaining at construction time.
+func (m *Manager) WithBus(b eventPublisher) *Manager {
+	m.bus = b
+	return m
+}
+
+// SetDialForTest substitutes the transport dialer with one returning an mcp-go
+// client (e.g. an in-process server), so tests outside this package — notably
+// the plan-12 conformance assertion — can exercise the manager without spawning
+// a real subprocess. ready reports whether the client is already
+// Started+Initialized. Test-only; not used in production paths.
+func SetDialForTest(m *Manager, dial func(ctx context.Context, s Server) (c *mcpgo.Client, ready bool, err error)) {
+	m.dial = func(ctx context.Context, s Server) (conn, bool, error) {
+		c, ready, err := dial(ctx, s)
+		if err != nil {
+			return nil, false, err
+		}
+		return c, ready, nil
+	}
 }
 
 // Status connects (once) and returns each server's status.
@@ -104,7 +142,7 @@ func (m *Manager) connect(ctx context.Context) {
 				status[name] = Status{Status: "disabled"}
 				continue
 			}
-			c, tl, err := m.dialAndList(ctx, s)
+			c, tl, err := m.dialAndList(ctx, name, s)
 			if err != nil {
 				status[name] = Status{Status: "failed", Error: errString(err)}
 				continue
@@ -135,8 +173,11 @@ func errString(err error) string {
 	return "connection failed"
 }
 
-// dialAndList connects, initializes, and lists a server's tools.
-func (m *Manager) dialAndList(ctx context.Context, s Server) (conn, []mcp.Tool, error) {
+// dialAndList connects, initializes, and lists a server's tools. When dial
+// already handshook the connection (ready), the Start/Initialize here is
+// skipped so a remote transport isn't initialized twice (some servers reject a
+// second `initialize`).
+func (m *Manager) dialAndList(ctx context.Context, name string, s Server) (conn, []mcp.Tool, error) {
 	timeout := defaultTimeout
 	if s.Timeout > 0 {
 		timeout = time.Duration(s.Timeout) * time.Millisecond
@@ -144,30 +185,70 @@ func (m *Manager) dialAndList(ctx context.Context, s Server) (conn, []mcp.Tool, 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	c, err := m.dial(ctx, s)
+	c, ready, err := m.dial(ctx, s)
 	if err != nil {
 		return nil, nil, err
 	}
-	// Note: the stdio constructor already spawns the subprocess (under its own
-	// background ctx), so this Start is idempotent and the timeout ctx bounds
-	// Initialize/ListTools rather than the spawn itself.
-	if err := c.Start(ctx); err != nil {
-		_ = c.Close()
-		return nil, nil, err
-	}
-	initReq := mcp.InitializeRequest{}
-	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	initReq.Params.ClientInfo = mcp.Implementation{Name: "forge", Version: "0.0.1"}
-	if _, err := c.Initialize(ctx, initReq); err != nil {
-		_ = c.Close()
-		return nil, nil, err
+	if !ready {
+		// Note: the stdio constructor already spawns the subprocess (under its own
+		// background ctx), so this Start is idempotent and the timeout ctx bounds
+		// Initialize/ListTools rather than the spawn itself.
+		if err := c.Start(ctx); err != nil {
+			_ = c.Close()
+			return nil, nil, err
+		}
+		initReq := mcp.InitializeRequest{}
+		initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+		initReq.Params.ClientInfo = mcp.Implementation{Name: "forge", Version: "0.0.1"}
+		if _, err := c.Initialize(ctx, initReq); err != nil {
+			_ = c.Close()
+			return nil, nil, err
+		}
 	}
 	res, err := c.ListTools(ctx, mcp.ListToolsRequest{})
 	if err != nil {
 		_ = c.Close()
 		return nil, nil, err
 	}
+	m.watch(name, c)
 	return c, res.Tools, nil
+}
+
+// watch registers a notifications/tools/list_changed handler on a connected
+// client (opencode mcp/index.ts:509-521). On notification it re-fetches the
+// server's tools, updates the cache, and publishes mcp.tools.changed on the
+// instance bus so the agent loop re-queries tools before its next LLM call.
+func (m *Manager) watch(name string, c conn) {
+	c.OnNotification(func(n mcp.JSONRPCNotification) {
+		if n.Method != mcp.MethodNotificationToolsListChanged {
+			return
+		}
+		m.refreshTools(name, c)
+	})
+}
+
+// refreshTools re-lists a server's tools and, if the connection is still the one
+// cached for name (not closed/replaced), updates the cache and emits
+// mcp.tools.changed with {server: name} — matching opencode's payload
+// (mcp/index.ts:519). The agent loop re-queries tools on the event.
+func (m *Manager) refreshTools(name string, c conn) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	res, err := c.ListTools(ctx, mcp.ListToolsRequest{})
+	if err != nil {
+		return
+	}
+	m.mu.Lock()
+	if m.closed || m.clients[name] != c {
+		m.mu.Unlock()
+		return
+	}
+	m.tools[name] = res.Tools
+	m.mu.Unlock()
+
+	if m.bus != nil {
+		m.bus.Publish("mcp.tools.changed", map[string]any{"server": name})
+	}
 }
 
 // flatTool is one MCP tool with its flattened (unique) name and origin server.
@@ -220,6 +301,20 @@ func (m *Manager) Tools(ctx context.Context) []ToolDef {
 		})
 	}
 	return out
+}
+
+// HasTool reports whether name resolves to a connected MCP tool. It connects
+// (once) so the executor's permission gate can decide before dispatch.
+func (m *Manager) HasTool(ctx context.Context, name string) bool {
+	m.connect(ctx)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, ft := range m.flatTools() {
+		if ft.name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // CallTool dispatches a flattened tool name to its server. found is false when
@@ -306,12 +401,25 @@ func (m *Manager) Close() {
 	}
 }
 
-// stdioDial is the default transport: local servers spawn a subprocess; remote
-// servers are not yet supported (HTTP/SSE transports + OAuth are a follow-up).
-func stdioDial(_ context.Context, s Server) (conn, error) {
-	if s.Type != "local" {
-		return nil, fmt.Errorf("remote MCP servers are not yet supported")
+// dialTransport is the default transport selector: local servers spawn a
+// subprocess (stdio); remote servers connect over HTTP. OAuth is a follow-up, so
+// servers that require it surface as "failed" (needs_auth is not yet emitted —
+// logged in known-divergences).
+func dialTransport(ctx context.Context, s Server) (conn, bool, error) {
+	switch s.Type {
+	case "local":
+		c, err := stdioDial(s)
+		return c, false, err
+	case "remote":
+		return remoteDial(ctx, s)
+	default:
+		return nil, false, fmt.Errorf("unknown MCP server type %q", s.Type)
 	}
+}
+
+// stdioDial spawns a local MCP server subprocess. The returned client is not yet
+// Started/Initialized (the caller's dialAndList does that).
+func stdioDial(s Server) (conn, error) {
 	if len(s.Command) == 0 {
 		return nil, fmt.Errorf("local MCP server has no command")
 	}
@@ -324,4 +432,65 @@ func stdioDial(_ context.Context, s Server) (conn, error) {
 		return nil, err
 	}
 	return c, nil
+}
+
+// remoteDial connects to a remote MCP server. It tries the StreamableHTTP
+// transport first, then falls back to SSE, mirroring opencode's transport order
+// (mcp/index.ts:339-413). The chosen transport is the one whose Start+Initialize
+// handshake succeeds; it returns ready=true so dialAndList does NOT re-run the
+// handshake (some servers reject a second `initialize`). OAuth (needs_auth) is
+// out of scope this slice: an auth failure surfaces as "failed".
+func remoteDial(ctx context.Context, s Server) (conn, bool, error) {
+	if s.URL == "" {
+		return nil, false, fmt.Errorf("remote MCP server has no url")
+	}
+	var lastErr error
+	for _, build := range []func() (conn, error){
+		func() (conn, error) {
+			return mcpgo.NewStreamableHttpClient(s.URL, transport.WithHTTPHeaders(s.Headers))
+		},
+		func() (conn, error) {
+			return mcpgo.NewSSEMCPClient(s.URL, transport.WithHeaders(s.Headers))
+		},
+	} {
+		c, err := build()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if err := probeRemote(ctx, s, c); err != nil {
+			_ = c.Close()
+			lastErr = err
+			continue
+		}
+		return c, true, nil // already Started+Initialized by probeRemote
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no remote transport succeeded")
+	}
+	return nil, false, lastErr
+}
+
+// probeRemote runs the Start+Initialize handshake against a candidate transport
+// so remoteDial can pick the first that connects. Start uses a long-lived
+// context (the SSE transport binds its event stream to the Start context, so it
+// must outlive the probe — only Initialize/ListTools are bounded by the server's
+// timeout). The timeout defaults to defaultTimeout.
+func probeRemote(ctx context.Context, s Server, c conn) error {
+	timeout := defaultTimeout
+	if s.Timeout > 0 {
+		timeout = time.Duration(s.Timeout) * time.Millisecond
+	}
+	if err := c.Start(context.WithoutCancel(ctx)); err != nil {
+		return err
+	}
+	initCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	initReq := mcp.InitializeRequest{}
+	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ClientInfo = mcp.Implementation{Name: "forge", Version: "0.0.1"}
+	if _, err := c.Initialize(initCtx, initReq); err != nil {
+		return err
+	}
+	return nil
 }

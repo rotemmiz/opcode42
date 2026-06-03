@@ -94,7 +94,7 @@ func (m *Manager) Get(directory string) *Context {
 		Permissions: permission.NewManager(instBus),
 		Questions:   question.NewManager(instBus),
 		RunState:    runstate.New(),
-		MCP:         mcp.NewManager(mcp.ParseConfig(cfg)),
+		MCP:         mcp.NewManager(mcp.ParseConfig(cfg)).WithBus(mcpBus{instBus}),
 		LSP:         newLSP(directory, cfg),
 	}
 	m.instances[directory] = c
@@ -110,6 +110,12 @@ func loadConfig(directory string) map[string]any {
 	}
 	return cfg
 }
+
+// mcpBus adapts the instance bus to mcp.eventPublisher so the MCP manager can
+// emit mcp.tools.changed in opencode's {id,type,properties} shape.
+type mcpBus struct{ b *bus.Bus }
+
+func (m mcpBus) Publish(typ string, props any) { m.b.Publish(bus.NewEvent(typ, props)) }
 
 // newLSP builds the instance's LSP service from the loaded config. A malformed
 // `lsp` block (e.g. a custom server missing `extensions`) disables LSP for the

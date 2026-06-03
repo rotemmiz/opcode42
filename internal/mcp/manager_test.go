@@ -25,14 +25,21 @@ func inProcessServer() *server.MCPServer {
 	return s
 }
 
+// dialInProcess returns a dial func that connects to the given in-process server
+// (not pre-initialized, so dialAndList runs the handshake).
+func dialInProcess(srv *server.MCPServer) func(context.Context, Server) (conn, bool, error) {
+	return func(context.Context, Server) (conn, bool, error) {
+		c, err := mcpgo.NewInProcessClient(srv)
+		return c, false, err
+	}
+}
+
 func TestManager_ConnectsAndListsTools(t *testing.T) {
 	m := NewManager(map[string]Server{
 		"echo": {Type: "local", Command: []string{"unused"}},
 		"off":  {Type: "local", Command: []string{"unused"}, Enabled: boolPtr(false)},
 	})
-	m.dial = func(_ context.Context, _ Server) (conn, error) {
-		return mcpgo.NewInProcessClient(inProcessServer())
-	}
+	m.dial = dialInProcess(inProcessServer())
 
 	status := m.Status(context.Background())
 	if status["echo"].Status != "connected" {
@@ -52,9 +59,7 @@ func TestManager_ConnectsAndListsTools(t *testing.T) {
 
 func TestManager_ToolsAndCallTool(t *testing.T) {
 	m := NewManager(map[string]Server{"my srv": {Type: "local", Command: []string{"x"}}})
-	m.dial = func(_ context.Context, _ Server) (conn, error) {
-		return mcpgo.NewInProcessClient(inProcessServer())
-	}
+	m.dial = dialInProcess(inProcessServer())
 	ctx := context.Background()
 
 	defs := m.Tools(ctx)
@@ -85,9 +90,7 @@ func TestManager_ToolsAndCallTool(t *testing.T) {
 // registry doesn't import mcp, so there's no cycle.)
 func TestExecutorDispatchesMCPTool(t *testing.T) {
 	m := NewManager(map[string]Server{"echo": {Type: "local", Command: []string{"x"}}})
-	m.dial = func(_ context.Context, _ Server) (conn, error) {
-		return mcpgo.NewInProcessClient(inProcessServer())
-	}
+	m.dial = dialInProcess(inProcessServer())
 	ex := &registry.Executor{Registry: registry.New(), MCP: m}
 	res, err := ex.Execute(context.Background(), processor.ToolCall{Name: "echo_ping", Input: map[string]any{}})
 	if err != nil {
@@ -109,7 +112,7 @@ func TestManager_CallTool_ErrorTextAsOutput(t *testing.T) {
 		return mcp.NewToolResultError("it broke"), nil
 	})
 	m := NewManager(map[string]Server{"x": {Type: "local", Command: []string{"u"}}})
-	m.dial = func(_ context.Context, _ Server) (conn, error) { return mcpgo.NewInProcessClient(srv) }
+	m.dial = dialInProcess(srv)
 
 	// opencode surfaces a tool's error text to the model as output, not a failure.
 	out, found, err := m.CallTool(context.Background(), "x_boom", nil)
@@ -139,8 +142,8 @@ func TestFlatTools_DedupesCollidingNames(t *testing.T) {
 
 func TestManager_DialFailureIsFailed(t *testing.T) {
 	m := NewManager(map[string]Server{"broken": {Type: "local", Command: []string{"x"}}})
-	m.dial = func(_ context.Context, _ Server) (conn, error) {
-		return nil, errors.New("spawn failed")
+	m.dial = func(context.Context, Server) (conn, bool, error) {
+		return nil, false, errors.New("spawn failed")
 	}
 	status := m.Status(context.Background())
 	if status["broken"].Status != "failed" || status["broken"].Error != "spawn failed" {
@@ -153,9 +156,7 @@ func TestManager_CloseRacesConnect(t *testing.T) {
 	// nil-map panic at shutdown). Run under -race.
 	for i := 0; i < 50; i++ {
 		m := NewManager(map[string]Server{"echo": {Type: "local", Command: []string{"x"}}})
-		m.dial = func(_ context.Context, _ Server) (conn, error) {
-			return mcpgo.NewInProcessClient(inProcessServer())
-		}
+		m.dial = dialInProcess(inProcessServer())
 		result := make(chan map[string]Status, 1)
 		go func() { result <- m.Status(context.Background()) }()
 		m.Close()
@@ -165,9 +166,15 @@ func TestManager_CloseRacesConnect(t *testing.T) {
 	}
 }
 
-func TestStdioDial_RemoteUnsupported(t *testing.T) {
-	if _, err := stdioDial(context.Background(), Server{Type: "remote", URL: "https://x"}); err == nil {
-		t.Fatal("remote should be unsupported in this slice")
+func TestStdioDial_RequiresCommand(t *testing.T) {
+	if _, err := stdioDial(Server{Type: "local"}); err == nil {
+		t.Fatal("local server with no command should error")
+	}
+}
+
+func TestRemoteDial_RequiresURL(t *testing.T) {
+	if _, _, err := remoteDial(context.Background(), Server{Type: "remote"}); err == nil {
+		t.Fatal("remote server with no url should error")
 	}
 }
 

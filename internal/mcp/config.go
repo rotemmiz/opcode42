@@ -1,9 +1,11 @@
 // Package mcp connects to the user's configured MCP (Model Context Protocol)
-// servers and exposes their tools to the agent. This first slice covers config
-// parsing, per-instance connection to local (stdio) servers, and status
-// reporting (GET /mcp); merging MCP tools into the agent loop and remote/OAuth
-// transports are follow-ups (logged in known-divergences). Mirrors opencode's
-// config/mcp.ts + mcp/index.ts.
+// servers and exposes their tools to the agent. It covers config parsing,
+// per-instance connection to local (stdio) and remote (StreamableHTTP with SSE
+// fallback) servers, status reporting (GET /mcp), merging MCP tools into the
+// agent loop (permission-gated like built-ins), and the tools/list_changed
+// watcher that emits mcp.tools.changed. OAuth (needs_auth statuses) and the
+// mutating /mcp endpoints are follow-ups (logged in known-divergences). Mirrors
+// opencode's config/mcp.ts + mcp/index.ts.
 package mcp
 
 // Server is one configured MCP server (config/mcp.ts Local|Remote, discriminated
