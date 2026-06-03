@@ -118,6 +118,7 @@ func (b *Bridge) start(ctx context.Context) error {
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
 
+	var c *conn
 	select {
 	case <-time.After(readyTimeout):
 		b.stopHost()
@@ -130,7 +131,7 @@ func (b *Bridge) start(ctx context.Context) error {
 			b.stopHost()
 			return fmt.Errorf("accept plugin host: %w", res.err)
 		}
-		c := newConn(res.c, b.log, b.onNotify)
+		c = newConn(res.c, b.log, b.onNotify)
 		b.mu.Lock()
 		b.conn = c
 		b.mu.Unlock()
@@ -139,6 +140,8 @@ func (b *Bridge) start(ctx context.Context) error {
 	}
 
 	// Wait for host.ready (delivered via onNotify) within the remaining budget.
+	// Bail out early if the host process exits or the connection drops before
+	// ready arrives, rather than spinning for the whole readyTimeout.
 	deadline := time.After(readyTimeout)
 	for {
 		if b.Ready() {
@@ -148,6 +151,12 @@ func (b *Bridge) start(ctx context.Context) error {
 		case <-deadline:
 			b.stopHost()
 			return errors.New("plugin host connected but never sent host.ready")
+		case err := <-exited:
+			b.stopHost()
+			return fmt.Errorf("plugin host exited before host.ready: %w", err)
+		case <-c.Done():
+			b.stopHost()
+			return errors.New("plugin host disconnected before host.ready")
 		case <-time.After(20 * time.Millisecond):
 		}
 	}
