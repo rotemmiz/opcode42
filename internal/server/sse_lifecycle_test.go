@@ -291,8 +291,13 @@ func TestSessionUpdateNotFound(t *testing.T) {
 	}
 }
 
-// TestSessionUpdateBadBody asserts a malformed JSON body 400s with {name:"BadRequest"}.
-func TestSessionUpdateBadBody(t *testing.T) {
+// TestSessionUpdateBodyContract pins PATCH /session/{id} body handling to
+// opencode's observed contract (verified live):
+//   - empty / absent body            -> 400 BadRequest
+//   - wrong-typed title / archived   -> 400 BadRequest
+//   - unknown top-level field        -> 200, ignored (NOT rejected)
+//   - malformed JSON                 -> 400 (Forge; opencode 500s — known divergence)
+func TestSessionUpdateBodyContract(t *testing.T) {
 	srv, _ := lifecycleServer(t)
 	dir := t.TempDir()
 
@@ -301,18 +306,50 @@ func TestSessionUpdateBadBody(t *testing.T) {
 	if err := json.Unmarshal(body, &created); err != nil {
 		t.Fatalf("decode create: %v", err)
 	}
+	path := "/session/" + created.ID
 
-	status, respBody := doReqBody(t, srv, http.MethodPatch, "/session/"+created.ID, dir,
-		`{"title":`)
-	if status != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400; body=%s", status, respBody)
+	assertBadRequest := func(name, reqBody string) {
+		t.Helper()
+		status, respBody := doReqBody(t, srv, http.MethodPatch, path, dir, reqBody)
+		if status != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, want 400; body=%s", name, status, respBody)
+		}
+		var be map[string]any
+		if err := json.Unmarshal(respBody, &be); err != nil {
+			t.Fatalf("%s: decode 400: %v", name, err)
+		}
+		if be["name"] != "BadRequest" {
+			t.Errorf("%s: 400 name = %v, want BadRequest", name, be["name"])
+		}
 	}
-	var be map[string]any
-	if err := json.Unmarshal(respBody, &be); err != nil {
-		t.Fatalf("decode 400: %v", err)
+
+	// Empty / absent body -> 400 (opencode: "Expected object, got undefined").
+	assertBadRequest("empty-body", "")
+	assertBadRequest("whitespace-body", "   ")
+	// Wrong-typed fields -> 400.
+	assertBadRequest("title-non-string", `{"title":123}`)
+	assertBadRequest("archived-non-number", `{"time":{"archived":"x"}}`)
+	// Malformed JSON -> 400 (Forge's intentional divergence from opencode's 500).
+	assertBadRequest("malformed-json", `{"title":`)
+
+	// Unknown top-level field is IGNORED, returning 200 with the session (matching
+	// opencode's runtime, which drops extra keys despite additionalProperties:false).
+	status, respBody := doReqBody(t, srv, http.MethodPatch, path, dir, `{"bogus":1}`)
+	if status != http.StatusOK {
+		t.Fatalf("unknown-field: status = %d, want 200; body=%s", status, respBody)
 	}
-	if be["name"] != "BadRequest" {
-		t.Errorf("400 name = %v, want BadRequest", be["name"])
+	var info session.Info
+	if err := json.Unmarshal(respBody, &info); err != nil {
+		t.Fatalf("unknown-field: decode 200: %v", err)
+	}
+	if info.ID != created.ID {
+		t.Errorf("unknown-field: id = %q, want %q", info.ID, created.ID)
+	}
+
+	// An empty object body {} is a valid no-op -> 200.
+	status, respBody = doReqBody(t, srv, http.MethodPatch, path, dir, `{}`)
+	if status != http.StatusOK {
+		t.Fatalf("empty-object: status = %d, want 200; body=%s", status, respBody)
 	}
 }
 
