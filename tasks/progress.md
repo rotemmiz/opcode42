@@ -171,3 +171,7 @@ Pre-existing stale PRs unrelated to these waves: #96 (tui graphics-fineness), #7
   - P07-C push client (mobile) — agent a3533ce1afe4cbbcf — Android FCM: token register→POST /push/register (#127), notification + tap deep-link; gated to build without google-services.json; live=manual-verify.
   - swift-sdk (sdk) — agent ab5c691f6e112606f — fix Swift array-of-array (QuestionAnswer) render so SDK compiles + enable sdk-fresh Swift compile gate (#122 followup).
   REMAINING after this: KMP extraction (mobile, after push client) · ~18 auto-install LSP servers (BIG post-v1 machinery: download/npm/dotnet-tool) · minor polish (VT scrollback, GET /command source expansion, per-session permission persistence #124).
+2026-06-04 11:33 RESUMED after user pause. Nothing merged during pause (main still 7c6b11a). Both final-tail agents were cut off by the session usage limit (reset 11:30) BEFORE committing/PR — partial work left uncommitted in their worktrees: push-client had substantial progress (new android/feature/notifications/ + 9-file wiring), swift-sdk had only scripts/gen-sdks.sh touched. Dispatched CONTINUATION agents into the existing worktrees:
+  - finish push client — agent ad29c90976e0830ae (worktree agent-a3533ce1afe4cbbcf, picks up partial FCM module).
+  - finish swift SDK — agent aa8c19b742aee4cda (worktree agent-ab5c691f6e112606f).
+  KMP extraction (mobile) sequenced AFTER push client merges (same ./android tree).
