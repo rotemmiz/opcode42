@@ -107,6 +107,97 @@ func TestExecutor_UnknownTool(t *testing.T) {
 	}
 }
 
+// recordHooks is a test PluginHooks that records hook names and runs a mutator
+// over the typed output, standing in for the real flag-gated bridge.
+type recordHooks struct {
+	names  []string
+	mutate func(name string, out any)
+}
+
+func (r *recordHooks) Trigger(_ context.Context, name string, _ any, out any) {
+	r.names = append(r.names, name)
+	if r.mutate != nil {
+		r.mutate(name, out)
+	}
+}
+
+func (r *recordHooks) fired(name string) bool {
+	for _, n := range r.names {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
+// TestExecutor_ToolBeforeHookRewritesArgs asserts a plugin's tool.execute.before
+// args rewrite is the value the tool actually runs with (session/tools.ts:87-91):
+// the plugin redirects the command, and that command's output is what comes back.
+func TestExecutor_ToolBeforeHookRewritesArgs(t *testing.T) {
+	hooks := &recordHooks{mutate: func(name string, out any) {
+		if name != hookToolExecuteBefore {
+			return
+		}
+		if o, ok := out.(*toolBeforeOutput); ok {
+			o.Args = map[string]any{"command": "echo rewritten"}
+		}
+	}}
+	exec := &Executor{Registry: builtins(), SessionID: "s", Directory: t.TempDir(), Plugins: hooks}
+	res, err := exec.Execute(context.Background(), processor.ToolCall{
+		Name: "bash", CallID: "c1", SessionID: "s", Input: map[string]any{"command": "echo original"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hooks.fired(hookToolExecuteBefore) || !hooks.fired(hookToolExecuteAfter) {
+		t.Fatalf("expected before+after hooks to fire: %v", hooks.names)
+	}
+	if !strings.Contains(res.Output, "rewritten") || strings.Contains(res.Output, "original") {
+		t.Fatalf("before hook did not rewrite args: output = %q", res.Output)
+	}
+}
+
+// TestExecutor_ToolAfterHookRewritesResult asserts a plugin's tool.execute.after
+// rewrite of the result title/output/metadata is returned to the caller
+// (session/tools.ts:103-107).
+func TestExecutor_ToolAfterHookRewritesResult(t *testing.T) {
+	hooks := &recordHooks{mutate: func(name string, out any) {
+		if name != hookToolExecuteAfter {
+			return
+		}
+		if o, ok := out.(*toolAfterOutput); ok {
+			o.Output = "patched output"
+			o.Title = "patched title"
+			o.Metadata = map[string]any{"by": "plugin"}
+		}
+	}}
+	exec := &Executor{Registry: builtins(), SessionID: "s", Directory: t.TempDir(), Plugins: hooks}
+	res, err := exec.Execute(context.Background(), processor.ToolCall{
+		Name: "bash", CallID: "c1", SessionID: "s", Input: map[string]any{"command": "echo hi"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Output != "patched output" || res.Title != "patched title" {
+		t.Fatalf("after hook not applied: %+v", res)
+	}
+	if res.Metadata["by"] != "plugin" {
+		t.Fatalf("after hook metadata not applied: %+v", res.Metadata)
+	}
+}
+
+// TestExecutor_NilPluginsIsNoOp asserts the tool path is unchanged when no
+// plugin host is configured (the default).
+func TestExecutor_NilPluginsIsNoOp(t *testing.T) {
+	exec := &Executor{Registry: builtins(), SessionID: "s", Directory: t.TempDir()}
+	res, err := exec.Execute(context.Background(), processor.ToolCall{
+		Name: "bash", CallID: "c1", SessionID: "s", Input: map[string]any{"command": "echo hi"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.Output, "hi") {
+		t.Fatalf("nil plugins should run the tool unchanged: %q", res.Output)
+	}
+}
+
 func TestSystemPromptVariant(t *testing.T) {
 	cases := map[string]string{
 		"gpt-4o": "Forge", "gemini-2.0-flash": "Forge", "claude-sonnet-4-6": "Forge", "llama-3.3": "Forge",

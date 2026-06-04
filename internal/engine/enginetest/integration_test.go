@@ -27,6 +27,7 @@ type rig struct {
 	sub       <-chan bus.Event
 	sessionID string
 	mock      *MockProvider
+	dir       string
 }
 
 func newRig(t *testing.T, scripts ...[]llm.Event) *rig {
@@ -66,7 +67,7 @@ func newRigInDir(t *testing.T, dir string, scripts ...[]llm.Event) *rig {
 		Rulesets:  []permission.Ruleset{{{Permission: "*", Pattern: "*", Action: permission.ActionAllow}}},
 		Providers: func(context.Context, string, string) (llm.Provider, error) { return mock, nil },
 	})
-	return &rig{eng: eng, store: store, bus: b, sub: sub, sessionID: sessionID, mock: mock}
+	return &rig{eng: eng, store: store, bus: b, sub: sub, sessionID: sessionID, mock: mock, dir: dir}
 }
 
 func (r *rig) prompt(t *testing.T, text string) message.WithParts {

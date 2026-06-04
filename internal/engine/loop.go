@@ -17,9 +17,10 @@ import (
 // and the pluginbridge constants; kept as locals so the engine need not import
 // the sidecar package (the wiring seam stays additive).
 const (
-	hookChatParams      = "chat.params"
-	hookChatHeaders     = "chat.headers"
-	hookSystemTransform = "experimental.chat.system.transform"
+	hookChatParams        = "chat.params"
+	hookChatHeaders       = "chat.headers"
+	hookSystemTransform   = "experimental.chat.system.transform"
+	hookMessagesTransform = "experimental.chat.messages.transform"
 )
 
 // ChatParamsOutput is the mutable output of the chat.params hook
@@ -108,7 +109,11 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 		tools := e.cfg.Registry.Definitions(registry.FilterInput{ProviderID: providerID, ModelID: modelID, Flags: e.cfg.Flags})
 		tools = append(tools, e.mcpDefinitions(ctx, tools)...)
 		system := e.buildSystem(modelID, latest.User.System)
-		modelMsgs := message.ToModelMessages(filtered, message.SerializeModel{ProviderID: providerID, ModelID: modelID}, message.SerializeOptions{})
+		// experimental.chat.messages.transform fires on the full message list just
+		// before serialization, exactly as opencode (prompt.ts:1433): input is
+		// empty, the { messages } output is mutated in place.
+		serialMsgs := e.transformMessages(ctx, filtered)
+		modelMsgs := message.ToModelMessages(serialMsgs, message.SerializeModel{ProviderID: providerID, ModelID: modelID}, message.SerializeOptions{})
 		if isLastStep {
 			modelMsgs = append(modelMsgs, llm.ModelMessage{
 				Role: llm.RoleAssistant, Content: []llm.ContentPart{{Kind: llm.ContentText, Text: maxStepsSentinel}},
@@ -186,6 +191,12 @@ func (e *Engine) runLoop(ctx context.Context, sessionID string) (message.WithPar
 		}
 		if e.cfg.MCP != nil {
 			executor.MCP = e.cfg.MCP
+		}
+		// Route tool.execute.before/after through the plugin host (no-op when off).
+		// Guard the nil interface so a nil engine.PluginHooks stays a nil
+		// registry.PluginHooks (the executor's `Plugins == nil` fast path holds).
+		if e.cfg.Plugins != nil {
+			executor.Plugins = e.cfg.Plugins
 		}
 		procCfg := processor.Config{
 			Store: e.cfg.Store, Bus: e.cfg.Bus, Catalog: e.cfg.Catalog,

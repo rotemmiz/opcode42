@@ -103,6 +103,67 @@ func marshalState(v any) json.RawMessage {
 // continuePrompt nudges the model to resume after an auto-compaction.
 const continuePrompt = "Continue if you have next steps; otherwise summarize what was accomplished."
 
+// Plan-05 compaction hook names (plugin/src/index.ts:300-322). compacting lets
+// a plugin inject context or replace the compaction prompt; autocontinue lets a
+// plugin suppress the synthetic continue turn after an auto-compaction.
+const (
+	hookSessionCompacting = "experimental.session.compacting"
+	hookCompactionAuto    = "experimental.compaction.autocontinue"
+)
+
+// compactingOutput is the mutable output of the experimental.session.compacting
+// hook (plugin/src/index.ts:300-303): context strings appended to the default
+// prompt, or a prompt that replaces it entirely.
+type compactingOutput struct {
+	Context []string `json:"context"`
+	Prompt  *string  `json:"prompt,omitempty"`
+}
+
+// autoContinueOutput is the mutable output of the
+// experimental.compaction.autocontinue hook (plugin/src/index.ts:317-321).
+type autoContinueOutput struct {
+	Enabled bool `json:"enabled"`
+}
+
+// compactingPrompt builds the compaction prompt, routing it through the
+// experimental.session.compacting hook (compaction.ts:398-403). With no plugin
+// host it returns the default summaryTemplate. A plugin may replace the prompt
+// outright (output.prompt) or append context strings joined after the template,
+// mirroring opencode's buildPrompt (compaction.ts:123-134).
+func (e *Engine) compactingPrompt(ctx context.Context, sessionID string) string {
+	if e.cfg.Plugins == nil {
+		return summaryTemplate
+	}
+	out := compactingOutput{Context: []string{}}
+	e.cfg.Plugins.Trigger(ctx, hookSessionCompacting, map[string]any{"sessionID": sessionID}, &out)
+	if out.Prompt != nil {
+		return *out.Prompt
+	}
+	prompt := summaryTemplate
+	for _, c := range out.Context {
+		prompt += "\n\n" + c
+	}
+	return prompt
+}
+
+// compactionAutoContinue reports whether the synthetic continue turn should be
+// added after an auto-compaction, routing the decision through the
+// experimental.compaction.autocontinue hook (compaction.ts:506-515). With no
+// plugin host it returns true (opencode's default enabled).
+func (e *Engine) compactionAutoContinue(ctx context.Context, sessionID string, user *message.UserMessage, overflow bool) bool {
+	if e.cfg.Plugins == nil {
+		return true
+	}
+	out := autoContinueOutput{Enabled: true}
+	e.cfg.Plugins.Trigger(ctx, hookCompactionAuto, map[string]any{
+		"sessionID": sessionID,
+		"agent":     user.Agent,
+		"model":     map[string]any{"providerID": user.Model.ProviderID, "modelID": user.Model.ModelID},
+		"overflow":  overflow,
+	}, &out)
+	return out.Enabled
+}
+
 // summaryTemplate is opencode's SUMMARY_TEMPLATE (compaction.ts:42-77).
 const summaryTemplate = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
@@ -210,9 +271,16 @@ func (e *Engine) processCompaction(ctx context.Context, sessionID string, filter
 	}
 	e.emitAssistant(summary)
 
+	// experimental.session.compacting fires before the prompt is built, exactly
+	// as opencode (compaction.ts:398-402): a plugin may append context strings or
+	// replace the compaction prompt entirely.
+	prompt := e.compactingPrompt(ctx, sessionID)
+	// experimental.chat.messages.transform fires on the head before serialization
+	// (compaction.ts:405), the same hook the main loop runs.
+	head = e.transformMessages(ctx, head)
 	modelMsgs := message.ToModelMessages(head, message.SerializeModel{ProviderID: providerID, ModelID: modelID},
 		message.SerializeOptions{StripMedia: true, ToolOutputMaxChars: toolOutputMaxChars})
-	modelMsgs = append(modelMsgs, llm.ModelMessage{Role: llm.RoleUser, Content: []llm.ContentPart{{Kind: llm.ContentText, Text: summaryTemplate}}})
+	modelMsgs = append(modelMsgs, llm.ModelMessage{Role: llm.RoleUser, Content: []llm.ContentPart{{Kind: llm.ContentText, Text: prompt}}})
 
 	events, err := provider.Stream(ctx, &llm.Request{Model: modelID, Messages: modelMsgs, ToolChoice: llm.ToolChoiceNone})
 	if err != nil {
@@ -251,8 +319,10 @@ func (e *Engine) processCompaction(ctx context.Context, sessionID string, filter
 		e.cfg.Bus.Publish(bus.NewEvent("session.compacted", map[string]any{"sessionID": sessionID}))
 	}
 
-	// Auto compaction: resume the task with a synthetic continue user message.
-	if part.Auto {
+	// Auto compaction: resume the task with a synthetic continue user message,
+	// unless a plugin disables it via experimental.compaction.autocontinue
+	// (compaction.ts:506-515). The hook defaults enabled=true.
+	if part.Auto && e.compactionAutoContinue(ctx, sessionID, compactionUser, part.Overflow) {
 		cu := &message.UserMessage{ID: id.Ascending(id.Message), SessionID: sessionID, Role: message.RoleUser,
 			Agent: compactionUser.Agent, Model: compactionUser.Model}
 		cu.Time.Created = time.Now().UnixMilli()

@@ -163,6 +163,7 @@ func (e *Engine) Prompt(ctx context.Context, in PromptInput) (message.WithParts,
 	}
 	e.emitMessage(message.Info{User: user})
 
+	var parts []message.Part
 	for _, pin := range e.ResolvePromptParts(in.Parts) {
 		part := toPart(pin, user.SessionID, user.ID)
 		if part == nil {
@@ -172,9 +173,32 @@ func (e *Engine) Prompt(ctx context.Context, in PromptInput) (message.WithParts,
 			return message.WithParts{}, err
 		}
 		e.emitPart(user.SessionID, part)
+		parts = append(parts, part)
 	}
 
+	// chat.message fires after the user message and its parts are stored, exactly
+	// as opencode (prompt.ts:1073). It is observe-only: the plugin sees the stored
+	// message+parts but the loop does not consume the hook's output.
+	e.triggerHook(ctx, hookChatMessage, map[string]any{
+		"sessionID": user.SessionID,
+		"agent":     user.Agent,
+		"model":     map[string]any{"providerID": user.Model.ProviderID, "modelID": user.Model.ModelID},
+		"messageID": user.ID,
+	}, &chatMessageOutput{Message: user, Parts: parts})
+
 	return e.Loop(ctx, in.SessionID)
+}
+
+// hookChatMessage mirrors opencode's chat.message hook key (plugin/src/index.ts:
+// 234-242). It is observe-only: a plugin sees the stored message but cannot
+// alter the loop's input.
+const hookChatMessage = "chat.message"
+
+// chatMessageOutput is the observe-only output of the chat.message hook
+// (plugin/src/index.ts:241): the stored user message and its parts.
+type chatMessageOutput struct {
+	Message *message.UserMessage `json:"message"`
+	Parts   []message.Part       `json:"parts"`
 }
 
 // Loop runs the agent loop under the session run lock (idempotent). The run-lock
@@ -307,4 +331,21 @@ func (e *Engine) triggerHook(ctx context.Context, name string, input any, out an
 		return
 	}
 	e.cfg.Plugins.Trigger(ctx, name, input, out)
+}
+
+// transformMessages routes the message list through the
+// experimental.chat.messages.transform hook just before serialization
+// (prompt.ts:1433, compaction.ts:405). With no plugin host it returns msgs
+// unchanged. A plugin may rewrite the list; on any failure (decode error, host
+// down) the original list is preserved. The input is empty per opencode.
+func (e *Engine) transformMessages(ctx context.Context, msgs []message.WithParts) []message.WithParts {
+	if e.cfg.Plugins == nil {
+		return msgs
+	}
+	out := message.TransformList{Messages: msgs}
+	e.cfg.Plugins.Trigger(ctx, hookMessagesTransform, map[string]any{}, &out)
+	if out.Messages == nil {
+		return msgs
+	}
+	return out.Messages
 }
