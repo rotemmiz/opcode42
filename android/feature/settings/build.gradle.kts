@@ -21,6 +21,7 @@ android {
 dependencies {
     api(project(":core:model"))
     implementation(project(":feature:connections"))
+    implementation(project(":feature:notifications"))
     implementation(libs.datastore.preferences)
     implementation(libs.android.lifecycle.viewmodel.compose)
     implementation(libs.hilt.android)

@@ -12,6 +12,7 @@ navigation-compose = "2.9.0"
 security-crypto = "1.1.0-alpha06"
 datastore = "1.1.2"
 coil = "2.7.0"
+firebase-bom = "33.10.0"
 
 [libraries]
 # Core Android
@@ -57,6 +58,14 @@ datastore-preferences = { group = "androidx.datastore", name = "datastore-prefer
 
 # Image loading
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+# Firebase Cloud Messaging (push notifications, plan 13 §13.8).
+# We deliberately do NOT use the com.google.gms:google-services Gradle plugin:
+# it requires a checked-in google-services.json at build time, which we do not
+# commit. Instead Firebase is initialized at runtime via FirebaseOptions read
+# from optional string resources, gated on their presence (see :feature:notifications).
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 
 # Testing
 junit = { group = "junit", name = "junit", version = "4.13.2" }

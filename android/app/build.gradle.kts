@@ -42,6 +42,7 @@ dependencies {
     implementation(project(":feature:chat"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:terminal"))
+    implementation(project(":feature:notifications"))
 
     implementation(libs.android.core.ktx)
     implementation(libs.android.lifecycle.runtime.ktx)

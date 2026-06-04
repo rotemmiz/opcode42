@@ -1,6 +1,7 @@
 package dev.forge.app.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -35,8 +36,22 @@ sealed class Screen(val route: String) {
 fun ForgeNavGraph(
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {},
+    deepLinkSessionId: String? = null,
+    deepLinkToken: Long = -1L,
+    onDeepLinkConsumed: () -> Unit = {},
 ) {
     val navController = rememberNavController()
+
+    // A push-notification tap deep-links straight to the relevant Chat screen.
+    // Keyed on the tap token (not the session id) so a repeat push for the same
+    // session still re-navigates.
+    LaunchedEffect(deepLinkToken) {
+        val sessionId = deepLinkSessionId ?: return@LaunchedEffect
+        navController.navigate(Screen.Chat.route(sessionId)) {
+            launchSingleTop = true
+        }
+        onDeepLinkConsumed()
+    }
 
     NavHost(navController = navController, startDestination = Screen.SessionList.route) {
         composable(Screen.SessionList.route) {

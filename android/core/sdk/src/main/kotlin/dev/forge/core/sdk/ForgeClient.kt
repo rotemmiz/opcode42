@@ -365,6 +365,51 @@ class ForgeClient @Inject constructor(
         directory = directory,
     ) { json -> ForgeJson.decodeFromJsonElement(Session.serializer(), json) }
 
+    // ─── Push notifications (plan 13 §13.8) ─────────────────────────────────────
+
+    /**
+     * POST /push/register — register or refresh this device's FCM token so the
+     * daemon's relay can push `session.idle` / `permission.asked` /
+     * `question.asked` notifications when no SSE client is connected. Re-calling
+     * with the same [deviceId] refreshes the token (the daemon upserts by
+     * device_id), which is the path taken on FCM token rotation.
+     *
+     * Forge known-addition (opencode has no push surface); the body matches
+     * `internal/server/push_handlers.go` pushRegisterInput. Returns true on success.
+     */
+    suspend fun registerPush(
+        deviceId: String,
+        fcmToken: String,
+        platform: String = "android",
+        sessionFilter: List<String>? = null,
+    ): Boolean = post(
+        path = "/push/register",
+        body = buildJsonObject {
+            put("device_id", deviceId)
+            put("fcm_token", fcmToken)
+            put("platform", platform)
+            sessionFilter?.let { filter ->
+                put("session_filter", buildJsonArray { filter.forEach { add(it) } })
+            }
+        },
+    ) { json -> (json as? JsonPrimitive)?.booleanOrNull ?: true }
+
+    /**
+     * DELETE /push/register/{deviceID} — unregister this device (logout/teardown)
+     * so the daemon stops fanning push out to a token we no longer own. A 404
+     * (device not registered) is treated as success — the desired end state
+     * (no registration) already holds.
+     */
+    suspend fun unregisterPush(deviceId: String): Boolean = withContext(Dispatchers.IO) {
+        val url = buildUrl("/push/register/${URLEncoder.encode(deviceId, "UTF-8")}", null)
+        val req = Request.Builder().url(url).delete().build()
+        httpClient.newCall(req).execute().use { resp ->
+            if (resp.isSuccessful || resp.code == 404) return@use true
+            val body = resp.body?.string() ?: ""
+            error("HTTP ${resp.code} for DELETE /push/register: $body")
+        }
+    }
+
     // ─── HTTP helpers ─────────────────────────────────────────────────────────
 
     private suspend fun <T> get(

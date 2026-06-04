@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Required on Android 13+ (API 33) to post notifications. The app requests
+         it at runtime; without it FCM messages are received but not shown. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+        <!-- FCM receiver for daemon push (plan 13 §13.8). Disabled by default and
+             enabled at runtime ONLY when Firebase is configured (PushConfig), so
+             the no-google-services build neither advertises nor starts it. -->
+        <service
+            android:name=".ForgeMessagingService"
+            android:enabled="false"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Default notification channel for FCM-display fallbacks. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="forge_agent_activity" />
+    </application>
+
+</manifest>

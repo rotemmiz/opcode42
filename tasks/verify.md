@@ -580,3 +580,31 @@ so it is MANUAL-VERIFY:
       sent while a client is actively connected.
 - [ ] EYEBALL: with a stale/invalid FCM token registered, trigger a push; confirm the daemon logs
       "pruning unregistered token" and the device row is removed (`GET /push/register` no longer lists it).
+
+## Android push client (plan 07 Phase C — push)
+
+The Android app now acquires its FCM token, registers it with the daemon relay
+(`POST /push/register` with `{device_id, fcm_token, platform:"android"}`, re-register on FCM
+token rotation, `DELETE /push/register/{deviceID}` when the active server is removed), renders
+received pushes as notifications, and deep-links a notification tap to the relevant Chat
+session (`data.session_id`). The whole path is gated on Firebase being configured for the build
+(`PushConfig`): the FCM `ForgeMessagingService` is `android:enabled="false"` in the manifest and
+only enabled at runtime when a Firebase config is present, so the app builds and runs on the
+no-`google-services.json` path (the CI path) with push as a clean no-op. The token-register body,
+dedup/refresh/unregister logic, 404-as-success on DELETE, and the `{event_type, session_id}`
+data-key contract are JVM-unit-tested (`:feature:notifications`, MockWebServer + fakes; no live
+Firebase). LIVE send/receive needs real infra and is MANUAL-VERIFY:
+- [ ] EYEBALL: create a Firebase project; drop its `google-services.json` into `android/app/`
+      (NOT committed) and run the gms plugin's resource generation, OR add a private
+      `firebase_config.xml` defining `firebase_application_id` / `firebase_api_key` /
+      `firebase_project_id` (+ optional `firebase_messaging_sender_id`); build + launch the app and
+      confirm push is now active (it logs "Registered push device with daemon").
+- [ ] EYEBALL: with the daemon's FCM relay enabled (see the daemon section above) and NO SSE client
+      connected, drive an agent to idle / trigger a permission or question; confirm a notification
+      arrives on the device with the mapped title/body.
+- [ ] EYEBALL: tap the notification; confirm the app opens (or comes to foreground) directly on the
+      Chat screen for the pushed `session_id`.
+- [ ] EYEBALL: remove the active server in Settings; confirm `DELETE /push/register/{deviceID}` fires
+      and the device is no longer listed by `GET /push/register`.
+- [ ] EYEBALL: on Android 13+ confirm the app requests the `POST_NOTIFICATIONS` runtime permission on
+      first launch (only when push is configured) and that denying it does not crash the app.
