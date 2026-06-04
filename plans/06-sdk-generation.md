@@ -662,9 +662,11 @@ not-built scaffold). Two changes, both kept deterministic across arches:
   self-contained SwiftPM `Sources/` layout with **no external `AnyCodable` dependency**, so
   `swift build` compiles offline.
 - **Normalizer step (b2)** inlines a `$ref` whose target is a *bare-array* component schema at
-  array-`items` use sites. This leaves the `QuestionAnswer` bare-array schema unreferenced, so the
-  existing orphan-collection pass (c) drops it — the same drop-the-orphan discipline the Kotlin fix
-  used to avoid amd64/arm64 casing diffs. Representation-only; the wire bytes are unchanged.
+  array-`items` use sites. This leaves the `QuestionAnswer` bare-array schema unreferenced; the
+  swift6/kotlin generator skips unreferenced bare-array schemas, so it never reaches the generated
+  output (the orphan-collection pass (c) only removes `EventTui*` schemas by name — the same
+  drop-the-orphan discipline the Kotlin fix used to avoid amd64/arm64 casing diffs).
+  Representation-only; the wire bytes are unchanged.
 - **Gating.** `scripts/check-sdk-fresh.sh` asserts `git diff`-clean `sdk/swift/gen` **and** runs
   `swift build` on the freshly-generated scratch tree when a Swift toolchain is present (skip-gated
   otherwise — the freshness diff still runs). The `sdk-fresh` CI job provisions Swift 6

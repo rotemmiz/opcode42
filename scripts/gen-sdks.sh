@@ -138,8 +138,10 @@ for _path, item in spec.get("paths", {}).items():
 #      it falls back to the bare `Array` type and emits the non-compiling `[Array]`.
 #      Replacing the `$ref` with the resolved array schema makes the generator render
 #      `[[String]]` directly. Representation-only: the wire shape (array of arrays of
-#      strings) is preserved. After this, QuestionAnswer is unreferenced and dropped by
-#      the orphan-collection pass (c) below.
+#      strings) is preserved. After this, QuestionAnswer is unreferenced; the swift6/
+#      kotlin generator skips unreferenced bare-array schemas, so it never reaches the
+#      generated output. (The orphan-collection pass (c) below is name-restricted to
+#      EventTui* schemas and does NOT remove QuestionAnswer.)
 def is_bare_array_schema(s):
     return (isinstance(s, dict) and s.get("type") == "array" and "items" in s
             and "properties" not in s and "allOf" not in s

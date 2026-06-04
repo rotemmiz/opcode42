@@ -19,10 +19,11 @@ parts, both deterministic across architectures:
 
 1. **Normalizer (`scripts/gen-sdks.sh` step b2):** at array-item use sites whose
    `items` is a `$ref` to a *bare-array* component schema, the `$ref` is inlined
-   to the resolved array schema. This leaves `QuestionAnswer` unreferenced, so the
-   existing orphan-collection pass drops it (same discipline the Kotlin fix uses to
-   avoid amd64/arm64 casing diffs). The wire shape (array of arrays of strings) is
-   unchanged.
+   to the resolved array schema. This leaves `QuestionAnswer` unreferenced; the
+   swift6/kotlin generator skips unreferenced bare-array schemas, so it never reaches
+   the generated output (the orphan-collection pass only removes `EventTui*` schemas by
+   name — the same normalization discipline the Kotlin fix uses to avoid amd64/arm64
+   casing diffs). The wire shape (array of arrays of strings) is unchanged.
 2. **`swift6` generator:** with (1) applied, swift6 renders the `answers` field as
    the correct `[[String]]`. (`swift5` still emitted `[Array]` even after the
    inlining — a swift5-specific nested-array defect.) swift6 also emits a
