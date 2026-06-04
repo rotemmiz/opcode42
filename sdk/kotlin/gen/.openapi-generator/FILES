@@ -217,12 +217,8 @@ src/main/kotlin/dev/forge/sdk/models/EventSessionStatusProperties.kt
 src/main/kotlin/dev/forge/sdk/models/EventSessionUpdated.kt
 src/main/kotlin/dev/forge/sdk/models/EventTodoUpdated.kt
 src/main/kotlin/dev/forge/sdk/models/EventTodoUpdatedProperties.kt
-src/main/kotlin/dev/forge/sdk/models/EventTuiCommandExecute.kt
 src/main/kotlin/dev/forge/sdk/models/EventTuiCommandExecuteProperties.kt
 src/main/kotlin/dev/forge/sdk/models/EventTuiCommandExecutePropertiesCommand.kt
-src/main/kotlin/dev/forge/sdk/models/EventTuiPromptAppend.kt
-src/main/kotlin/dev/forge/sdk/models/EventTuiSessionSelect.kt
-src/main/kotlin/dev/forge/sdk/models/EventTuiToastShow.kt
 src/main/kotlin/dev/forge/sdk/models/EventTuiToastShow1.kt
 src/main/kotlin/dev/forge/sdk/models/EventVcsBranchUpdated.kt
 src/main/kotlin/dev/forge/sdk/models/EventVcsBranchUpdatedProperties.kt

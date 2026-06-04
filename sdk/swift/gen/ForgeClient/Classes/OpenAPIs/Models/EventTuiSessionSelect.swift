@@ -15,15 +15,18 @@ public struct EventTuiSessionSelect: Codable, JSONEncodable, Hashable {
     public enum ModelType: String, Codable, CaseIterable {
         case tuiPeriodSessionPeriodSelect = "tui.session.select"
     }
+    public var id: String
     public var properties: TuiSelectSessionRequest
     public var type: ModelType
 
-    public init(properties: TuiSelectSessionRequest, type: ModelType) {
+    public init(id: String, properties: TuiSelectSessionRequest, type: ModelType) {
+        self.id = id
         self.properties = properties
         self.type = type
     }
 
     public enum CodingKeys: String, CodingKey, CaseIterable {
+        case id
         case properties
         case type
     }
@@ -32,6 +35,7 @@ public struct EventTuiSessionSelect: Codable, JSONEncodable, Hashable {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
         try container.encode(properties, forKey: .properties)
         try container.encode(type, forKey: .type)
     }

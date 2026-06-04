@@ -131,6 +131,41 @@ for _path, item in spec.get("paths", {}).items():
                 schema["type"] = "object"
                 schema["additionalProperties"] = True
 
+# (c) drop component schemas left UNREFERENCED after (b). Collapsing /tui/publish
+#     orphans the four EventTui{PromptAppend,CommandExecute,ToastShow,SessionSelect}
+#     schemas (the Event union references the downconverted *1 variants, not these).
+#     The Kotlin generator still emits the orphans, and their names collide with the
+#     *1 variants, which triggers an ARCH-DEPENDENT casing bug (`EventTuiToastShow`
+#     on amd64 vs `Eventtuitoastshow` on arm64) — non-reproducible committed output.
+#     Removing the dead schemas removes the ambiguity entirely. Generic: any
+#     component schema with zero remaining `$ref`s after (a)/(b) is dropped.
+def collect_refs(node, acc):
+    if isinstance(node, dict):
+        r = node.get("$ref")
+        if isinstance(r, str) and r.startswith("#/components/schemas/"):
+            acc.add(r.rsplit("/", 1)[1])
+        for v in node.values():
+            collect_refs(v, acc)
+    elif isinstance(node, list):
+        for v in node:
+            collect_refs(v, acc)
+
+schemas = spec.get("components", {}).get("schemas", {})
+# Iterate to a fixed point: dropping a schema can orphan others it referenced.
+while True:
+    referenced = set()
+    # refs from paths/operations
+    collect_refs(spec.get("paths", {}), referenced)
+    # refs between schemas (a schema is "live" only if reachable from an operation,
+    # but to stay conservative we keep any schema referenced by another KEPT schema)
+    collect_refs(schemas, referenced)
+    dead = [n for n in schemas
+            if n not in referenced and n.startswith("EventTui")]
+    if not dead:
+        break
+    for n in dead:
+        del schemas[n]
+
 json.dump(spec, open(dst, "w"), indent=2, sort_keys=True)
 PY
 
@@ -155,9 +190,13 @@ KOTLIN_OUT="$OUT_DIR/sdk/kotlin/gen"
 rm -rf "$KOTLIN_OUT"
 mkdir -p "$KOTLIN_OUT"
 cp "$REPO_ROOT/sdk/kotlin/.openapi-generator-ignore" "$KOTLIN_OUT/.openapi-generator-ignore"
+# model-name-mappings File=ForgeFile: the `File` schema otherwise collides with
+# the Kotlin generator's reserved `java.io.File` mapping (corrupts the class name).
+# (The EventTui* casing/arch issue is handled upstream by normalizer step (c),
+# which drops those now-unreferenced schemas entirely.)
 gen kotlin "$KOTLIN_OUT" \
   --library jvm-okhttp4 \
-  --model-name-mappings File=ForgeFile \
+  --model-name-mappings 'File=ForgeFile' \
   --type-mappings 'AnyType=JsonElement,object=JsonElement' \
   --import-mappings 'JsonElement=kotlinx.serialization.json.JsonElement' \
   --additional-properties="packageName=$KOTLIN_PACKAGE,dateLibrary=java8,serializationLibrary=kotlinx_serialization,useCoroutines=true"
