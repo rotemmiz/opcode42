@@ -124,12 +124,90 @@ func TestServerDef_MatchesExtension(t *testing.T) {
 
 func TestBuiltinIDs(t *testing.T) {
 	ids := BuiltinIDs()
-	for _, want := range []string{"gopls", "typescript", "pyright"} {
+	// Every entry in Servers must be reported as a built-in id (config treats
+	// these as not requiring an `extensions` field).
+	if len(ids) != len(Servers) {
+		t.Fatalf("BuiltinIDs (%d) must cover every server (%d)", len(ids), len(Servers))
+	}
+	for _, want := range []string{
+		"gopls", "typescript", "pyright", "deno", "ruby-lsp", "rust", "clangd",
+		"dart", "php intelephense", "prisma", "ocaml-lsp", "bash", "terraform",
+		"dockerfile", "gleam", "clojure-lsp", "nixd",
+	} {
 		if !ids[want] {
 			t.Fatalf("missing built-in id %q", want)
 		}
 	}
-	if len(ids) != 3 {
-		t.Fatalf("foundation subset should be exactly 3 servers, got %d", len(ids))
+}
+
+// TestServerDef_IDsMatchKeys guards against a copy-paste mismatch between a map
+// key and the ServerDef.ID it points to.
+func TestServerDef_IDsMatchKeys(t *testing.T) {
+	for key, def := range Servers {
+		if def.ID != key {
+			t.Fatalf("server %q has mismatched ID %q", key, def.ID)
+		}
+		if len(def.Extensions) == 0 {
+			t.Fatalf("server %q has no extensions", key)
+		}
+		if def.Root == nil || def.Command == nil {
+			t.Fatalf("server %q missing Root/Command", key)
+		}
+	}
+}
+
+func TestDenoRoot(t *testing.T) {
+	dir := t.TempDir()
+	touch(t, dir, "deno.json")
+	src := touch(t, dir, "src/main.ts")
+	if got := denoRoot(src, dir); got != dir {
+		t.Fatalf("deno.json should be root: want %s, got %s", dir, got)
+	}
+
+	// No deno marker ⇒ empty root (Deno only attaches inside Deno projects).
+	other := t.TempDir()
+	osrc := touch(t, other, "src/main.ts")
+	if got := denoRoot(osrc, other); got != "" {
+		t.Fatalf("no deno.json should yield empty root, got %q", got)
+	}
+}
+
+func TestRustRoot_WorkspaceWins(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("[workspace]\nmembers=[\"crate\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	crate := filepath.Join(dir, "crate")
+	if err := os.MkdirAll(crate, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(crate, "Cargo.toml"), []byte("[package]\nname=\"c\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := touch(t, dir, "crate/src/main.rs")
+	if got := rustRoot(src, dir); got != dir {
+		t.Fatalf("workspace root should win: want %s, got %s", dir, got)
+	}
+}
+
+func TestRustRoot_CrateWhenNoWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	crate := filepath.Join(dir, "crate")
+	if err := os.MkdirAll(crate, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(crate, "Cargo.toml"), []byte("[package]\nname=\"c\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := touch(t, dir, "crate/src/main.rs")
+	if got := rustRoot(src, dir); got != crate {
+		t.Fatalf("crate root expected: want %s, got %s", crate, got)
+	}
+
+	// No Cargo manifest at all ⇒ empty.
+	bare := t.TempDir()
+	bsrc := touch(t, bare, "src/main.rs")
+	if got := rustRoot(bsrc, bare); got != "" {
+		t.Fatalf("no Cargo.toml should yield empty root, got %q", got)
 	}
 }
