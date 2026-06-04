@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 
 	"go.lsp.dev/protocol"
 
@@ -279,7 +278,10 @@ func (s *Service) spawn(def ServerDef, root string) (*handle, error) {
 
 	cmd := exec.Command(argv[0], argv[1:]...) //nolint:gosec // argv is from the built-in server table / resolved binaries
 	cmd.Dir = root
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// setProcessGroup is OS-specific: on POSIX it starts the process in its own
+	// process group (Setpgid) so the whole tree can be signalled on cleanup; on
+	// Windows it is a no-op (cleanup falls back to a plain process kill).
+	setProcessGroup(cmd)
 
 	// Establish the stdio pipes for the JSON-RPC stream (must be created before
 	// Start). stdin must not be the inherited tty.
@@ -297,11 +299,10 @@ func (s *Service) spawn(def ServerDef, root string) (*handle, error) {
 		return nil, fmt.Errorf("spawn lsp %s: %w", def.ID, err)
 	}
 
-	pgid, err := syscall.Getpgid(cmd.Process.Pid)
-	if err != nil {
-		// Fall back to the pid as its own group (Setpgid should make pgid == pid).
-		pgid = cmd.Process.Pid
-	}
+	// processGroupID resolves the spawned process's group id for later
+	// signalling. On POSIX this is the Setpgid group (== pid); on Windows it is 0
+	// (no process groups — killGroup falls back to a plain kill).
+	pgid := processGroupID(cmd)
 	return &handle{
 		serverID: def.ID,
 		root:     root,
@@ -517,16 +518,14 @@ func (s *Service) DisposeAll() {
 	}
 }
 
-// killGroup SIGTERMs the process group of a spawned server (negative pgid), then
-// reaps it so no zombie remains. A nil handle is a no-op.
+// killGroup terminates a spawned server, then reaps it so no zombie remains. A
+// nil handle is a no-op. The actual signalling is OS-specific
+// (terminateProcessGroup): on POSIX it SIGTERMs the whole process group
+// (negative pgid); on Windows it kills the single process.
 func killGroup(h *handle) {
 	if h == nil || h.cmd == nil || h.cmd.Process == nil {
 		return
 	}
-	if h.pgid > 0 {
-		_ = syscall.Kill(-h.pgid, syscall.SIGTERM)
-	} else {
-		_ = h.cmd.Process.Signal(syscall.SIGTERM)
-	}
+	terminateProcessGroup(h)
 	_ = h.cmd.Wait()
 }
