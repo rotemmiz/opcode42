@@ -188,11 +188,16 @@ func (g *singleFlight) Do(key string, fn func() (any, error)) (any, error) {
 	g.calls[key] = c
 	g.mu.Unlock()
 
-	c.val, c.err = fn()
-	c.wg.Done()
+	// Release the flight even if fn panics, so a panicking refresh can't wedge
+	// every later caller for this key on a wg that is never Done (the re-panic
+	// preserves the original failure for this caller). Mirrors x/sync/singleflight.
+	defer func() {
+		g.mu.Lock()
+		delete(g.calls, key)
+		g.mu.Unlock()
+		c.wg.Done()
+	}()
 
-	g.mu.Lock()
-	delete(g.calls, key)
-	g.mu.Unlock()
+	c.val, c.err = fn()
 	return c.val, c.err
 }
