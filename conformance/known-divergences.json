@@ -31,8 +31,8 @@
   {
     "scenario": "command-list",
     "phase": "B",
-    "reason": "GET /command is implemented (.opencode/command(s) + config). Forge returns only file/config commands (source=command); opencode also surfaces built-in, MCP, and skill-derived commands. The opencode order is also non-deterministic so it was never a parity scenario.",
-    "track": "done for .opencode commands (plan 04 M4/M8); skill/MCP commands are plan 04 M6 / plan 03"
+    "reason": "GET /command is implemented (.opencode/command(s) + config). ORDERING is no longer a divergence: opencode returns the list in non-deterministic (map/glob) order, Forge sorts by name (a recorded known-addition, masterplan decision #6), and the `command-list` conformance scenario compares the body order-insensitively (set-normalized, client.go orderInsensitiveListPath), so the self-diff gate covers /command. The REMAINING divergence is content, and applies only to a forge-vs-opencode dual-run: Forge returns only file/config commands (source=command) while opencode also surfaces built-in, MCP, and skill-derived commands — so opencode's command SET is a superset of Forge's.",
+    "track": "ordering done (decision #6, order-insensitive scenario); skill/MCP/built-in commands are plan 04 M6 / plan 03"
   },
   {
     "scenario": "find-file",

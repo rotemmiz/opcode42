@@ -482,3 +482,34 @@ recordings (which dual-run the TUI's GET surface vs opencode). The full-LLM dual
 
 No new known-divergence: the TUI consumes only existing endpoints. `GET /command`'s
 non-deterministic ordering exclusion is unchanged.
+
+## U12 finished + `/command` ordering resolved (2026-06-04) — plan-08 polish closed
+
+This closes the two items the 2026-06-03 review flagged as "genuinely remaining".
+
+- **`U12` the in-TUI VT pane is DONE.** The interactive embedded terminal landed in #80
+  (`internal/tui/ptypane.go`): a `vt10x` (`github.com/hinshun/vt10x`, the plan's spike — a stable
+  cell-grid emulator chosen over the untagged `charmbracelet/x/vt`) virtual screen fed by the PTY
+  WebSocket, rendered as a bottom split, opened/focused via `ctrl+x ``` (also the palette
+  "Terminal (PTY)" / `/terminal`), keystrokes forwarded as raw bytes, generation-stamped so frames
+  from a reopened pane can't corrupt the grid, reflow + `PUT /pty/{id}` on resize. This change adds
+  the #80 follow-up — **text-attribute rendering**: `renderGrid` now decodes the vt10x glyph mode
+  (`Glyph.Mode`, the fixed `attr*` bit layout from vt10x `state.go`) into bold/underline/italic and
+  applies them via Lipgloss, and an SGR-reverse cell swaps fg/bg (composing with the cursor-reverse).
+  The run-batching key is now the full cell styling (color + attributes). Scrollback remains a
+  follow-up. So **no new TUI dependency is added** — `vt10x` was already vendored by #80.
+- **`GET /command` ordering: implemented per masterplan decision #6.** Forge already sorts commands
+  by name (`internal/resource/command.go:50`) — a deterministic known-addition. This change turns
+  `/command` from a conformance *exclusion* into an **order-insensitive parity scenario**
+  (`command-list`): the harness set-normalizes the `/command` body (`orderInsensitiveListPath` in
+  `conformance/client.go`, reusing `NormalizeSetJSON`), so opencode's non-deterministic order and
+  Forge's sorted order compare equal while a genuinely missing/extra command still fails. The
+  self-diff gate (opencode-vs-opencode) now covers `/command`. The `command-list` known-divergence
+  note is updated: ordering is no longer a divergence; the remaining (forge-vs-opencode-only)
+  divergence is that opencode's command SET is a superset (built-in/MCP/skill commands Forge doesn't
+  surface yet).
+  - **Not recorded in `known-additions.json`** by design: that registry lists *additive operations*
+    (endpoints absent from the frozen reference, consumed by the OpenAPI drift gate). `/command` is a
+    reference endpoint; listing it there would falsely mark it Forge-only and weaken the drift gate.
+    The deterministic-sort is a *behavioral* known-addition, recorded via the order-insensitive
+    scenario + the `command-list` divergence note + masterplan decision #6 itself.

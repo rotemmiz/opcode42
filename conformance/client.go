@@ -221,16 +221,22 @@ func (c *Client) SSE(stepName, path string, wait time.Duration, maxEvents int) (
 }
 
 // normalizeBody normalizes a JSON response body; non-JSON bodies are returned
-// trimmed and verbatim. The GET /session list is a global, accumulating list
-// whose element COUNT is non-deterministic run-to-run (every entry normalizes to
-// the same placeholder object), so it is set-normalized (dedup distinct entries)
-// to keep the self-diff stable — see Normalizer.NormalizeSetJSON.
+// trimmed and verbatim. Two GET lists are normalized order-insensitively (a
+// canonical-sorted set, see Normalizer.NormalizeSetJSON):
+//   - GET /session — a global, accumulating list whose element COUNT is
+//     non-deterministic run-to-run (every entry normalizes to the same placeholder
+//     object), so the set dedup removes the count noise.
+//   - GET /command — opencode returns the command list in a non-deterministic
+//     (map/glob) ORDER, while Forge sorts by name (a recorded known-addition,
+//     masterplan decision #6). Set-normalizing makes the order irrelevant so the
+//     two runs' identical command SET compares equal; a genuinely missing or extra
+//     command still changes the set and fails.
 func (c *Client) normalizeBody(method, path string, raw []byte) string {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return ""
 	}
 	norm := c.Norm.NormalizeJSON
-	if method == http.MethodGet && sessionListPath(path) {
+	if method == http.MethodGet && orderInsensitiveListPath(path) {
 		norm = c.Norm.NormalizeSetJSON
 	}
 	if out, err := norm(raw); err == nil {
@@ -239,11 +245,13 @@ func (c *Client) normalizeBody(method, path string, raw []byte) string {
 	return strings.TrimSpace(string(raw))
 }
 
-// sessionListPath reports whether path is the global session-list endpoint
-// (GET /session), ignoring any query string (e.g. ?directory=...).
-func sessionListPath(path string) bool {
+// orderInsensitiveListPath reports whether path is a GET list endpoint whose
+// top-level array order is non-deterministic and so must be set-normalized:
+// /session (global accumulating list) or /command (opencode's non-deterministic
+// order vs Forge's sort). The query string (e.g. ?directory=...) is ignored.
+func orderInsensitiveListPath(path string) bool {
 	if i := strings.IndexByte(path, '?'); i >= 0 {
 		path = path[:i]
 	}
-	return path == "/session"
+	return path == "/session" || path == "/command"
 }

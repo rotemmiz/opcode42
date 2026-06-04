@@ -242,8 +242,55 @@ func (m Model) ptyPaneView(width int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, bar, m.renderGrid(width))
 }
 
-// renderGrid snapshots the vt10x screen into colored lines, batching runs of
-// same-styled cells. The cursor cell is shown reversed when the pane is focused.
+// vt10x glyph-mode attribute bits. These mirror the (unexported) attr* constants
+// in hinshun/vt10x state.go:13-21 — the emulator stores SGR attributes in the
+// public Glyph.Mode int16 using this fixed bit layout, so decoding it here is how
+// the render path recovers bold/underline/italic/reverse. attrGfx/attrBlink/
+// attrWrap are not visually rendered (line-graphics glyphs already arrive as the
+// right runes; blink/wrap have no Lipgloss analogue).
+const (
+	vtAttrReverse   = 1 << 0 // attrReverse
+	vtAttrUnderline = 1 << 1 // attrUnderline
+	vtAttrBold      = 1 << 2 // attrBold
+	vtAttrItalic    = 1 << 4 // attrItalic
+)
+
+// cellAttrs is the visual styling of one terminal cell: resolved colors (after
+// any reverse swap) plus the bold/underline/italic flags. Two adjacent cells
+// share a style run iff their cellAttrs are equal, so it is the run-batching key.
+type cellAttrs struct {
+	fg, bg                  lipgloss.Color
+	colorOK                 bool
+	bold, underline, italic bool
+}
+
+// styleCell builds a lipgloss style for a cell run (no-op when the run carries no
+// color and no attributes).
+func (a cellAttrs) styleCell() lipgloss.Style {
+	st := lipgloss.NewStyle()
+	if a.colorOK {
+		if a.fg != "" {
+			st = st.Foreground(a.fg)
+		}
+		if a.bg != "" {
+			st = st.Background(a.bg)
+		}
+	}
+	if a.bold {
+		st = st.Bold(true)
+	}
+	if a.underline {
+		st = st.Underline(true)
+	}
+	if a.italic {
+		st = st.Italic(true)
+	}
+	return st
+}
+
+// renderGrid snapshots the vt10x screen into styled lines, batching runs of
+// same-styled cells (color + bold/underline/italic). The cursor cell is shown
+// reversed when the pane is focused; an SGR-reverse cell swaps fg/bg too.
 func (m Model) renderGrid(width int) string {
 	t := m.pty.term
 	if t == nil {
@@ -261,13 +308,12 @@ func (m Model) renderGrid(width int) string {
 	var b strings.Builder
 	for y := 0; y < rows; y++ {
 		var run strings.Builder
-		var runFG, runBG lipgloss.Color
-		var runOK bool
+		var runAttrs cellAttrs
 		flush := func() {
 			if run.Len() == 0 {
 				return
 			}
-			b.WriteString(styleCell(runFG, runBG, runOK).Render(run.String()))
+			b.WriteString(runAttrs.styleCell().Render(run.String()))
 			run.Reset()
 		}
 		for x := 0; x < cols; x++ {
@@ -278,18 +324,28 @@ func (m Model) renderGrid(width int) string {
 			}
 			fg, fgOK := vtColor(g.FG)
 			bg, bgOK := vtColor(g.BG)
-			reverse := y == cur.Y && x == cur.X && curVis
-			if reverse { // draw the cursor as a reversed cell
+			// An SGR-reverse cell or the focused cursor cell swaps fg/bg; when both
+			// apply they cancel out (a reversed cell under the cursor reads normal).
+			reverse := g.Mode&vtAttrReverse != 0
+			if y == cur.Y && x == cur.X && curVis {
+				reverse = !reverse
+			}
+			if reverse {
 				fg, bg, fgOK, bgOK = bg, fg, bgOK, fgOK
-				if !bgOK { // ensure a visible cursor block even on default bg
+				if !bgOK { // ensure a visible block even on default bg
 					bg, bgOK = m.styles.P.Fg, true
 				}
 			}
-			ok := fgOK || bgOK
-			if run.Len() > 0 && (fg != runFG || bg != runBG || ok != runOK) {
+			attrs := cellAttrs{
+				fg: fg, bg: bg, colorOK: fgOK || bgOK,
+				bold:      g.Mode&vtAttrBold != 0,
+				underline: g.Mode&vtAttrUnderline != 0,
+				italic:    g.Mode&vtAttrItalic != 0,
+			}
+			if run.Len() > 0 && attrs != runAttrs {
 				flush()
 			}
-			runFG, runBG, runOK = fg, bg, ok
+			runAttrs = attrs
 			run.WriteRune(ch)
 		}
 		flush()
@@ -298,22 +354,6 @@ func (m Model) renderGrid(width int) string {
 		}
 	}
 	return b.String()
-}
-
-// styleCell builds a lipgloss style for a cell run's colors (no-op when both are
-// the terminal default).
-func styleCell(fg, bg lipgloss.Color, ok bool) lipgloss.Style {
-	st := lipgloss.NewStyle()
-	if !ok {
-		return st
-	}
-	if fg != "" {
-		st = st.Foreground(fg)
-	}
-	if bg != "" {
-		st = st.Background(bg)
-	}
-	return st
 }
 
 // vtPalette pre-renders the 256 palette indices to lipgloss colors so the hot

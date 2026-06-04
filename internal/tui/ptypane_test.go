@@ -81,6 +81,70 @@ func TestRenderGrid_Golden(t *testing.T) {
 	}
 }
 
+// TestStyleCell_Attributes asserts cellAttrs.styleCell maps the decoded
+// bold/underline/italic flags onto the lipgloss style (the rendered ANSI itself
+// is color-profile-dependent and stripped under a non-TTY test run, so the style
+// getters are the stable assertion).
+func TestStyleCell_Attributes(t *testing.T) {
+	cases := []struct {
+		name string
+		a    cellAttrs
+		bold bool
+		und  bool
+		ital bool
+	}{
+		{"plain", cellAttrs{}, false, false, false},
+		{"bold", cellAttrs{bold: true}, true, false, false},
+		{"underline", cellAttrs{underline: true}, false, true, false},
+		{"italic", cellAttrs{italic: true}, false, false, true},
+		{"all", cellAttrs{bold: true, underline: true, italic: true}, true, true, true},
+	}
+	for _, c := range cases {
+		st := c.a.styleCell()
+		if st.GetBold() != c.bold || st.GetUnderline() != c.und || st.GetItalic() != c.ital {
+			t.Errorf("%s: style bold=%v under=%v ital=%v, want %v/%v/%v",
+				c.name, st.GetBold(), st.GetUnderline(), st.GetItalic(), c.bold, c.und, c.ital)
+		}
+	}
+}
+
+// TestRenderGrid_DecodesAttributes feeds bold/underline/italic SGR sequences and
+// asserts renderGrid decodes the vt10x glyph mode into the matching cellAttrs (it
+// reads the same Cell(x,y).Mode the renderer does, so this pins the bit layout).
+func TestRenderGrid_DecodesAttributes(t *testing.T) {
+	m := withPTY()
+	// bold "B", underline "U", italic "I" on three rows; the renderGrid output must
+	// still contain the glyphs (decode must not drop cells).
+	_, _ = m.pty.term.Write([]byte("\x1b[1mB\x1b[0m\r\n\x1b[4mU\x1b[0m\r\n\x1b[3mI\x1b[0m"))
+	if plain := stripANSI(m.renderGrid(m.pty.cols)); !strings.Contains(plain, "B") ||
+		!strings.Contains(plain, "U") || !strings.Contains(plain, "I") {
+		t.Fatalf("attribute cells should still render their glyphs, got %q", plain)
+	}
+	// The decode itself: each cell's Mode carries exactly the expected attr bit.
+	if g := m.pty.term.Cell(0, 0); g.Mode&vtAttrBold == 0 {
+		t.Errorf("row 0 cell should carry the bold bit, mode=%b", g.Mode)
+	}
+	if g := m.pty.term.Cell(0, 1); g.Mode&vtAttrUnderline == 0 {
+		t.Errorf("row 1 cell should carry the underline bit, mode=%b", g.Mode)
+	}
+	if g := m.pty.term.Cell(0, 2); g.Mode&vtAttrItalic == 0 {
+		t.Errorf("row 2 cell should carry the italic bit, mode=%b", g.Mode)
+	}
+}
+
+// TestRenderGrid_DecodesReverse asserts an SGR-reverse cell is decoded (its glyph
+// survives and the reverse bit is set, which drives the fg/bg swap in renderGrid).
+func TestRenderGrid_DecodesReverse(t *testing.T) {
+	m := withPTY()
+	_, _ = m.pty.term.Write([]byte("\x1b[7;31mR\x1b[0m"))
+	if !strings.Contains(stripANSI(m.renderGrid(m.pty.cols)), "R") {
+		t.Fatalf("reverse cell should still render its glyph")
+	}
+	if g := m.pty.term.Cell(0, 0); g.Mode&vtAttrReverse == 0 {
+		t.Errorf("cell should carry the reverse bit, mode=%b", g.Mode)
+	}
+}
+
 func TestPTYOutput_FeedsGrid(t *testing.T) {
 	m := withPTY()
 	m, cmd := step(t, m, ptyOutputMsg{data: []byte("echo hi")})

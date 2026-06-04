@@ -227,16 +227,21 @@ func (n *Normalizer) NormalizeJSON(data []byte) ([]byte, error) {
 }
 
 // NormalizeSetJSON is NormalizeJSON for a response whose top-level value is a
-// non-deterministic accumulating LIST — specifically GET /session, which opencode
-// serves as a GLOBAL list spanning every directory and grows as sibling scenarios
-// (and prior daemon state) create sessions (see confDirRe note; scenario.go's
-// session-list note). After per-field normalization every session entry collapses
-// to the SAME placeholder object, so the only thing that varies run-to-run is the
-// element COUNT — a harness artifact, not a wire signal. Collapsing the array to
-// its set of DISTINCT normalized entries (sorted canonically) removes that count
-// non-determinism while preserving the real check: the created session's shape.
-// A genuinely different entry shape changes the set and still fails. Non-array
-// roots fall back to plain NormalizeJSON.
+// LIST with non-deterministic element count or order. It collapses the array to
+// its set of DISTINCT normalized entries, sorted canonically, so the comparison
+// becomes count- and order-insensitive while preserving the real check (entry
+// shape): a genuinely different/missing/extra entry changes the set and still
+// fails. Non-array roots fall back to plain NormalizeJSON. Two endpoints use it
+// (see client.go orderInsensitiveListPath):
+//   - GET /session — opencode serves a GLOBAL list spanning every directory that
+//     grows as sibling scenarios (and prior daemon state) create sessions (see
+//     confDirRe note). After per-field normalization every session entry collapses
+//     to the SAME placeholder object, so only the element COUNT varies run-to-run;
+//     the set dedup removes that harness artifact.
+//   - GET /command — opencode returns the command list in non-deterministic
+//     (map/glob) ORDER while Forge sorts by name (masterplan decision #6). The
+//     canonical sort makes the order irrelevant; entries stay distinct so the dedup
+//     is a no-op and the command SET is compared exactly.
 func (n *Normalizer) NormalizeSetJSON(data []byte) ([]byte, error) {
 	var v any
 	if err := json.Unmarshal(data, &v); err != nil {

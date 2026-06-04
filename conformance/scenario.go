@@ -24,10 +24,15 @@ var Scenarios = []Scenario{
 	{Name: "config-get", Run: scenarioConfigGet},
 	{Name: "provider-list", Run: scenarioProviderList},
 	{Name: "agent-list", Run: scenarioAgentList},
-	// NOTE: GET /command is intentionally NOT a conformance scenario — opencode
-	// returns the command list in a non-deterministic order (it varies between two
-	// fresh runs), so it can't serve as a parity gate. The TUI sorts commands
-	// client-side, so order doesn't matter there.
+	// GET /command IS a parity scenario, compared order-insensitively: opencode
+	// returns the command list in a non-deterministic (map/glob) order while Forge
+	// sorts by name (masterplan decision #6, a recorded known-addition). The
+	// harness set-normalizes /command (orderInsensitiveListPath in client.go), so
+	// two runs' identical command SET compares equal regardless of order while a
+	// genuinely missing/extra command still fails. (forge-vs-opencode additionally
+	// differs because opencode surfaces built-in/MCP/skill commands Forge doesn't —
+	// that remains the `command-list` known-divergence, separate from ordering.)
+	{Name: "command-list", Run: scenarioCommandList},
 	{Name: "session-todo-empty", Run: scenarioSessionTodo},
 	{Name: "session-message-list", Run: scenarioSessionMessageList},
 	// The reply/reject endpoints' happy path needs a pending request (a running
@@ -129,6 +134,18 @@ func scenarioProviderList(c *Client) ([]result.Step, error) {
 // parity gate includes the TUI's read surface (plan 08 U8/U9).
 func scenarioAgentList(c *Client) ([]result.Step, error) {
 	s, err := c.Do("agent", http.MethodGet, "/agent", nil)
+	if err != nil {
+		return nil, err
+	}
+	return []result.Step{s}, nil
+}
+
+// scenarioCommandList reads the slash-command list (the TUI's `/` switcher and
+// autocomplete source, plan 08 U9). The body is set-normalized in client.go so
+// opencode's non-deterministic order and Forge's sorted order both compare equal
+// (masterplan decision #6).
+func scenarioCommandList(c *Client) ([]result.Step, error) {
+	s, err := c.Do("command", http.MethodGet, "/command", nil)
 	if err != nil {
 		return nil, err
 	}
