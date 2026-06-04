@@ -12,6 +12,11 @@ coverage.*
 /bin/
 /dist/
 
+# SwiftPM build artifacts — the Swift SDK compile-gate (check-sdk-fresh.sh) runs
+# `swift build` in a scratch tree, but guard against a stray .build under the
+# committed SDK tree polluting `git diff`.
+.build/
+
 # Local env vars / secrets (never commit; .env.example documents the keys)
 .env
 .env.local

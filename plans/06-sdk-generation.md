@@ -651,6 +651,31 @@ as `internal/api/gen/conformance.go` + `openapi_conformance_test.go` from the pr
 - **Registry.** `GET /doc` and `GET /openapi.json` are recorded in `conformance/known-additions.json`
   (both are absent from opencode's own spec `paths`, so both surface as additive and are WARN'd).
 
+## M9 follow-up (2026-06-04) — Swift SDK now COMPILES and is compile-gated
+
+M9 is closed: the Swift SDK is generated, committed, and **compile-gated** (no longer a
+not-built scaffold). Two changes, both kept deterministic across arches:
+
+- **Generator `swift5` → `swift6`** (`scripts/gen-sdks.sh`). The `swift5` generator mis-rendered
+  the array-of-array `answers` field (`QuestionReplied`, `QuestionReplyRequest`) as the
+  non-compiling `[Array]`. `swift6` renders it as the correct `[[String]]` and emits a
+  self-contained SwiftPM `Sources/` layout with **no external `AnyCodable` dependency**, so
+  `swift build` compiles offline.
+- **Normalizer step (b2)** inlines a `$ref` whose target is a *bare-array* component schema at
+  array-`items` use sites. This leaves the `QuestionAnswer` bare-array schema unreferenced; the
+  swift6/kotlin generator skips unreferenced bare-array schemas, so it never reaches the generated
+  output (the orphan-collection pass (c) only removes `EventTui*` schemas by name — the same
+  drop-the-orphan discipline the Kotlin fix used to avoid amd64/arm64 casing diffs).
+  Representation-only; the wire bytes are unchanged.
+- **Gating.** `scripts/check-sdk-fresh.sh` asserts `git diff`-clean `sdk/swift/gen` **and** runs
+  `swift build` on the freshly-generated scratch tree when a Swift toolchain is present (skip-gated
+  otherwise — the freshness diff still runs). The `sdk-fresh` CI job provisions Swift 6
+  (`swift-actions/setup-swift`) and compiles `sdk/swift/gen`, so a non-compiling Swift SDK fails CI.
+  `.build/` is gitignored so the compile can't dirty the committed tree.
+
+The hand-written SSE / WS-PTY Swift layers remain deferred to plan 07's iOS scope (codegen can't
+model persistent streams); the generated REST/types layer is the M9 deliverable.
+
 ## Links
 
 - [00 — Masterplan](00-masterplan.md) — contract source, wire-compat strategy
