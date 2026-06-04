@@ -82,3 +82,25 @@ jobs:
           if [ "$size" -gt 41943040 ]; then
             echo "::error::forged binary $size bytes exceeds 40MB target"; exit 1
           fi
+
+  android:
+    # Builds the Android client (primary deliverable, plan 07) and runs its
+    # deterministic JVM unit tests — including the SSE wire-parsing tests that
+    # pin the Forge/opencode {id,type,properties} + payload-envelope contract.
+    # Live-daemon / LLM flows are manual-verify (tasks/verify.md), not gated here.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build (assembleDebug)
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace

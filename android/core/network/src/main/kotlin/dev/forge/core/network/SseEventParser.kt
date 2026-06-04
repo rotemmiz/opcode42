@@ -18,31 +18,48 @@ class SseEventParser @Inject constructor() {
             "server.heartbeat" -> AppEvent.ServerHeartbeat
             "global.disposed" -> AppEvent.GlobalDisposed
 
-            "session.updated" ->
-                AppEvent.SessionUpdated(ForgeJson.decodeFromJsonElement(Session.serializer(), p))
-            "session.removed" ->
-                AppEvent.SessionRemoved(p["sessionID"]?.jsonPrimitive?.content ?: "")
+            // session.created / session.updated wrap the session under `info`
+            // (opencode openapi EventSessionUpdated.properties = {sessionID, info}).
+            "session.updated", "session.created" ->
+                AppEvent.SessionUpdated(
+                    ForgeJson.decodeFromJsonElement(Session.serializer(), p["info"] ?: p))
+            // opencode/Forge emit `session.deleted`; keep `session.removed` as an alias.
+            "session.deleted", "session.removed" ->
+                AppEvent.SessionRemoved(
+                    p["sessionID"]?.jsonPrimitive?.content
+                        ?: (p["info"] as? JsonObject)?.get("id")?.jsonPrimitive?.content ?: "")
             "session.status" ->
                 AppEvent.SessionStatus(
                     sessionId = p["sessionID"]?.jsonPrimitive?.content ?: "",
                     status = p["status"]?.jsonObject?.get("type")?.jsonPrimitive?.content ?: "idle",
                 )
 
+            // message.updated wraps the message info under `info`
+            // (EventMessageUpdated.properties = {sessionID, info}).
             "message.updated" ->
-                AppEvent.MessageUpdated(parseMessage(p))
+                AppEvent.MessageUpdated(parseMessage((p["info"] as? JsonObject) ?: p))
+            // EventMessageRemoved.properties = {sessionID, messageID}.
             "message.removed" ->
                 AppEvent.MessageRemoved(
                     sessionId = p["sessionID"]?.jsonPrimitive?.content ?: "",
-                    messageId = p["id"]?.jsonPrimitive?.content ?: "",
+                    messageId = p["messageID"]?.jsonPrimitive?.content
+                        ?: p["id"]?.jsonPrimitive?.content ?: "",
                 )
 
+            // EventMessagePartUpdated.properties = {sessionID, part, time} —
+            // the part object is nested under `part`.
             "message.part.updated" ->
-                AppEvent.PartUpdated(parsePart(p))
+                AppEvent.PartUpdated(parsePart((p["part"] as? JsonObject) ?: p))
+            // EventMessagePartRemoved.properties = {sessionID, messageID, partID}.
             "message.part.removed" ->
-                AppEvent.PartRemoved(p["id"]?.jsonPrimitive?.content ?: "")
+                AppEvent.PartRemoved(
+                    p["partID"]?.jsonPrimitive?.content
+                        ?: p["id"]?.jsonPrimitive?.content ?: "")
+            // EventMessagePartDelta.properties = {sessionID, messageID, partID, field, delta}.
             "message.part.delta" ->
                 AppEvent.PartDelta(
-                    partId = p["id"]?.jsonPrimitive?.content ?: "",
+                    partId = p["partID"]?.jsonPrimitive?.content
+                        ?: p["id"]?.jsonPrimitive?.content ?: "",
                     messageId = p["messageID"]?.jsonPrimitive?.content ?: "",
                     delta = p["delta"]?.jsonPrimitive?.content ?: "",
                 )

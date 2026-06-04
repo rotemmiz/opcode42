@@ -9,8 +9,9 @@ import dev.forge.core.store.AppStore
 import dev.forge.core.store.ConnectionState
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.jsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -170,14 +171,12 @@ class SseManager @Inject constructor(
 
                 override fun onEvent(es: EventSource, id: String?, type: String?, data: String) {
                     lastEventAt = System.currentTimeMillis()
-                    val raw = SseEvent(id = id, type = type ?: "unknown",
-                        properties = try {
-                            ForgeJson.parseToJsonElement(data).jsonObject
-                        } catch (_: Exception) {
-                            kotlinx.serialization.json.JsonObject(emptyMap())
-                        }
-                    )
-                    batchChannel.trySend(raw)
+                    // The SSE `event:` line is always "message"; the real event type
+                    // lives inside the JSON `data` payload as `{id,type,properties}`.
+                    // The /global/event stream additionally wraps that payload in a
+                    // {payload:{...}, directory} envelope (Forge internal/server/sse.go;
+                    // opencode bus/global.ts). parseSseData unwraps both shapes.
+                    parseSseData(data, fallbackId = id)?.let { batchChannel.trySend(it) }
                 }
 
                 override fun onClosed(es: EventSource) {
@@ -252,13 +251,16 @@ class SseManager @Inject constructor(
                     latestByKey[key] = event
                 }
                 "message.part.updated" -> {
-                    val partId = event.properties["id"]?.jsonPrimitive?.content ?: ""
+                    // properties = {sessionID, part:{id,...}, time} — part ID is nested.
+                    val partId = (event.properties["part"] as? JsonObject)
+                        ?.get("id")?.jsonPrimitive?.content ?: ""
                     val key = "message.part.updated:$partId"
                     latestByKey[key] = event
                     updatedPartIds.add(partId)
                 }
                 "message.part.delta" -> {
-                    val partId = event.properties["id"]?.jsonPrimitive?.content ?: ""
+                    // properties = {sessionID, messageID, partID, field, delta}.
+                    val partId = event.properties["partID"]?.jsonPrimitive?.content ?: ""
                     if (partId !in updatedPartIds) {
                         latestByKey["delta:$partId:${batch.indexOf(event)}"] = event
                     }
@@ -268,4 +270,37 @@ class SseManager @Inject constructor(
         }
         return latestByKey.values.toList()
     }
+}
+
+/**
+ * Parses one SSE `data:` JSON string into a typed [SseEvent].
+ *
+ * Both Forge and opencode emit every frame with the SSE `event:` name "message"
+ * and carry the actual event in the JSON body:
+ *
+ *  - Instance stream (`/event`):   `{ "id", "type", "properties" }` (bare).
+ *  - Global stream (`/global/event`): `{ "payload": { "id","type","properties" },
+ *    "directory", "project", "workspace" }`.
+ *
+ * This unwraps the `payload` envelope when present and surfaces the routing
+ * `directory` so downstream consumers see a uniform [SseEvent]. Returns null if
+ * the body is not a JSON object or carries no `type`.
+ *
+ * Refs: Forge internal/server/sse.go (writeSSE → `event: message`; global wraps
+ * in {payload,directory}); opencode bus/global.ts:5-8, bus/index.ts:103.
+ */
+internal fun parseSseData(data: String, fallbackId: String? = null): SseEvent? {
+    val root = try {
+        ForgeJson.parseToJsonElement(data) as? JsonObject ?: return null
+    } catch (_: Exception) {
+        return null
+    }
+    // Unwrap the global envelope: {payload:{...}, directory, ...}
+    val payload = (root["payload"] as? JsonObject)
+    val body = payload ?: root
+    val directory = root["directory"]?.jsonPrimitive?.contentOrNull
+    val type = body["type"]?.jsonPrimitive?.contentOrNull ?: return null
+    val id = body["id"]?.jsonPrimitive?.contentOrNull ?: fallbackId
+    val properties = (body["properties"] as? JsonObject) ?: JsonObject(emptyMap())
+    return SseEvent(id = id, type = type, properties = properties, directory = directory)
 }

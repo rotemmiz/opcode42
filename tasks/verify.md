@@ -510,3 +510,20 @@ multiple machines and are left for you.
 - [ ] Windows release target — `internal/lsp/service.go` uses Unix-only syscalls without build
       constraints, so windows/amd64 cross-build fails. goreleaser omits windows until the daemon is
       made Windows-portable (out of this track's scope; do not edit internal/lsp here).
+
+## P07-B — Android repointed to Forge daemon (2026-06-04, plan 07 Phase B)
+Repointed the Android client's HTTP+SSE wiring at the Forge daemon and fixed the SSE
+consumption path (it was parsing the SSE `event:` name as the type and reading the wrong
+payload field locations). Deterministic JVM unit tests (19) now pin the wire contract and
+run in CI (new `android` job in ci.yml). The flows below need a LIVE Forge daemon + real LLM
+key, so they are manual EYEBALL items (the gemini free key is throttled):
+- [ ] EYEBALL: `forge serve`, add the server in the app (URL + Basic creds), confirm the session
+      list loads (GET /session) and a new session can be created.
+- [ ] EYEBALL: open a running session and confirm streaming works end-to-end via SSE — assistant
+      text deltas (`message.part.delta`), full part replaces (`message.part.updated` → nested `part`),
+      and `message.updated` (`info`-wrapped) all render live with no manual refresh.
+- [ ] EYEBALL: trigger a tool that needs permission; confirm the permission bottom sheet appears
+      from `permission.asked` and dismisses on `permission.replied`.
+- [ ] EYEBALL: background the app ~60s then foreground; confirm SSE reconnects and state catches up.
+- [ ] EYEBALL: verify `Authorization: Basic …` is present on REST + SSE calls (OkHttp logging /
+      Charles), and that `?auth_token=` is appended on the WS-PTY upgrade URL.
