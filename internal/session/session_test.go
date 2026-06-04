@@ -133,3 +133,89 @@ func TestForkMissingParent(t *testing.T) {
 		t.Errorf("Fork(missing) err=%v, want ErrNotFound", err)
 	}
 }
+
+func TestUpdateTitleAndArchived(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	dir := worktree.Resolve(t.TempDir())
+
+	created, err := store.Create(ctx, dir)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if created.Time.Archived != nil {
+		t.Fatalf("new session already archived: %+v", created.Time)
+	}
+
+	// Title-only update leaves archived untouched and returns the full session.
+	newTitle := "renamed session"
+	got, err := store.Update(ctx, created.ID, UpdateParams{Title: &newTitle})
+	if err != nil {
+		t.Fatalf("Update(title): %v", err)
+	}
+	if got.Title != newTitle {
+		t.Errorf("title = %q, want %q", got.Title, newTitle)
+	}
+	if got.Time.Archived != nil {
+		t.Errorf("title-only update set archived: %+v", got.Time)
+	}
+	// Persisted: a fresh Get sees the new title.
+	if reread, _ := store.Get(ctx, created.ID); reread.Title != newTitle {
+		t.Errorf("persisted title = %q, want %q", reread.Title, newTitle)
+	}
+
+	// Archive: set time.archived to an epoch-ms, title preserved.
+	ts := int64(1717000000000)
+	got, err = store.Update(ctx, created.ID, UpdateParams{Archived: &ts})
+	if err != nil {
+		t.Fatalf("Update(archive): %v", err)
+	}
+	if got.Time.Archived == nil || *got.Time.Archived != ts {
+		t.Errorf("archived = %v, want %d", got.Time.Archived, ts)
+	}
+	if got.Title != newTitle {
+		t.Errorf("archive update clobbered title: %q", got.Title)
+	}
+	if reread, _ := store.Get(ctx, created.ID); reread.Time.Archived == nil || *reread.Time.Archived != ts {
+		t.Errorf("archived not persisted: %+v", reread.Time)
+	}
+
+	// A title-only update after archiving leaves the archived timestamp intact
+	// (opencode has no un-archive path; only a number ever sets time.archived).
+	newer := "renamed again"
+	got, err = store.Update(ctx, created.ID, UpdateParams{Title: &newer})
+	if err != nil {
+		t.Fatalf("Update(title after archive): %v", err)
+	}
+	if got.Time.Archived == nil || *got.Time.Archived != ts {
+		t.Errorf("title-only update cleared archived: %+v", got.Time)
+	}
+}
+
+func TestUpdateMissingSession(t *testing.T) {
+	store := newTestStore(t)
+	title := "x"
+	if _, err := store.Update(context.Background(), "ses_nonexistent00000000000000", UpdateParams{Title: &title}); err != ErrNotFound {
+		t.Errorf("Update(missing) err=%v, want ErrNotFound", err)
+	}
+}
+
+func TestUpdateNoFieldsReturnsCurrent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	created, err := store.Create(ctx, worktree.Resolve(t.TempDir()))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	got, err := store.Update(ctx, created.ID, UpdateParams{})
+	if err != nil {
+		t.Fatalf("Update(no fields): %v", err)
+	}
+	if got.ID != created.ID || got.Title != created.Title {
+		t.Errorf("no-op update changed session: %+v", got)
+	}
+	// A no-op patch on a missing session still 404s.
+	if _, err := store.Update(ctx, "ses_nonexistent00000000000000", UpdateParams{}); err != ErrNotFound {
+		t.Errorf("no-op Update(missing) err=%v, want ErrNotFound", err)
+	}
+}

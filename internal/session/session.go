@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -272,6 +273,78 @@ func (s *Store) SetTitle(ctx context.Context, sessionID, title string) error {
 		s.publish(info.Directory, "session.updated", sessionEventProps(info))
 	}
 	return nil
+}
+
+// UpdateParams carries the partial fields PATCH /session/{id} may set. Each
+// pointer is nil when the caller omitted the field, so a request body of
+// {"title":"x"} touches only the title and leaves time.archived untouched —
+// matching opencode's update handler, which calls setTitle / setArchived
+// independently per present field
+// (server/routes/instance/httpapi/handlers/session.ts:184-197).
+type UpdateParams struct {
+	// Title sets the session title when non-nil.
+	Title *string
+	// Archived sets time.archived (epoch-ms) when non-nil. opencode's
+	// UpdatePayload types time.archived as Schema.optional(Schema.Finite) — a
+	// finite number or absent; null/absent are dropped by the schema and only a
+	// number reaches setArchived (groups/session.ts:46-54, handlers/session.ts:194,
+	// session.ts:731). There is no un-archive (clear) path in opencode 1.15.x, so
+	// Update only ever SETS time_archived, never clears it — matching the observed
+	// dual-run contract (PATCH {time:{archived:null}} returns 200 unchanged).
+	Archived *int64
+}
+
+// Update applies a partial PATCH to a session: title and/or time.archived. It
+// returns ErrNotFound when no session matches sessionID. On a successful change
+// it re-reads the row and publishes session.updated carrying the full refreshed
+// info, mirroring opencode's update endpoint, whose setTitle/setArchived calls
+// each publish Session.Event.Updated (session.ts:727-733, projectors.ts:12-22).
+//
+// Unlike SetTitle (the best-effort title-generation path, which bumps
+// time_updated), Update does NOT touch time_updated for either field: opencode's
+// setTitle and setArchived patch only the named columns and leave time.updated
+// alone (session.ts:727-733).
+func (s *Store) Update(ctx context.Context, sessionID string, p UpdateParams) (Info, error) {
+	// Build a partial UPDATE touching only the supplied columns. A request with
+	// no recognized fields still re-reads and returns the current session (a
+	// no-op patch), matching opencode returning the unchanged session.
+	sets := make([]string, 0, 2)
+	args := make([]any, 0, 3)
+	if p.Title != nil {
+		sets = append(sets, "title = ?")
+		args = append(args, *p.Title)
+	}
+	if p.Archived != nil {
+		sets = append(sets, "time_archived = ?")
+		args = append(args, *p.Archived)
+	}
+
+	if len(sets) > 0 {
+		args = append(args, sessionID)
+		s.mu.Lock()
+		res, err := s.db.ExecContext(ctx,
+			"UPDATE session SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...)
+		s.mu.Unlock()
+		if err != nil {
+			return Info{}, err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return Info{}, ErrNotFound
+		}
+	}
+
+	// Re-read so the response and published event carry the full refreshed
+	// session (opencode's update returns requireSession after patching;
+	// session.ts:184-197). For a no-op patch (no recognized fields) this also
+	// serves to 404 a missing session.
+	info, err := s.Get(ctx, sessionID)
+	if err != nil {
+		return Info{}, err
+	}
+	if len(sets) > 0 {
+		s.publish(info.Directory, "session.updated", sessionEventProps(info))
+	}
+	return info, nil
 }
 
 // IsDefaultTitle reports whether title is a still-untouched auto-generated

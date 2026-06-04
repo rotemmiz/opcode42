@@ -20,6 +20,7 @@ type Scenario struct {
 var Scenarios = []Scenario{
 	{Name: "session-create-list", Run: scenarioSessionCreateList},
 	{Name: "session-get-delete", Run: scenarioSessionGetDelete},
+	{Name: "session-update", Run: scenarioSessionUpdate},
 	{Name: "session-fork-children", Run: scenarioSessionForkChildren},
 	{Name: "config-get", Run: scenarioConfigGet},
 	{Name: "provider-list", Run: scenarioProviderList},
@@ -91,6 +92,41 @@ func scenarioSessionGetDelete(c *Client) ([]result.Step, error) {
 	}
 	// After delete, get should 404 (the status is the conformance signal).
 	if err := do(c, &steps, "get-after-delete", http.MethodGet, "/session/"+cs.ID, nil); err != nil {
+		return steps, err
+	}
+	return steps, nil
+}
+
+// scenarioSessionUpdate exercises PATCH /session/{id} (opencode session.update):
+// a partial rename, then archive via time.archived, then an explicit
+// {time:{archived:null}} which opencode treats as a no-op (the schema types
+// archived as a finite number and drops null; there is no un-archive path, so the
+// archived timestamp stays set). The normalizer collapses the volatile title/time
+// bits so two opencode runs (and a forge dual run) compare equal; the fixed
+// "renamed" title and the literal archived value are the parity signal.
+func scenarioSessionUpdate(c *Client) ([]result.Step, error) {
+	var steps []result.Step
+	if err := do(c, &steps, "create", http.MethodPost, "/session", map[string]any{}); err != nil {
+		return steps, err
+	}
+	var cs createdSession
+	if err := c.LastJSON(&cs); err != nil {
+		return steps, err
+	}
+	// Rename (title-only partial update).
+	if err := do(c, &steps, "rename", http.MethodPatch, "/session/"+cs.ID,
+		map[string]any{"title": "renamed"}); err != nil {
+		return steps, err
+	}
+	// Archive: set time.archived.
+	if err := do(c, &steps, "archive", http.MethodPatch, "/session/"+cs.ID,
+		map[string]any{"time": map[string]any{"archived": 1717000000000}}); err != nil {
+		return steps, err
+	}
+	// archived:null is a no-op (opencode has no un-archive path; the timestamp
+	// stays set). Both daemons return 200 with the prior archived value.
+	if err := do(c, &steps, "archived-null", http.MethodPatch, "/session/"+cs.ID,
+		map[string]any{"time": map[string]any{"archived": nil}}); err != nil {
 		return steps, err
 	}
 	return steps, nil
