@@ -131,6 +131,43 @@ for _path, item in spec.get("paths", {}).items():
                 schema["type"] = "object"
                 schema["additionalProperties"] = True
 
+# (b2) inline bare-array component schemas at array-item use sites. The swift5
+#      generator does not emit a named model for a component schema that is itself a
+#      bare array (e.g. `QuestionAnswer = {type: array, items: {type: string}}`); when
+#      such a schema is used as the `items` of another array (`answers: [[String]]`)
+#      it falls back to the bare `Array` type and emits the non-compiling `[Array]`.
+#      Replacing the `$ref` with the resolved array schema makes the generator render
+#      `[[String]]` directly. Representation-only: the wire shape (array of arrays of
+#      strings) is preserved. After this, QuestionAnswer is unreferenced and dropped by
+#      the orphan-collection pass (c) below.
+def is_bare_array_schema(s):
+    return (isinstance(s, dict) and s.get("type") == "array" and "items" in s
+            and "properties" not in s and "allOf" not in s
+            and "anyOf" not in s and "oneOf" not in s)
+
+def resolve_ref(ref):
+    if not isinstance(ref, str) or not ref.startswith("#/components/schemas/"):
+        return None
+    return spec.get("components", {}).get("schemas", {}).get(ref.rsplit("/", 1)[1])
+
+def inline_bare_array_item_refs(node):
+    if isinstance(node, dict):
+        items = node.get("items")
+        if node.get("type") == "array" and is_ref(items):
+            target = resolve_ref(items["$ref"])
+            if is_bare_array_schema(target):
+                node["items"] = json.loads(json.dumps(target))
+        for v in node.values():
+            inline_bare_array_item_refs(v)
+    elif isinstance(node, list):
+        for v in node:
+            inline_bare_array_item_refs(v)
+
+# Walk paths and schema definitions; inlining copies the resolved array schema so
+# the source component is left intact for any other (non-bare-array) use sites.
+inline_bare_array_item_refs(spec.get("paths", {}))
+inline_bare_array_item_refs(spec.get("components", {}).get("schemas", {}))
+
 # (c) drop component schemas left UNREFERENCED after (b). Collapsing /tui/publish
 #     orphans the four EventTui{PromptAppend,CommandExecute,ToastShow,SessionSelect}
 #     schemas (the Event union references the downconverted *1 variants, not these).
@@ -201,16 +238,19 @@ gen kotlin "$KOTLIN_OUT" \
   --import-mappings 'JsonElement=kotlinx.serialization.json.JsonElement' \
   --additional-properties="packageName=$KOTLIN_PACKAGE,dateLibrary=java8,serializationLibrary=kotlinx_serialization,useCoroutines=true"
 
-# --- Swift (future iOS client, plan 07 stretch) — scaffold, best-effort ------
-# Generated and committed so the consumer exists, but NOT compile-gated: the
-# swift5 generator currently mis-renders one array-of-array schema
-# (QuestionAnswer used as a list element -> untyped `[Array]`), affecting 2
-# models. Tracked as a SDK-track followup; the Kotlin SDK is the gated one.
+# --- Swift (future iOS client, plan 07 stretch) — compiles, compile-gated ----
+# Uses the `swift6` generator: combined with the bare-array-ref inlining in
+# normalizer step (b2), it renders the array-of-array `answers` field as the
+# correct `[[String]]`. The older `swift5` generator emits the non-compiling
+# `[Array]` even after (b2) (a swift5-specific nested-array defect). swift6 emits
+# a SwiftPM `Sources/` layout that `swift build` compiles clean; the freshness
+# gate (scripts/check-sdk-fresh.sh) compile-gates it when a Swift toolchain is
+# present and always asserts the committed tree matches this output.
 SWIFT_OUT="$OUT_DIR/sdk/swift/gen"
 rm -rf "$SWIFT_OUT"
 mkdir -p "$SWIFT_OUT"
 cp "$REPO_ROOT/sdk/swift/.openapi-generator-ignore" "$SWIFT_OUT/.openapi-generator-ignore"
-gen swift5 "$SWIFT_OUT" \
+gen swift6 "$SWIFT_OUT" \
   --additional-properties="projectName=$SWIFT_PROJECT,responseAs=AsyncAwait"
 
 echo "SDKs generated under $OUT_DIR/sdk/{kotlin,swift}/gen" >&2
