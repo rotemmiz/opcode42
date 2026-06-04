@@ -123,8 +123,9 @@ func scenarioSessionUpdate(c *Client) ([]result.Step, error) {
 		map[string]any{"time": map[string]any{"archived": 1717000000000}}); err != nil {
 		return steps, err
 	}
-	// Un-archive: explicit null clears time.archived.
-	if err := do(c, &steps, "unarchive", http.MethodPatch, "/session/"+cs.ID,
+	// archived:null is a no-op (opencode has no un-archive path; the timestamp
+	// stays set). Both daemons return 200 with the prior archived value.
+	if err := do(c, &steps, "archived-null", http.MethodPatch, "/session/"+cs.ID,
 		map[string]any{"time": map[string]any{"archived": nil}}); err != nil {
 		return steps, err
 	}
