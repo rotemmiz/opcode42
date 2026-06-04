@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.DarkMode
@@ -186,6 +187,10 @@ fun ChatScreen(
                                 showOverflow = false
                                 showShareDialog = true
                             },
+                            onArchive = {
+                                showOverflow = false
+                                viewModel.archiveSession { onNavigateBack() }
+                            },
                             onDelete = {
                                 showOverflow = false
                                 viewModel.deleteSession { onNavigateBack() }
@@ -346,6 +351,7 @@ private fun OverflowMenu(
     onFork: () -> Unit,
     onSummarize: () -> Unit,
     onShare: () -> Unit,
+    onArchive: () -> Unit,
     onDelete: () -> Unit,
     onToggleTheme: () -> Unit,
 ) {
@@ -386,6 +392,11 @@ private fun OverflowMenu(
             onClick = onToggleTheme,
         )
         HorizontalDivider(color = Hairline)
+        DropdownMenuItem(
+            text = { Text("Archive session", color = OnSurface) },
+            leadingIcon = { Icon(Icons.Default.Archive, contentDescription = null, tint = OnSurfaceVariant) },
+            onClick = onArchive,
+        )
         DropdownMenuItem(
             text = { Text("Delete session", color = Error) },
             leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Error) },

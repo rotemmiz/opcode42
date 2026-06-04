@@ -324,6 +324,24 @@ class ForgeClient @Inject constructor(
         directory = directory,
     ) { json -> ForgeJson.decodeFromJsonElement(Session.serializer(), json) }
 
+    /**
+     * PATCH /session/{id} — archive the session by setting `time.archived` to a
+     * finite Unix-ms timestamp. opencode has NO un-archive path: archived is set-only
+     * (a JSON null/absent for archived is a no-op), so we only ever set it
+     * (session.ts:731-732, groups/session.ts:46-54). Returns the updated session.
+     */
+    suspend fun archiveSession(
+        sessionId: String,
+        archivedAt: Long = System.currentTimeMillis(),
+        directory: String? = null,
+    ): Session = patch(
+        path = "/session/$sessionId",
+        body = buildJsonObject {
+            put("time", buildJsonObject { put("archived", archivedAt) })
+        },
+        directory = directory,
+    ) { json -> ForgeJson.decodeFromJsonElement(Session.serializer(), json) }
+
     /** POST /session/{id}/summarize — compact the context using the given model. */
     suspend fun summarizeSession(sessionId: String, model: ModelRef, directory: String? = null): Boolean = post(
         path = "/session/$sessionId/summarize",

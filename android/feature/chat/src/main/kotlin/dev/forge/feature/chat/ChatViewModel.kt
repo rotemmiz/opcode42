@@ -280,6 +280,22 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Overflow → Archive: set `time.archived`; the returned (archived) session updates the
+     * store, dropping it from the active list. opencode has no un-archive path, so on success
+     * we navigate back. [onArchived] runs only after the PATCH succeeds.
+     */
+    fun archiveSession(onArchived: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                store.dispatch(AppEvent.SessionUpdated(client.archiveSession(sessionId, directory = directory)))
+                onArchived()
+            } catch (e: Exception) {
+                android.util.Log.w("ChatVM", "archiveSession failed", e)
+            }
+        }
+    }
+
     /** Overflow → Summarize: compact the context. No-op (logged) if no model is known yet. */
     fun summarize() {
         val model = effectiveModel() ?: run {

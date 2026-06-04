@@ -157,6 +157,33 @@ class SseWireParsingTest {
     }
 
     @Test
+    fun `session_updated surfaces time_archived as a number`() {
+        // opencode types time.archived as a finite number; the session list filters on it.
+        // A live session.updated after PATCH {time:{archived}} carries it under info.time.
+        val raw = sse(
+            "session.updated",
+            """{"sessionID":"ses_a",
+               "info":{"id":"ses_a","title":"Old","time":{"created":1,"archived":1717000000000}}}""",
+        )
+        val ev = parser.parse(raw)
+        assertTrue(ev is AppEvent.SessionUpdated)
+        val s = (ev as AppEvent.SessionUpdated).session
+        assertEquals("ses_a", s.id)
+        assertEquals(1717000000000L, s.time?.archived)
+    }
+
+    @Test
+    fun `session_updated without archived leaves it null`() {
+        val raw = sse(
+            "session.updated",
+            """{"sessionID":"ses_b","info":{"id":"ses_b","time":{"created":1}}}""",
+        )
+        val ev = parser.parse(raw)
+        assertTrue(ev is AppEvent.SessionUpdated)
+        assertNull((ev as AppEvent.SessionUpdated).session.time?.archived)
+    }
+
+    @Test
     fun `session_created is handled like session_updated`() {
         val raw = sse("session.created", """{"sessionID":"ses_9","info":{"id":"ses_9"}}""")
         assertTrue(parser.parse(raw) is AppEvent.SessionUpdated)

@@ -49,4 +49,8 @@ data class SessionShare(val url: String)
 data class SessionTime(
     val created: Long = 0,
     val updated: Long? = null,
+    // Unix-ms timestamp set when the session is archived. opencode types this as a
+    // finite number; null/absent means "not archived" and there is no un-archive path
+    // (session.ts:304, groups/session.ts:51). The session list filters on this.
+    val archived: Long? = null,
 )

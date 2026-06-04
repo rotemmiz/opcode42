@@ -544,3 +544,17 @@ Live-daemon eyeball items (need `forge serve` + a real shell):
       width (PUT /pty resize took effect — e.g. `tput cols` reflects the visible width).
 - [ ] EYEBALL: background+foreground or briefly drop the network during a terminal session and
       confirm reconnect resumes from the last cursor without replaying the entire scrollback.
+
+## P07-C — Android session rename + archive UI (plan 07 Phase C; PATCH /session/{id} #124)
+- [ ] EYEBALL: long-press a session row in the list → "Rename session" → change the title → Save;
+      confirm the row title updates immediately and persists across app restart (PATCH title).
+- [ ] EYEBALL: open a session → overflow (⋮) → "Rename session"; confirm the chat top bar title updates.
+- [ ] EYEBALL: long-press a session row → "Archive session"; confirm it disappears from the active
+      list and the top-bar "Archived (n)" badge increments.
+- [ ] EYEBALL: tap the "Archived (n)" badge; confirm archived sessions are listed, the title shows
+      "Archived", the FAB is hidden, and rows offer NO "Archive" action (opencode has no un-archive path).
+- [ ] EYEBALL: open a session → overflow → "Archive session"; confirm it navigates back and the
+      session is gone from the active list.
+- [ ] EYEBALL: with the app open on the session list, archive/rename the SAME session from another
+      client (or curl PATCH /session/{id}); confirm the list updates live via the session.updated SSE
+      (no manual refresh).
