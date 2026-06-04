@@ -33,10 +33,10 @@ type ToolDef struct {
 // config description says 5s but the code uses 30s).
 const defaultTimeout = 30 * time.Second
 
-// Status is a server's connection status (openapi MCPStatus). Error is set only
-// for "failed".
+// Status is a server's connection status (openapi MCPStatus). Error is present
+// (required) for "failed" and "needs_client_registration"; absent otherwise.
 type Status struct {
-	Status string `json:"status"` // connected | disabled | failed
+	Status string `json:"status"` // connected|disabled|failed|needs_auth|needs_client_registration
 	Error  string `json:"error,omitempty"`
 }
 
@@ -70,6 +70,13 @@ type Manager struct {
 	status  map[string]Status
 	clients map[string]conn
 	tools   map[string][]mcp.Tool // server name → its tools
+	// dynamic holds servers added at runtime via Add() (mcp/index.ts State.config),
+	// merged over the config-loaded `servers` for lookups.
+	dynamic map[string]Server
+	// pending holds in-progress OAuth flows keyed by server name, bridging the
+	// separate StartAuth and FinishAuth HTTP requests (the Go analogue of
+	// opencode's pendingOAuthTransports, mcp/index.ts:104).
+	pending map[string]*authFlow
 }
 
 // eventPublisher is the subset of *bus.Bus the manager needs to emit
@@ -144,7 +151,7 @@ func (m *Manager) connect(ctx context.Context) {
 			}
 			c, tl, err := m.dialAndList(ctx, name, s)
 			if err != nil {
-				status[name] = Status{Status: "failed", Error: errString(err)}
+				status[name] = m.dialErrorStatus(ctx, name, s, err)
 				continue
 			}
 			clients[name] = c
@@ -173,6 +180,28 @@ func errString(err error) string {
 	return "connection failed"
 }
 
+// dialErrorStatus classifies a failed dial into a status. A remote OAuth server
+// whose connect failed because authentication is required reports needs_auth or
+// needs_client_registration (mcp/index.ts:360-414); everything else is "failed".
+func (m *Manager) dialErrorStatus(ctx context.Context, name string, s Server, err error) Status {
+	if s.Type == "remote" && !s.oauthDisabled() {
+		if st, ok := authStatusFromConnectError(ctx, name, s, err); ok {
+			return st
+		}
+	}
+	return Status{Status: "failed", Error: errString(err)}
+}
+
+// probeInitialize runs the MCP Start+Initialize handshake against a freshly-built
+// client. It is shared by dialAndList (local/stdio) and the OAuth probe.
+func probeInitialize(ctx context.Context, c conn) error {
+	initReq := mcp.InitializeRequest{}
+	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ClientInfo = mcp.Implementation{Name: "forge", Version: "0.0.1"}
+	_, err := c.Initialize(ctx, initReq)
+	return err
+}
+
 // dialAndList connects, initializes, and lists a server's tools. When dial
 // already handshook the connection (ready), the Start/Initialize here is
 // skipped so a remote transport isn't initialized twice (some servers reject a
@@ -197,10 +226,7 @@ func (m *Manager) dialAndList(ctx context.Context, name string, s Server) (conn,
 			_ = c.Close()
 			return nil, nil, err
 		}
-		initReq := mcp.InitializeRequest{}
-		initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-		initReq.Params.ClientInfo = mcp.Implementation{Name: "forge", Version: "0.0.1"}
-		if _, err := c.Initialize(ctx, initReq); err != nil {
+		if err := probeInitialize(ctx, c); err != nil {
 			_ = c.Close()
 			return nil, nil, err
 		}
@@ -402,9 +428,9 @@ func (m *Manager) Close() {
 }
 
 // dialTransport is the default transport selector: local servers spawn a
-// subprocess (stdio); remote servers connect over HTTP. OAuth is a follow-up, so
-// servers that require it surface as "failed" (needs_auth is not yet emitted —
-// logged in known-divergences).
+// subprocess (stdio); remote servers connect over HTTP (with OAuth wired unless
+// disabled). An OAuth-required connect failure is propagated so dialErrorStatus
+// can classify it as needs_auth / needs_client_registration.
 func dialTransport(ctx context.Context, s Server) (conn, bool, error) {
 	switch s.Type {
 	case "local":
@@ -438,19 +464,44 @@ func stdioDial(s Server) (conn, error) {
 // transport first, then falls back to SSE, mirroring opencode's transport order
 // (mcp/index.ts:339-413). The chosen transport is the one whose Start+Initialize
 // handshake succeeds; it returns ready=true so dialAndList does NOT re-run the
-// handshake (some servers reject a second `initialize`). OAuth (needs_auth) is
-// out of scope this slice: an auth failure surfaces as "failed".
+// handshake (some servers reject a second `initialize`).
+//
+// OAuth: unless `oauth: false`, each transport is wired with a persistent token
+// store + the resolved redirect URI, so a stored token authenticates the connect
+// transparently. If a transport reports OAuth is required, that error is returned
+// immediately and the fallback loop breaks (matching opencode, which stops trying
+// transports on an auth error); dialErrorStatus then maps it to needs_auth /
+// needs_client_registration.
 func remoteDial(ctx context.Context, s Server) (conn, bool, error) {
 	if s.URL == "" {
 		return nil, false, fmt.Errorf("remote MCP server has no url")
 	}
+	// Attach OAuth only when a token is already stored: mcp-go's OAuth transport
+	// pre-empts with an "authorization required" error whenever the token store is
+	// empty (oauth.go:250), which would wrongly mark servers that don't require
+	// auth as needs_auth. So we dial plain when there's no token and rely on the
+	// server's real 401 (base AuthorizationRequiredError) to drive the auth flow —
+	// matching opencode, which only treats a 401 as needs_auth (mcp/index.ts:360).
+	oauthOn := !s.oauthDisabled() && hasStoredTokens(s.Name)
+	var cfg transport.OAuthConfig
+	if oauthOn {
+		cfg = oauthConfig(s.Name, s)
+	}
 	var lastErr error
 	for _, build := range []func() (conn, error){
 		func() (conn, error) {
-			return mcpgo.NewStreamableHttpClient(s.URL, transport.WithHTTPHeaders(s.Headers))
+			opts := []transport.StreamableHTTPCOption{transport.WithHTTPHeaders(s.Headers)}
+			if oauthOn {
+				opts = append(opts, transport.WithHTTPOAuth(cfg))
+			}
+			return mcpgo.NewStreamableHttpClient(s.URL, opts...)
 		},
 		func() (conn, error) {
-			return mcpgo.NewSSEMCPClient(s.URL, transport.WithHeaders(s.Headers))
+			opts := []transport.ClientOption{transport.WithHeaders(s.Headers)}
+			if oauthOn {
+				opts = append(opts, transport.WithOAuth(cfg))
+			}
+			return mcpgo.NewSSEMCPClient(s.URL, opts...)
 		},
 	} {
 		c, err := build()
@@ -460,6 +511,11 @@ func remoteDial(ctx context.Context, s Server) (conn, bool, error) {
 		}
 		if err := probeRemote(ctx, s, c); err != nil {
 			_ = c.Close()
+			// Stop on an auth error (401): trying the next transport would just hit
+			// the same 401, and opencode breaks the loop here (mcp/index.ts:413).
+			if isAuthRequired(err) {
+				return nil, false, err
+			}
 			lastErr = err
 			continue
 		}
@@ -469,6 +525,13 @@ func remoteDial(ctx context.Context, s Server) (conn, bool, error) {
 		lastErr = fmt.Errorf("no remote transport succeeded")
 	}
 	return nil, false, lastErr
+}
+
+// isAuthRequired reports whether err is a 401-driven authorization error, whether
+// from a plain transport (AuthorizationRequiredError) or an OAuth-enabled one
+// (OAuthAuthorizationRequiredError). Both signal the server requires auth.
+func isAuthRequired(err error) bool {
+	return mcpgo.IsOAuthAuthorizationRequiredError(err) || mcpgo.IsAuthorizationRequiredError(err)
 }
 
 // probeRemote runs the Start+Initialize handshake against a candidate transport
