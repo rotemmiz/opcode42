@@ -115,7 +115,12 @@ func (r *Relay) Run(ctx context.Context) {
 			if !lastDisconnect.IsZero() && r.now().Sub(lastDisconnect) < clientGrace {
 				continue
 			}
-			r.dispatch(ctx, n)
+			// Dispatch off the consumer goroutine so a slow/unreachable FCM send
+			// (up to the per-send timeout) never blocks bus consumption and stalls
+			// other subscribers sharing the global bus (whose buffered channel
+			// would otherwise fill and drop events). The rate limiter dedups, so a
+			// fresh dispatch per event is cheap.
+			go r.dispatch(ctx, n)
 		}
 	}
 }
@@ -149,12 +154,20 @@ func (r *Relay) dispatch(ctx context.Context, n Notification) {
 }
 
 // allow enforces the per-(device,session) rate window. It returns true and
-// records the send time when a push is permitted.
+// records the send time when a push is permitted. It also evicts rate entries
+// older than the window so the map does not grow without bound on a long-lived
+// daemon that serves many sessions (a stale entry is past its window anyway, so
+// dropping it cannot suppress a future push).
 func (r *Relay) allow(deviceID, sessionID string) bool {
 	key := deviceID + "|" + sessionID
 	now := r.now()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	for k, last := range r.rate {
+		if now.Sub(last) >= rateWindow {
+			delete(r.rate, k)
+		}
+	}
 	if last, ok := r.rate[key]; ok && now.Sub(last) < rateWindow {
 		return false
 	}

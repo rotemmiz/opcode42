@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -61,8 +62,7 @@ func TestFCMSenderSend(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "ya29.test", "expires_in": 3600})
 		default: // FCM send
 			gotAuth = r.Header.Get("Authorization")
-			buf := make([]byte, r.ContentLength)
-			_, _ = r.Body.Read(buf)
+			buf, _ := io.ReadAll(r.Body)
 			gotBody = string(buf)
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{}`))
