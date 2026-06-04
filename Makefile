@@ -3,7 +3,7 @@ BIN_DIR := bin
 DAEMON  := $(BIN_DIR)/forged
 TARGET  ?= http://localhost:4096
 
-.PHONY: all build test lint gen tidy conformance record selfdiff release-snapshot clean help
+.PHONY: all build test lint gen gen-sdks gen-all check-sdk-fresh tidy conformance record selfdiff release-snapshot clean help
 
 all: build
 
@@ -19,8 +19,16 @@ test: ## Run unit tests
 lint: ## Run golangci-lint
 	golangci-lint run
 
-gen: ## Regenerate code from the OpenAPI reference (oapi-codegen) — task S3
+gen: ## Regenerate Go code from the OpenAPI reference (oapi-codegen) — task S3
 	$(GO) generate ./...
+
+gen-sdks: ## Regenerate the Kotlin + Swift SDKs from the contract (needs java) — plan 06
+	bash scripts/gen-sdks.sh
+
+gen-all: gen gen-sdks ## Regenerate all generated code: Go + Kotlin + Swift SDKs
+
+check-sdk-fresh: ## Assert committed Kotlin/Swift SDKs match the spec (needs java) — plan 06 M8
+	bash scripts/check-sdk-fresh.sh
 
 tidy: ## Tidy go.mod / go.sum
 	$(GO) mod tidy

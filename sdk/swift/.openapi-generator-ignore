@@ -1,0 +1,16 @@
+# openapi-generator ignore — keep the committed Swift SDK lean and reviewable.
+# We commit only the generated Swift sources + the SwiftPM manifest; consumers
+# own their Xcode/CocoaPods/Carthage harness.
+# Regenerate with `make gen-sdks` (see scripts/gen-sdks.sh).
+
+# Per-endpoint markdown docs — noise in review; the spec is the source of truth.
+docs/**
+README.md
+
+# Alternative packaging manifests + helper scripts we don't ship.
+Cartfile
+ForgeClient.podspec
+project.yml
+git_push.sh
+.gitignore
+.swiftformat

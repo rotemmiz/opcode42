@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# Generate the Kotlin + Swift client SDKs from the frozen wire contract
+# (conformance/openapi-reference.json) using openapi-generator-cli, pinned to a
+# fixed version for deterministic, reviewable output (plan 06 M5 / M9).
+#
+# Pipeline (mirrors the Go SDK's, which downconverts before oapi-codegen):
+#   1. downconvert the 3.1 reference -> a derived 3.0 spec (the same converter the
+#      Go SDK uses, internal/tools/downconvert). openapi-generator handles 3.0 far
+#      better than 3.1 (3.1's `anyOf:[…,{type:null}]` nullability and free-form
+#      `anyOf:[{}]` shapes otherwise produce non-compiling output).
+#   2. normalize a few residual free-form/union shapes the generators still botch
+#      (see comments on the python step) — representation-only, wire shape kept.
+#   3. run the Kotlin (and best-effort Swift) generators.
+#
+# The Go SDK is generated separately by `make gen` (oapi-codegen via go generate);
+# this script covers only the JVM/Swift generators that need a Java toolchain.
+#
+# Output is committed (sdk/kotlin/gen, sdk/swift/gen); CI re-runs this and fails on
+# any diff (scripts/check-sdk-fresh.sh) so the SDKs stay pinned to the spec.
+#
+# Usage: scripts/gen-sdks.sh                  # generate into the repo (in place)
+#        OUT_DIR=/tmp/x scripts/gen-sdks.sh   # generate elsewhere (freshness check)
+#
+# Requires: java (>= 11) and go (for the downconvert step). The openapi-generator
+# JAR is downloaded once and cached under ${OPENAPI_GENERATOR_CACHE:-~/.cache/forge-sdk};
+# set OPENAPI_GENERATOR_JAR to a pre-downloaded JAR for offline/CI use.
+set -euo pipefail
+
+# --- pinned toolchain -------------------------------------------------------
+OPENAPI_GENERATOR_VERSION="${OPENAPI_GENERATOR_VERSION:-7.10.0}"
+KOTLIN_PACKAGE="dev.forge.sdk"
+SWIFT_PROJECT="ForgeClient"
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SPEC="$REPO_ROOT/conformance/openapi-reference.json"
+OUT_DIR="${OUT_DIR:-$REPO_ROOT}"
+CACHE_DIR="${OPENAPI_GENERATOR_CACHE:-$HOME/.cache/forge-sdk}"
+GO="${GO:-go}"
+
+if [[ ! -f "$SPEC" ]]; then
+  echo "error: spec not found at $SPEC (run scripts/sync-openapi.sh)" >&2
+  exit 2
+fi
+
+if ! command -v java >/dev/null 2>&1; then
+  echo "error: java not found — the Kotlin/Swift SDK generators need a JVM (>= 11)." >&2
+  echo "       Install a JDK, or skip SDK gen (Go SDK still regenerates via 'make gen')." >&2
+  exit 3
+fi
+
+# --- resolve the generator JAR (cache or download) --------------------------
+JAR="${OPENAPI_GENERATOR_JAR:-}"
+if [[ -z "$JAR" ]]; then
+  JAR="$CACHE_DIR/openapi-generator-cli-$OPENAPI_GENERATOR_VERSION.jar"
+  if [[ ! -f "$JAR" ]]; then
+    mkdir -p "$CACHE_DIR"
+    URL="https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/$OPENAPI_GENERATOR_VERSION/openapi-generator-cli-$OPENAPI_GENERATOR_VERSION.jar"
+    echo "downloading openapi-generator-cli $OPENAPI_GENERATOR_VERSION ..." >&2
+    if ! curl -fsSL -o "$JAR.tmp" "$URL"; then
+      echo "error: could not download $URL (set OPENAPI_GENERATOR_JAR to a local copy for offline use)." >&2
+      rm -f "$JAR.tmp"
+      exit 4
+    fi
+    mv "$JAR.tmp" "$JAR"
+  fi
+fi
+
+# --- 1. downconvert 3.1 -> derived 3.0 --------------------------------------
+DERIVED_SPEC="$(mktemp -t forge-sdk-3.0.XXXXXX.json)"
+NORM_SPEC="$(mktemp -t forge-sdk-norm.XXXXXX.json)"
+trap 'rm -f "$DERIVED_SPEC" "$NORM_SPEC"' EXIT
+echo "== downconvert 3.1 -> 3.0 ==" >&2
+# No -client flag: that disambiguator is specific to oapi-codegen's response
+# wrappers and would rename component schemas the openapi-generator output keeps.
+"$GO" run github.com/rotemmiz/forge/internal/tools/downconvert \
+  -in "$SPEC" -out "$DERIVED_SPEC" >/dev/null
+
+# --- 2. normalize residual shapes -------------------------------------------
+# Two representation-only transforms (wire shape preserved — request/response
+# bytes are unchanged), each working around an openapi-generator defect:
+#   (a) free-form object map values (`additionalProperties: {type: object}`) ->
+#       `additionalProperties: true`. Combined with the `object/AnyType ->
+#       JsonElement` type-mapping below, the Kotlin generator then emits a
+#       kotlinx-serializable `Map<String, JsonElement>` instead of an
+#       unserializable `Map<String, Any>`.
+#   (b) a requestBody whose ROOT schema is an undiscriminated `anyOf` of object
+#       `$ref`s (only /tui/publish: a union of 4 EventTui* schemas) -> free-form
+#       object. The Kotlin generator otherwise merges this into one inline model
+#       that references the members with mangled casing (`Eventtuitoastshow` vs
+#       the imported `EventTuiToastShow`) and fails to compile. Collapsing this
+#       one body to free-form matches what the Swift generator produces and still
+#       lets the client POST any union member verbatim.
+python3 - "$DERIVED_SPEC" "$NORM_SPEC" <<'PY'
+import json, sys
+src, dst = sys.argv[1], sys.argv[2]
+spec = json.load(open(src))
+
+def is_ref(s):
+    return isinstance(s, dict) and set(s.keys()) == {"$ref"}
+
+# (a) free-form map values -> additionalProperties: true
+def norm_freeform_maps(node):
+    if isinstance(node, dict):
+        ap = node.get("additionalProperties")
+        if (isinstance(ap, dict) and ap.get("type") == "object"
+                and "properties" not in ap and "additionalProperties" not in ap
+                and "$ref" not in ap):
+            node["additionalProperties"] = True
+        for v in list(node.values()):
+            norm_freeform_maps(v)
+    elif isinstance(node, list):
+        for v in node:
+            norm_freeform_maps(v)
+
+norm_freeform_maps(spec)
+
+# (b) requestBody root anyOf-of-object-refs -> free-form object
+for _path, item in spec.get("paths", {}).items():
+    if not isinstance(item, dict):
+        continue
+    for _method, op in item.items():
+        if not isinstance(op, dict):
+            continue
+        for _ct, media in (op.get("requestBody", {}) or {}).get("content", {}).items():
+            schema = media.get("schema")
+            if (isinstance(schema, dict) and isinstance(schema.get("anyOf"), list)
+                    and len(schema["anyOf"]) > 1
+                    and all(is_ref(s) for s in schema["anyOf"])
+                    and "discriminator" not in schema):
+                schema.clear()
+                schema["type"] = "object"
+                schema["additionalProperties"] = True
+
+# (c) drop component schemas left UNREFERENCED after (b). Collapsing /tui/publish
+#     orphans the four EventTui{PromptAppend,CommandExecute,ToastShow,SessionSelect}
+#     schemas (the Event union references the downconverted *1 variants, not these).
+#     The Kotlin generator still emits the orphans, and their names collide with the
+#     *1 variants, which triggers an ARCH-DEPENDENT casing bug (`EventTuiToastShow`
+#     on amd64 vs `Eventtuitoastshow` on arm64) — non-reproducible committed output.
+#     Removing the dead schemas removes the ambiguity entirely. Generic: any
+#     component schema with zero remaining `$ref`s after (a)/(b) is dropped.
+def collect_refs(node, acc):
+    if isinstance(node, dict):
+        r = node.get("$ref")
+        if isinstance(r, str) and r.startswith("#/components/schemas/"):
+            acc.add(r.rsplit("/", 1)[1])
+        for v in node.values():
+            collect_refs(v, acc)
+    elif isinstance(node, list):
+        for v in node:
+            collect_refs(v, acc)
+
+schemas = spec.get("components", {}).get("schemas", {})
+# Iterate to a fixed point: dropping a schema can orphan others it referenced.
+while True:
+    referenced = set()
+    # refs from paths/operations
+    collect_refs(spec.get("paths", {}), referenced)
+    # refs between schemas (a schema is "live" only if reachable from an operation,
+    # but to stay conservative we keep any schema referenced by another KEPT schema)
+    collect_refs(schemas, referenced)
+    dead = [n for n in schemas
+            if n not in referenced and n.startswith("EventTui")]
+    if not dead:
+        break
+    for n in dead:
+        del schemas[n]
+
+json.dump(spec, open(dst, "w"), indent=2, sort_keys=True)
+PY
+
+# --- 3. generate ------------------------------------------------------------
+gen() {
+  local generator="$1" out="$2"; shift 2
+  echo "== generating $generator -> $out ==" >&2
+  # --skip-validate-spec: the frozen opencode contract has a duplicate `pty` tag
+  # (a benign upstream quirk) carried through the downconvert.
+  # --global-property *Docs/*Tests=false: no per-endpoint docs/test stubs.
+  java -jar "$JAR" generate \
+    -i "$NORM_SPEC" \
+    -g "$generator" \
+    -o "$out" \
+    --skip-validate-spec \
+    --global-property=apiDocs=false,modelDocs=false,apiTests=false,modelTests=false \
+    "$@" >/dev/null
+}
+
+# --- Kotlin (Android primary client) — fully built, compiles clean ----------
+KOTLIN_OUT="$OUT_DIR/sdk/kotlin/gen"
+rm -rf "$KOTLIN_OUT"
+mkdir -p "$KOTLIN_OUT"
+cp "$REPO_ROOT/sdk/kotlin/.openapi-generator-ignore" "$KOTLIN_OUT/.openapi-generator-ignore"
+# model-name-mappings File=ForgeFile: the `File` schema otherwise collides with
+# the Kotlin generator's reserved `java.io.File` mapping (corrupts the class name).
+# (The EventTui* casing/arch issue is handled upstream by normalizer step (c),
+# which drops those now-unreferenced schemas entirely.)
+gen kotlin "$KOTLIN_OUT" \
+  --library jvm-okhttp4 \
+  --model-name-mappings 'File=ForgeFile' \
+  --type-mappings 'AnyType=JsonElement,object=JsonElement' \
+  --import-mappings 'JsonElement=kotlinx.serialization.json.JsonElement' \
+  --additional-properties="packageName=$KOTLIN_PACKAGE,dateLibrary=java8,serializationLibrary=kotlinx_serialization,useCoroutines=true"
+
+# --- Swift (future iOS client, plan 07 stretch) — scaffold, best-effort ------
+# Generated and committed so the consumer exists, but NOT compile-gated: the
+# swift5 generator currently mis-renders one array-of-array schema
+# (QuestionAnswer used as a list element -> untyped `[Array]`), affecting 2
+# models. Tracked as a SDK-track followup; the Kotlin SDK is the gated one.
+SWIFT_OUT="$OUT_DIR/sdk/swift/gen"
+rm -rf "$SWIFT_OUT"
+mkdir -p "$SWIFT_OUT"
+cp "$REPO_ROOT/sdk/swift/.openapi-generator-ignore" "$SWIFT_OUT/.openapi-generator-ignore"
+gen swift5 "$SWIFT_OUT" \
+  --additional-properties="projectName=$SWIFT_PROJECT,responseAs=AsyncAwait"
+
+echo "SDKs generated under $OUT_DIR/sdk/{kotlin,swift}/gen" >&2

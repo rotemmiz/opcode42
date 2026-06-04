@@ -1,0 +1,18 @@
+# openapi-generator ignore — keep the committed Kotlin SDK lean and reviewable.
+# We commit only the generated Kotlin sources + the module build file; the
+# Android app / consumers supply the Gradle wrapper, settings, and toolchain.
+# Regenerate with `make gen-sdks` (see scripts/gen-sdks.sh).
+
+# Per-endpoint markdown docs (hundreds of files) — noise in review; the spec is
+# the source of truth.
+docs/**
+README.md
+
+# Gradle wrapper + project scaffolding — consumers own their build harness.
+gradlew
+gradlew.bat
+gradle/**
+settings.gradle
+.gitignore
+git_push.sh
+proguard-rules.pro

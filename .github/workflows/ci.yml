@@ -49,6 +49,39 @@ jobs:
       - name: Assert committed codegen is up to date
         run: git diff --exit-code internal/api/gen/ || (echo "::error::forge.gen.go is stale — run 'make gen' and commit"; exit 1)
 
+  sdk-fresh:
+    # The Kotlin + Swift client SDKs (sdk/{kotlin,swift}/gen) are generated from
+    # the frozen contract and committed; this job regenerates them and fails on any
+    # diff — the same "generated output is pinned to the spec" gate the Go codegen
+    # has (codegen-fresh). It also compiles the Kotlin SDK (the primary client).
+    # Needs Go (for the 3.1->3.0 downconvert) + a JDK (for openapi-generator).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # sdk/kotlin has no Gradle wrapper (it's a standalone library module, not
+          # the Android app); pin a Gradle so the `gradle` CLI is on PATH for the
+          # compile step below.
+          gradle-version: "8.11.1"
+      - name: Regenerate SDKs
+        run: make gen-sdks
+      - name: Assert committed SDKs are up to date
+        run: |
+          git diff --exit-code sdk/kotlin/gen sdk/swift/gen \
+            || (echo "::error::SDKs are stale — run 'make gen-sdks' and commit sdk/{kotlin,swift}/gen"; exit 1)
+      - name: Compile the Kotlin SDK
+        working-directory: sdk/kotlin
+        run: gradle --no-daemon build -x test
+
   goreleaser-snapshot:
     # Validates the release packaging config (plan 13 §Packaging verification #8):
     # `goreleaser check` lints .goreleaser.yaml and the snapshot build proves all
