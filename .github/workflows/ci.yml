@@ -48,3 +48,37 @@ jobs:
         run: make gen
       - name: Assert committed codegen is up to date
         run: git diff --exit-code internal/api/gen/ || (echo "::error::forge.gen.go is stale — run 'make gen' and commit"; exit 1)
+
+  goreleaser-snapshot:
+    # Validates the release packaging config (plan 13 §Packaging verification #8):
+    # `goreleaser check` lints .goreleaser.yaml and the snapshot build proves all
+    # platform binaries are produced. Docker images are release-only and skipped
+    # here so no registry credentials are needed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: Check goreleaser config
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: check
+      - name: Snapshot build (binaries + archives, no publish)
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean --skip=docker
+      - name: Assert forged binary under 40MB
+        run: |
+          bin=$(find dist -type f -name forged | head -n1)
+          echo "binary: $bin"
+          size=$(stat -c%s "$bin")
+          echo "size bytes: $size"
+          if [ "$size" -gt 41943040 ]; then
+            echo "::error::forged binary $size bytes exceeds 40MB target"; exit 1
+          fi

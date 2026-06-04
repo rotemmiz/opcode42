@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Forge daemon launchd agent (plan 13 §"launchd plist (macOS)").
+
+  Install (per-user LaunchAgent):
+    cp packaging/launchd/dev.forge.daemon.plist ~/Library/LaunchAgents/
+    # Set a password if you bind beyond loopback (otherwise the daemon refuses):
+    # launchctl setenv OPENCODE_SERVER_PASSWORD "$(openssl rand -base64 24)"
+    launchctl load ~/Library/LaunchAgents/dev.forge.daemon.plist
+
+  Replace /usr/local/bin/forged with your install path if different.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.forge.daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/forged</string>
+        <string>--host</string>
+        <string>127.0.0.1</string>
+        <string>--port</string>
+        <string>4096</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/forge.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/forge.err.log</string>
+</dict>
+</plist>

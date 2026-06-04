@@ -1,0 +1,39 @@
+# Forge daemon systemd unit (plan 13 §"systemd unit (Linux)").
+#
+# Install:
+#   sudo cp packaging/systemd/forge.service /etc/systemd/system/forge.service
+#   sudo useradd --system --no-create-home --shell /usr/sbin/nologin forge
+#   sudo install -d -o forge -g forge /var/lib/forge
+#   sudo install -d /etc/forge
+#   # Write a strong password (0600); the daemon reads OPENCODE_SERVER_PASSWORD.
+#   sudo sh -c 'umask 077; printf "OPENCODE_SERVER_PASSWORD=%s\n" "$(openssl rand -base64 24)" > /etc/forge/env'
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now forge
+[Unit]
+Description=Forge AI coding daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=forge
+Group=forge
+# Loopback by default; a non-loopback --host requires OPENCODE_SERVER_PASSWORD or
+# the daemon refuses to start (plan 13 §Defaults).
+ExecStart=/usr/local/bin/forged --host 127.0.0.1 --port 4096
+Restart=on-failure
+RestartSec=5s
+
+# Credentials and runtime data.
+EnvironmentFile=-/etc/forge/env
+Environment=FORGE_DB=/var/lib/forge/forge.db
+
+# Hardening.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/forge
+
+[Install]
+WantedBy=multi-user.target

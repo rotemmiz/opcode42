@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/subtle"
 	"encoding/base64"
 	"net/http"
 	"os"
@@ -46,6 +47,44 @@ func FromEnv() Config {
 	return Config{Username: user, Password: os.Getenv("OPENCODE_SERVER_PASSWORD")}
 }
 
+// loopbackHosts are the bind hosts treated as loopback-only (not exposed beyond
+// the local machine). Kept here rather than imported from the mdns package to
+// avoid an import cycle and to keep the security decision self-contained.
+var loopbackHosts = map[string]struct{}{
+	"127.0.0.1": {},
+	"localhost": {},
+	"::1":       {},
+	"":          {},
+}
+
+// IsLoopbackHost reports whether host binds only the local machine.
+func IsLoopbackHost(host string) bool {
+	_, ok := loopbackHosts[strings.ToLower(strings.TrimSpace(host))]
+	return ok
+}
+
+// CheckBindExposure enforces Forge's stronger-than-opencode default: a
+// non-loopback bind requires a password. opencode merely warns
+// (cli/cmd/serve.ts:15); Forge refuses (plan 13 §"Defaults": "0.0.0.0 bind
+// requires a password; daemon refuses to start otherwise"). It returns a
+// non-nil error the caller should treat as a hard start failure when host is
+// exposed and auth is not required; otherwise nil.
+func (c Config) CheckBindExposure(host string) error {
+	if !c.Required() && !IsLoopbackHost(host) {
+		return &ExposureError{Host: host}
+	}
+	return nil
+}
+
+// ExposureError is returned by CheckBindExposure when a non-loopback bind is
+// requested without a password.
+type ExposureError struct{ Host string }
+
+func (e *ExposureError) Error() string {
+	return "refusing to bind non-loopback host " + e.Host +
+		" without a password: set OPENCODE_SERVER_PASSWORD (or bind 127.0.0.1)"
+}
+
 // Middleware enforces auth. When auth is not required it is a pass-through.
 // Otherwise it accepts the credential from ?auth_token or the Authorization
 // header and, on failure, responds 401 with a WWW-Authenticate challenge and an
@@ -64,13 +103,26 @@ func (c Config) Middleware(next http.Handler) http.Handler {
 			return
 		}
 		user, pass := credentialFromRequest(r)
-		if user != c.Username || pass != c.Password {
+		if !c.authorized(user, pass) {
 			w.Header().Set("WWW-Authenticate", wwwAuthenticate)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// authorized reports whether the presented (user, pass) match the configured
+// credentials. Unlike opencode's plain `===` compare (auth.ts:30), Forge uses
+// crypto/subtle.ConstantTimeCompare so the response time does not leak how many
+// leading bytes of the password were correct (plan 13 §"Auth", threat row
+// "Timing attacks on password compare"). Both fields are compared
+// unconditionally — using `&` rather than `&&` — so a username mismatch does not
+// short-circuit and reveal, via timing, whether the username was right.
+func (c Config) authorized(user, pass string) bool {
+	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(c.Username))
+	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(c.Password))
+	return userOK&passOK == 1
 }
 
 // credentialFromRequest extracts (username, password) from the request: the

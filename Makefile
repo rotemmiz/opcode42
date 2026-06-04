@@ -3,12 +3,15 @@ BIN_DIR := bin
 DAEMON  := $(BIN_DIR)/forged
 TARGET  ?= http://localhost:4096
 
-.PHONY: all build test lint gen tidy conformance record clean help
+.PHONY: all build test lint gen tidy conformance record selfdiff release-snapshot clean help
 
 all: build
 
 build: ## Build the forged daemon into bin/forged
 	$(GO) build -o $(DAEMON) ./cmd/forged
+
+release-snapshot: ## Dry-run the release build (binaries + archives, no publish) — plan 13
+	goreleaser release --snapshot --clean --skip=docker
 
 test: ## Run unit tests
 	$(GO) test ./...

@@ -133,7 +133,13 @@ func resolveOptions(o options, explicit map[string]bool) options {
 func run(opts options) error {
 	authCfg := auth.FromEnv()
 	if !authCfg.Required() {
-		// opencode warns when the server is unsecured (cli/cmd/serve.ts:15).
+		// opencode only warns when the server is unsecured (cli/cmd/serve.ts:15);
+		// Forge keeps the warning on loopback but REFUSES to expose an
+		// unauthenticated daemon on a non-loopback interface (plan 13 §"Defaults":
+		// "0.0.0.0 bind requires a password; daemon refuses to start otherwise").
+		if err := authCfg.CheckBindExposure(opts.host); err != nil {
+			return err
+		}
 		log.Printf("warning: OPENCODE_SERVER_PASSWORD is not set; server is unauthenticated")
 	}
 
@@ -204,7 +210,7 @@ func run(opts options) error {
 		registerPluginHost(baseCtx, instances, ln.Addr().String(), authCfg)
 	}
 
-	mdnsSvc := startMDNS(opts, ln)
+	mdnsSvc := startMDNS(opts, ln, authCfg.Required())
 	if mdnsSvc != nil {
 		defer mdnsSvc.Shutdown()
 	}
@@ -356,9 +362,11 @@ func firstEnv(names ...string) string {
 }
 
 // startMDNS advertises the service on the actually-bound port when mDNS is
-// enabled and the host is not loopback (server.ts:158-164). Returns nil when
-// nothing was published.
-func startMDNS(opts options, ln net.Listener) *mdns.Service {
+// enabled and the host is not loopback (server.ts:158-164). It publishes both
+// the opencode-compatible _http._tcp record and Forge's richer _opencode._tcp
+// record (plan 13 §Discovery); authRequired sets the auth TXT key on the latter.
+// Returns nil when nothing was published.
+func startMDNS(opts options, ln net.Listener, authRequired bool) *mdns.Service {
 	if !opts.mdns {
 		return nil
 	}
@@ -367,12 +375,12 @@ func startMDNS(opts options, ln net.Listener) *mdns.Service {
 		return nil
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
-	svc, err := mdns.Publish(port, opts.mdnsDomain)
+	svc, err := mdns.Publish(port, opts.mdnsDomain, authRequired)
 	if err != nil {
 		log.Printf("warning: mDNS publish failed: %v", err)
 		return nil
 	}
-	log.Printf("mDNS: advertising opencode-%d via _http._tcp.local", port)
+	log.Printf("mDNS: advertising opencode-%d via _http._tcp.local and _opencode._tcp.local", port)
 	return svc
 }
 

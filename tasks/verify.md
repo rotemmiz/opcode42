@@ -478,3 +478,35 @@ Plan 02 agent loop completed end-to-end on the Go daemon.
       session list — len differs between two fresh runs because sessions persist in the repo's
       storage, not isolated by the fresh HOME). Orthogonal to the TUI work; needs the runner to
       isolate per-run project storage or the normalizer to count rather than compare the list.
+
+## P13-rest — Remote-ops hardening (2026-06-04, plan 13 §13.1/§13.7/§Packaging)
+
+Auth + mDNS hardening are unit-tested and CI-gated; the items below need real infra /
+multiple machines and are left for you.
+
+- [x] Constant-time credential compare (`auth.authorized` via `crypto/subtle`), wrong-username
+      and wrong-password both 401, both-fields-checked. (automated: `go test ./internal/auth/...`)
+- [x] Non-loopback bind without a password refuses to start (`CheckBindExposure`). (automated:
+      `TestCheckBindExposure`) Spot-check live: `OPENCODE_SERVER_PASSWORD= ./bin/forged --host 0.0.0.0`
+      should exit non-zero with a "refusing to bind" error.
+- [x] mDNS advertises BOTH `_http._tcp` and `_opencode._tcp`. (automated: `TestPublishDualRecords`)
+- [ ] EYEBALL (LAN): start `./bin/forged --mdns` (with a password) on one machine; browse
+      `_opencode._tcp.local` and `_http._tcp.local` from another (e.g. `dns-sd -B _opencode._tcp`
+      on macOS) — confirm both records appear with TXT `auth=required`/`version=1` on the Forge one.
+- [ ] EYEBALL (release): push a `vX.Y.Z` tag (or run `make release-snapshot`) — confirm goreleaser
+      produces linux/darwin amd64+arm64 archives + checksums, and (on a real tag) multi-arch
+      `ghcr.io/rotemmiz/forge` images. Binary stays < 40MB (CI asserts this).
+- [ ] EYEBALL (container): `docker run --rm -e OPENCODE_SERVER_PASSWORD=x -p 4096:4096
+      ghcr.io/rotemmiz/forge:latest --host 0.0.0.0` then `curl -u opencode:x localhost:4096/global/health`
+      returns 200.
+- [ ] EYEBALL (service units): install `packaging/systemd/forge.service` (Linux) or
+      `packaging/launchd/dev.forge.daemon.plist` (macOS); confirm the daemon starts and restarts.
+
+### Deferred to followups (NOT in this PR)
+- [ ] Push notifications (FCM dispatcher, `/push/*` endpoints, notification queue) — plan 13 §13.8.
+      Needs an FCM service account + a real Android device; cannot be CI-gated. Left as a followup.
+- [ ] `forge install-service` CLI command (systemd/launchd/Windows-svc generators) — plan 13 §13.13.
+      Static unit templates ship in `packaging/`; the generator command is deferred.
+- [ ] Windows release target — `internal/lsp/service.go` uses Unix-only syscalls without build
+      constraints, so windows/amd64 cross-build fails. goreleaser omits windows until the daemon is
+      made Windows-portable (out of this track's scope; do not edit internal/lsp here).
