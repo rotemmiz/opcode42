@@ -104,6 +104,15 @@ var forgeEmittedEventCatalog = map[string]bool{
 	"message.updated":      true,
 	"message.part.updated": true,
 	"message.part.delta":   true,
+	// message deletion (server/prompt_handlers.go deleteMessageHandler;
+	// message store DeleteMessage) — opencode session.ts:792, message-v2.ts:524
+	"message.removed": true,
+	// session lifecycle CRUD (internal/session.Store publishes via the instance
+	// bus): created+updated on create/fork, updated on title generation, deleted
+	// on delete — opencode session.ts:339-352,557,562,611
+	"session.created": true,
+	"session.updated": true,
+	"session.deleted": true,
 	// run-lock status (engine.go emitStatus, M11)
 	"session.status":    true,
 	"session.idle":      true,

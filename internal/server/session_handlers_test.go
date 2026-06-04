@@ -34,12 +34,16 @@ func newBackedServer(t *testing.T, authCfg auth.Config) http.Handler {
 	t.Cleanup(func() { _ = db.Close() })
 
 	g := bus.NewGlobal()
+	instances := instance.NewManager(g)
+	sessions := session.NewStore(db).WithBus(func(directory string) session.EventPublisher {
+		return instances.BusFor(directory)
+	})
 	h, err := New(Options{
 		Version:   "0.0.1",
 		Auth:      authCfg,
 		Cwd:       t.TempDir(),
-		Sessions:  session.NewStore(db),
-		Instances: instance.NewManager(g),
+		Sessions:  sessions,
+		Instances: instances,
 		Global:    g,
 	})
 	if err != nil {

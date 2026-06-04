@@ -131,6 +131,15 @@ func (m *Manager) Get(directory string) *Context {
 	return c
 }
 
+// BusFor returns the instance bus serving directory, creating the instance on
+// first use (like Get). It is the publish side for directory-scoped lifecycle
+// events (session.created/updated/deleted, message.removed) that originate
+// outside an active run — e.g. the session HTTP handlers and async title
+// generation.
+func (m *Manager) BusFor(directory string) *bus.Bus {
+	return m.Get(directory).Bus
+}
+
 // loadConfig loads the directory's merged opencode config (nil on error, so a
 // bad config never blocks instance creation).
 func loadConfig(directory string) map[string]any {

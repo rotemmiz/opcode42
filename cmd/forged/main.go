@@ -157,6 +157,12 @@ func run(opts options) error {
 	globalBus := bus.NewGlobal()
 	instances := instance.NewManager(globalBus)
 
+	// sessions publishes its lifecycle events (session.created/updated/deleted)
+	// to the per-directory instance bus so SSE subscribers see them.
+	sessions := session.NewStore(db).WithBus(func(directory string) session.EventPublisher {
+		return instances.BusFor(directory)
+	})
+
 	// baseCtx is cancelled at the start of shutdown to unblock SSE/PTY streams.
 	baseCtx, cancelBase := context.WithCancel(context.Background())
 	defer cancelBase()
@@ -175,7 +181,7 @@ func run(opts options) error {
 		Version:   version,
 		Auth:      authCfg,
 		Cwd:       cwd,
-		Sessions:  session.NewStore(db),
+		Sessions:  sessions,
 		Instances: instances,
 		Global:    globalBus,
 		BaseCtx:   baseCtx,

@@ -84,6 +84,29 @@ func (s *Store) DeletePart(ctx context.Context, partID string) (bool, error) {
 	return n > 0, err
 }
 
+// DeleteMessage removes a message and all its parts, scoped to (sessionID,
+// messageID), and reports whether the message row existed. It mirrors
+// opencode's message.removed projector, which deletes the MessageTable row and
+// its PartTable rows (projectors.ts:145-169). The two deletes run under mu so a
+// concurrent put can't interleave; a missing message reports ok=false without
+// error so the handler can 404 the same way opencode's requireSession does for
+// the parent session.
+func (s *Store) DeleteMessage(ctx context.Context, sessionID, messageID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.db.ExecContext(ctx,
+		"DELETE FROM part WHERE message_id = ? AND session_id = ?", messageID, sessionID); err != nil {
+		return false, fmt.Errorf("delete parts: %w", err)
+	}
+	res, err := s.db.ExecContext(ctx,
+		"DELETE FROM message WHERE id = ? AND session_id = ?", messageID, sessionID)
+	if err != nil {
+		return false, fmt.Errorf("delete message: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 // GetPart returns a single part by id, or ErrNotFound.
 func (s *Store) GetPart(ctx context.Context, partID string) (Part, error) {
 	var data string

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rotemmiz/forge/internal/bus"
 	"github.com/rotemmiz/forge/internal/id"
 	"github.com/rotemmiz/forge/internal/storage"
 	"github.com/rotemmiz/forge/internal/worktree"
@@ -84,17 +85,72 @@ type Time struct {
 	Archived   *int64 `json:"archived,omitempty"`
 }
 
+// EventPublisher is the minimal slice of the instance bus the session store
+// needs to fan lifecycle events out to SSE subscribers. *bus.Bus satisfies it.
+type EventPublisher interface {
+	Publish(bus.Event)
+}
+
+// BusResolver maps a session's (symlink-resolved) directory to the instance bus
+// that serves that directory's SSE subscribers. It returns nil when no bus is
+// available (e.g. the store has no instance manager wired), in which case
+// lifecycle publishing is silently skipped.
+type BusResolver func(directory string) EventPublisher
+
 // Store persists sessions. Writes are serialized by mu on top of the
 // single-connection storage layer.
 type Store struct {
 	db            *storage.DB
 	mu            sync.Mutex
 	CompatVersion string
+	// busFor resolves the per-directory instance bus for lifecycle publishing.
+	// nil ⇒ no events are published (the store still functions for tests that
+	// only exercise persistence).
+	busFor BusResolver
 }
 
 // NewStore returns a session store backed by db.
 func NewStore(db *storage.DB) *Store {
 	return &Store{db: db, CompatVersion: DefaultCompatVersion}
+}
+
+// WithBus wires the per-directory bus resolver so the store publishes
+// session.created / session.updated / session.deleted to SSE subscribers,
+// matching opencode's session/session.ts publish sites (session.ts:339-352,557,
+// 562,611). It returns the store for chaining and is safe to call with a nil
+// resolver (publishing stays disabled).
+func (s *Store) WithBus(r BusResolver) *Store {
+	s.busFor = r
+	return s
+}
+
+// publish fans a lifecycle event out to the instance bus serving directory.
+// A nil resolver or a nil bus (unknown directory) makes this a no-op.
+func (s *Store) publish(directory, typ string, props any) {
+	if s.busFor == nil {
+		return
+	}
+	if b := s.busFor(directory); b != nil {
+		b.Publish(bus.NewEvent(typ, props))
+	}
+}
+
+// publishCreated emits session.created followed by the backwards-compat
+// session.updated, mirroring opencode's create path which publishes both: the
+// sync Event.Created plus a manual bus Event.Updated carrying the full info
+// (session.ts:557,562). Both events carry {sessionID, info} with the FULL
+// session object (Event.Updated's busSchema is CreatedEventSchema — the bus
+// always sees the whole session, never a partial patch; session.ts:344,
+// projectors.ts:12-22).
+func (s *Store) publishCreated(info Info) {
+	s.publish(info.Directory, "session.created", sessionEventProps(info))
+	s.publish(info.Directory, "session.updated", sessionEventProps(info))
+}
+
+// sessionEventProps is the {sessionID, info} shape every session lifecycle
+// event carries on the bus (session.ts:289-292 CreatedEventSchema).
+func sessionEventProps(info Info) map[string]any {
+	return map[string]any{"sessionID": info.ID, "info": info}
 }
 
 // Create makes a new session rooted at the (already symlink-resolved) directory
@@ -116,6 +172,7 @@ func (s *Store) Create(ctx context.Context, dir string) (Info, error) {
 	if err := s.insert(ctx, info, root); err != nil {
 		return Info{}, err
 	}
+	s.publishCreated(info)
 	return info, nil
 }
 
@@ -139,6 +196,7 @@ func (s *Store) CreateChild(ctx context.Context, dir, parentID string) (Info, er
 	if err := s.insert(ctx, info, root); err != nil {
 		return Info{}, err
 	}
+	s.publishCreated(info)
 	return info, nil
 }
 
@@ -165,6 +223,7 @@ func (s *Store) Fork(ctx context.Context, parentID string) (Info, error) {
 	if err := s.insert(ctx, info, worktree.Root(parent.Directory)); err != nil {
 		return Info{}, err
 	}
+	s.publishCreated(info)
 	return info, nil
 }
 
@@ -189,14 +248,30 @@ func (s *Store) Title(ctx context.Context, sessionID string) (string, error) {
 
 // SetTitle updates the session's title and bumps time_updated. It is a no-op for
 // a missing session (RowsAffected == 0); callers fire it as best-effort during
-// title generation.
+// title generation. On a real update it publishes session.updated with the full
+// refreshed info, matching opencode's title-generation update path (the loop's
+// patch(...) call ultimately publishes Session.Event.Updated; session.ts:562,
+// 721).
 func (s *Store) SetTitle(ctx context.Context, sessionID, title string) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		"UPDATE session SET title = ?, time_updated = ? WHERE id = ?",
 		title, time.Now().UnixMilli(), sessionID)
-	return err
+	s.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil // missing session: nothing updated, nothing to publish
+	}
+	// Re-read the row so the published info carries the new title + bumped
+	// time, the way opencode's bus projector rehydrates the full session
+	// (projectors.ts:12-22). A read failure here is non-fatal: the title was
+	// persisted; only the (best-effort) notification is skipped.
+	if info, err := s.Get(ctx, sessionID); err == nil {
+		s.publish(info.Directory, "session.updated", sessionEventProps(info))
+	}
+	return nil
 }
 
 // IsDefaultTitle reports whether title is a still-untouched auto-generated
@@ -227,16 +302,30 @@ func (s *Store) List(ctx context.Context) ([]Info, error) {
 	return out, rows.Err()
 }
 
-// Delete removes the session and reports whether a row existed.
+// Delete removes the session and reports whether a row existed. On a successful
+// delete it publishes session.deleted carrying the FULL session info that was
+// removed, matching opencode's remove path (it publishes Event.Deleted with the
+// fetched session before deleting; session.ts:611, Event.Deleted's schema is
+// CreatedEventSchema so the payload is {sessionID, info}; session.ts:348-352).
 func (s *Store) Delete(ctx context.Context, sessionID string) (bool, error) {
+	// Snapshot the session first so the deleted event can carry its full info;
+	// a not-found here just means the delete below is a no-op.
+	info, getErr := s.Get(ctx, sessionID)
+
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	res, err := s.db.ExecContext(ctx, "DELETE FROM session WHERE id = ?", sessionID)
+	s.mu.Unlock()
 	if err != nil {
 		return false, err
 	}
 	n, err := res.RowsAffected()
-	return n > 0, err
+	if err != nil {
+		return false, err
+	}
+	if n > 0 && getErr == nil {
+		s.publish(info.Directory, "session.deleted", sessionEventProps(info))
+	}
+	return n > 0, nil
 }
 
 // Children returns the sessions whose parentID is sessionID. With fork not

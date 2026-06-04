@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/rotemmiz/forge/internal/bus"
 	"github.com/rotemmiz/forge/internal/engine"
 	"github.com/rotemmiz/forge/internal/engine/message"
 	"github.com/rotemmiz/forge/internal/engine/permission"
@@ -29,6 +30,7 @@ func registerPromptRoutes(reg func(method, path string, h http.HandlerFunc), opt
 	reg(http.MethodPost, "/session/{sessionID}/message", promptHandler(opts, false))
 	reg(http.MethodPost, "/session/{sessionID}/prompt_async", promptHandler(opts, true))
 	reg(http.MethodGet, "/session/{sessionID}/message", listMessagesHandler(opts))
+	reg(http.MethodDelete, "/session/{sessionID}/message/{messageID}", deleteMessageHandler(opts))
 	reg(http.MethodPost, "/session/{sessionID}/abort", abortHandler(opts))
 	reg(http.MethodPost, "/session/{sessionID}/summarize", summarizeHandler(opts))
 }
@@ -269,6 +271,39 @@ func listMessagesHandler(opts Options) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, msgs)
+	}
+}
+
+// deleteMessageHandler implements DELETE /session/:id/message/:messageID. It
+// mirrors opencode's deleteMessage handler exactly: requireSession (404) →
+// assertNotBusy (409) → removeMessage → return bare `true`. removeMessage drops
+// the message + its parts and publishes message.removed with {sessionID,
+// messageID} on the instance bus (session.ts:373-379,788-797; message-v2.ts:500-
+// 502,524-529; the projector deletes the rows: projectors.ts:145-169).
+func deleteMessageHandler(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID := chi.URLParam(r, "sessionID")
+		messageID := chi.URLParam(r, "messageID")
+		if !requireSession(w, r, opts, sessionID) {
+			return
+		}
+		inst := opts.Instances.Get(DirectoryFromContext(r.Context()))
+		if err := inst.RunState.AssertNotBusy(sessionID); err != nil {
+			writeError(w, http.StatusConflict, "BusyError", err.Error())
+			return
+		}
+		if _, err := opts.Messages.DeleteMessage(r.Context(), sessionID, messageID); err != nil {
+			writeError(w, http.StatusInternalServerError, "StorageError", err.Error())
+			return
+		}
+		// opencode publishes message.removed unconditionally (sync.run), even when
+		// the message did not exist; match that so subscribers observe the same
+		// stream regardless of prior state (session.ts:792-795).
+		inst.Bus.Publish(bus.NewEvent("message.removed", map[string]any{
+			"sessionID": sessionID,
+			"messageID": messageID,
+		}))
+		writeJSON(w, http.StatusOK, true)
 	}
 }
 
