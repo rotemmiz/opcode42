@@ -44,29 +44,30 @@ sealed interface PaletteEntry {
 }
 
 /**
- * Merges built-in actions ahead of daemon commands (builtins-first ordering, like
- * the TUI's `filterSlash`). Unbuilt built-ins are kept but disabled;
- * implemented-but-currently-unavailable built-ins (e.g. `/terminal` without a
- * directory) are hidden. Daemon commands are de-duplicated by name so the merged
- * list always has collision-free [PaletteEntry.key]s.
+ * Builds the palette in three bands: available built-in actions first (in registry
+ * order, like the TUI's builtins-first `filterSlash`), then daemon commands, then
+ * the disabled "coming soon" built-ins last so they never bury real commands.
+ * Implemented-but-currently-unavailable built-ins (e.g. `/terminal` without a
+ * directory, `/info` when the panel is already shown) are hidden. Daemon commands
+ * are de-duplicated by name so the merged list always has collision-free
+ * [PaletteEntry.key]s.
  */
 fun buildPaletteEntries(
     builtins: List<BuiltinCommand>,
     daemon: List<CommandInfo>,
     actions: ChatCommandActions,
 ): List<PaletteEntry> {
-    val builtinEntries = builtins.mapNotNull { cmd ->
-        when {
-            !cmd.implemented -> PaletteEntry.Builtin(cmd, enabled = false)
-            cmd.isAvailable(actions) -> PaletteEntry.Builtin(cmd, enabled = true)
-            else -> null
-        }
-    }
+    val available = builtins
+        .filter { it.implemented && it.isAvailable(actions) }
+        .map { PaletteEntry.Builtin(it, enabled = true) }
     val daemonEntries = daemon
         .filter { it.name.isNotEmpty() }
         .distinctBy { it.name }
         .map { PaletteEntry.Daemon(it) }
-    return builtinEntries + daemonEntries
+    val comingSoon = builtins
+        .filter { !it.implemented }
+        .map { PaletteEntry.Builtin(it, enabled = false) }
+    return available + daemonEntries + comingSoon
 }
 
 /** Case-insensitive substring match on the command name (keeps the prior `contains` feel). */

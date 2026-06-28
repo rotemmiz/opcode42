@@ -14,15 +14,39 @@ class PaletteEntryTest {
         CommandInfo(name = name, description = description, source = source)
 
     @Test
-    fun builtinsComeBeforeDaemonCommands() {
+    fun orderingIsAvailableBuiltinsThenDaemonThenComingSoon() {
         val entries = buildPaletteEntries(
             builtinCommands,
             listOf(daemon("deploy")),
             RecordingCommandActions(),
         )
-        val lastBuiltin = entries.indexOfLast { it is PaletteEntry.Builtin }
         val firstDaemon = entries.indexOfFirst { it is PaletteEntry.Daemon }
-        assertTrue(lastBuiltin < firstDaemon)
+        val lastAvailableBuiltin = entries.indexOfLast { it is PaletteEntry.Builtin && it.enabled }
+        val firstComingSoon = entries.indexOfFirst { it is PaletteEntry.Builtin && !it.enabled }
+        // available built-ins → daemon → coming-soon
+        assertTrue(lastAvailableBuiltin < firstDaemon)
+        assertTrue(firstDaemon < firstComingSoon)
+    }
+
+    @Test
+    fun availableBuiltinsKeepRegistryOrder() {
+        val entries = buildPaletteEntries(builtinCommands, emptyList(), RecordingCommandActions())
+        val newIdx = entries.indexOfFirst { it.name == "new" }
+        val deleteIdx = entries.indexOfFirst { it.name == "delete" }
+        assertTrue(newIdx in 0 until deleteIdx) // "new" precedes "delete" as in the registry
+    }
+
+    @Test
+    fun infoHiddenWhenInfoPanelVisible() {
+        val withPanel = buildPaletteEntries(
+            builtinCommands, emptyList(), RecordingCommandActions(infoPanelVisible = true),
+        )
+        assertNull(withPanel.firstOrNull { it.name == "info" })
+
+        val withoutPanel = buildPaletteEntries(
+            builtinCommands, emptyList(), RecordingCommandActions(infoPanelVisible = false),
+        )
+        assertNotNull(withoutPanel.firstOrNull { it.name == "info" })
     }
 
     @Test
@@ -101,5 +125,26 @@ class PaletteEntryTest {
     fun emptyQueryReturnsEverything() {
         val entries = buildPaletteEntries(builtinCommands, emptyList(), RecordingCommandActions())
         assertEquals(entries, entries.filterByQuery(""))
+    }
+
+    @Test
+    fun filterByQueryMatchesBothBuiltinAndDaemonEntries() {
+        val entries = buildPaletteEntries(
+            builtinCommands,
+            listOf(daemon("shipit")),
+            RecordingCommandActions(),
+        )
+        // "i" appears in built-ins (e.g. "info") and the daemon "shipit"
+        val result = entries.filterByQuery("i")
+        assertTrue(result.any { it is PaletteEntry.Builtin })
+        assertTrue(result.any { it is PaletteEntry.Daemon })
+    }
+
+    @Test
+    fun disabledBuiltinSurvivesFilter() {
+        val entries = buildPaletteEntries(builtinCommands, emptyList(), RecordingCommandActions())
+        val result = entries.filterByQuery("diff")
+        val diff = result.first { it.name == "diff" }
+        assertFalse(diff.enabled)
     }
 }

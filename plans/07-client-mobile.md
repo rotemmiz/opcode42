@@ -473,9 +473,10 @@ management formerly only in the ⋮ overflow (`/rename`, `/fork`, `/summarize`, 
 
 **Backlog (shown disabled with a "soon" badge until the screens land):** `/diff` (full-screen diff
 viewer), `/timeline` (revert to a turn), `/variant` (model-variant picker), `/stash` (prompt-draft
-store). Each becomes selectable by flipping `implemented = true` and adding a `ChatCommandActions`
-method once its screen exists. Daemon-command arguments (`/cmd <args>` → `$ARGUMENTS`) remain a
-pre-existing gap (commands run with empty args).
+store). Disabled entries sort *below* daemon commands so they never bury real commands; each becomes
+selectable by flipping `implemented = true` and adding a `ChatCommandActions` method once its screen
+exists. Daemon-command **arguments** are supported: in `/cmd <args>` the command word filters the
+palette and the trailing text runs as the daemon command's `$ARGUMENTS` (on tap or Send).
 
 ### Chat screen — LazyColumn streaming
 

@@ -3,6 +3,7 @@ package dev.forge.feature.chat.commands
 /** Test double that records which capability a command invoked. */
 class RecordingCommandActions(
     override val hasDirectory: Boolean = true,
+    override val infoPanelVisible: Boolean = false,
 ) : ChatCommandActions {
     val calls = mutableListOf<String>()
 

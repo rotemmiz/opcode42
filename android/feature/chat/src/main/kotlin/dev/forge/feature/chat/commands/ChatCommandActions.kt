@@ -13,6 +13,10 @@ interface ChatCommandActions {
     /** Whether the session has a working directory (runtime gate for `/terminal`). */
     val hasDirectory: Boolean
 
+    /** Whether the session-info panel is already shown inline (expanded layout), which
+     *  makes `/info` redundant. */
+    val infoPanelVisible: Boolean
+
     fun newSession()
     /** Multi-pane: open the nav rail; compact: navigate back to the session list. */
     fun openSessions()

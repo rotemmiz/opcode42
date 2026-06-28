@@ -121,8 +121,11 @@ fun ChatScreen(
 
     // Capability surface for the `/` palette's built-in actions. Recreated each
     // recomposition so it always closes over the current session state/callbacks.
+    // The info panel is shown inline (in place of the todos dock) in the expanded layout.
+    val infoPanelShown = !showTodoSheet
     val commandActions = object : ChatCommandActions {
         override val hasDirectory: Boolean get() = sessionDirectory != null
+        override val infoPanelVisible: Boolean get() = infoPanelShown
         override fun newSession() = onNewSession()
         override fun openSessions() {
             if (isMultiPane) onOpenNavRail() else onNavigateBack()
@@ -138,9 +141,10 @@ fun ChatScreen(
         override fun archiveSession() { showArchiveConfirm = true }
         override fun deleteSession() { showDeleteConfirm = true }
     }
-    // Rebuilt only when the inputs the list depends on change (daemon commands +
-    // directory availability), not on every streaming recomposition.
-    val paletteEntries = remember(commands, sessionDirectory) {
+    // Rebuilt only when an input that affects the list changes — the daemon commands
+    // and everything the built-ins' isAvailable() reads (directory + info-panel
+    // visibility) — not on every streaming recomposition.
+    val paletteEntries = remember(commands, sessionDirectory, infoPanelShown) {
         buildPaletteEntries(builtinCommands, commands, commandActions)
     }
 
@@ -328,10 +332,10 @@ fun ChatScreen(
                     onStop = { viewModel.abort() },
                     paletteEntries = paletteEntries,
                     onSearchFiles = { query -> viewModel.searchFiles(query) },
-                    onPickEntry = { entry ->
+                    onPickEntry = { entry, arguments ->
                         when (entry) {
                             is PaletteEntry.Builtin -> entry.command.execute(commandActions)
-                            is PaletteEntry.Daemon -> viewModel.runCommand(entry.name, "")
+                            is PaletteEntry.Daemon -> viewModel.runCommand(entry.name, arguments)
                         }
                     },
                 )

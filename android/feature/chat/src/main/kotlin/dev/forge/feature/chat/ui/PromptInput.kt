@@ -51,13 +51,30 @@ import kotlinx.coroutines.withContext
 
 private const val TAG = "PromptInput"
 private const val MAX_FILE_BYTES = 10 * 1024 * 1024  // 10 MB OOM guard
-private const val MAX_PALETTE_ROWS = 20               // panel scrolls past this
+private const val MAX_PALETTE_ROWS = 20               // max matches kept; the panel scrolls
 
 /** Bundles a file part with the human-readable name shown in the chip. */
 private data class PendingAttachment(val part: FilePartInput, val name: String)
 
 // Trailing @-mention token at the caret end: "see @src/ht" → "src/ht".
 private val MentionRegex = Regex("""(?:^|\s)@(\S*)$""")
+
+/** A leading slash command split into the command [word] and its [arguments]. */
+private data class SlashInput(val word: String, val arguments: String)
+
+/**
+ * Parses a leading "/command [args]" token. Returns null unless the text starts with
+ * "/" and has no newline (a multi-line message isn't a command). "/dep" → word "dep",
+ * empty args; "/deploy prod" → word "deploy", args "prod"; "/" → empty word (shows the
+ * whole palette).
+ */
+private fun parseSlashInput(text: String): SlashInput? {
+    if (!text.startsWith("/") || text.contains('\n')) return null
+    val body = text.drop(1)
+    val space = body.indexOf(' ')
+    return if (space < 0) SlashInput(body, "")
+    else SlashInput(body.take(space), body.substring(space + 1).trim())
+}
 
 /**
  * Sticky bottom prompt input (C5) with `/` command palette and `@` file-mention
@@ -73,7 +90,7 @@ fun PromptInput(
     onStop: () -> Unit = {},
     paletteEntries: List<PaletteEntry> = emptyList(),
     onSearchFiles: suspend (String) -> List<String> = { emptyList() },
-    onPickEntry: (PaletteEntry) -> Unit = {},
+    onPickEntry: (PaletteEntry, arguments: String) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -81,16 +98,17 @@ fun PromptInput(
     var text by remember { mutableStateOf("") }
     var pendingAttachments by remember { mutableStateOf<List<PendingAttachment>>(emptyList()) }
 
-    // `/cmd` is active only while the text is a single leading slash token.
-    val slashQuery: String? = remember(text) {
-        if (text.startsWith("/") && !text.contains(' ') && !text.contains('\n')) text.drop(1) else null
-    }
+    // A leading "/command [args]" token (no newline): the word filters the palette,
+    // the rest is the command's arguments. Stays active while typing args so the
+    // matching command can be tapped to run with them.
+    val slash: SlashInput? = remember(text) { parseSlashInput(text) }
+
     val mentionMatch = remember(text) { MentionRegex.find(text) }
     val mentionQuery: String? = mentionMatch?.groupValues?.get(1)
 
-    val filteredCommands = remember(paletteEntries, slashQuery) {
-        if (slashQuery == null) emptyList()
-        else paletteEntries.filterByQuery(slashQuery).take(MAX_PALETTE_ROWS)
+    val filteredCommands = remember(paletteEntries, slash) {
+        if (slash == null) emptyList()
+        else paletteEntries.filterByQuery(slash.word).take(MAX_PALETTE_ROWS)
     }
 
     var fileResults by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -142,7 +160,7 @@ fun PromptInput(
             filteredCommands.isNotEmpty() -> CommandPanel(
                 entries = filteredCommands,
                 onPick = { entry ->
-                    onPickEntry(entry)
+                    onPickEntry(entry, slash?.arguments.orEmpty())
                     text = ""
                 },
             )
@@ -244,9 +262,18 @@ fun PromptInput(
                     .clickable(enabled = active) {
                         if (busy) {
                             onStop()
+                            return@clickable
+                        }
+                        // A fully-typed "/command [args]" runs the command instead of
+                        // being sent as a chat message (so `/deploy prod` + Send works).
+                        val match = slash?.let { s ->
+                            paletteEntries.firstOrNull { it.enabled && it.name.equals(s.word, ignoreCase = true) }
+                        }
+                        if (match != null) {
+                            onPickEntry(match, slash.arguments)
+                            text = ""
                         } else {
-                            val trimmed = text.trim()
-                            onSend(trimmed, pendingAttachments.map { it.part })
+                            onSend(text.trim(), pendingAttachments.map { it.part })
                             text = ""
                             pendingAttachments = emptyList()
                         }
@@ -356,7 +383,7 @@ private fun SuggestionPanel(content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = 240.dp)
+            .heightIn(max = 320.dp)
             .padding(bottom = 6.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(SurfaceContainerHigh)
