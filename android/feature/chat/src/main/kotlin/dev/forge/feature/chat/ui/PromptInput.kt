@@ -42,14 +42,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.forge.core.model.CommandInfo
 import dev.forge.core.model.FilePartInput
+import dev.forge.feature.chat.commands.PaletteEntry
+import dev.forge.feature.chat.commands.filterByQuery
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val TAG = "PromptInput"
 private const val MAX_FILE_BYTES = 10 * 1024 * 1024  // 10 MB OOM guard
+private const val MAX_PALETTE_ROWS = 20               // panel scrolls past this
 
 /** Bundles a file part with the human-readable name shown in the chip. */
 private data class PendingAttachment(val part: FilePartInput, val name: String)
@@ -69,9 +71,9 @@ fun PromptInput(
     enabled: Boolean = true,
     busy: Boolean = false,
     onStop: () -> Unit = {},
-    commands: List<CommandInfo> = emptyList(),
+    paletteEntries: List<PaletteEntry> = emptyList(),
     onSearchFiles: suspend (String) -> List<String> = { emptyList() },
-    onRunCommand: (name: String, arguments: String) -> Unit = { _, _ -> },
+    onPickEntry: (PaletteEntry) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -86,9 +88,9 @@ fun PromptInput(
     val mentionMatch = remember(text) { MentionRegex.find(text) }
     val mentionQuery: String? = mentionMatch?.groupValues?.get(1)
 
-    val filteredCommands = remember(commands, slashQuery) {
+    val filteredCommands = remember(paletteEntries, slashQuery) {
         if (slashQuery == null) emptyList()
-        else commands.filter { it.name.contains(slashQuery, ignoreCase = true) }.take(8)
+        else paletteEntries.filterByQuery(slashQuery).take(MAX_PALETTE_ROWS)
     }
 
     var fileResults by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -138,9 +140,9 @@ fun PromptInput(
         // ── Autocomplete panels (above the field) ──
         when {
             filteredCommands.isNotEmpty() -> CommandPanel(
-                commands = filteredCommands,
-                onPick = { cmd ->
-                    onRunCommand(cmd.name, "")
+                entries = filteredCommands,
+                onPick = { entry ->
+                    onPickEntry(entry)
                     text = ""
                 },
             )
@@ -276,43 +278,45 @@ fun PromptInput(
     }
 }
 
-/** Slash-command suggestions list, anchored above the field. */
+/**
+ * Slash-command suggestions list, anchored above the field. Merges built-in client
+ * actions (first) with daemon commands; disabled entries (not-yet-built built-ins)
+ * render greyed with a "soon" badge and are not selectable.
+ */
 @Composable
-private fun CommandPanel(commands: List<CommandInfo>, onPick: (CommandInfo) -> Unit) {
+private fun CommandPanel(entries: List<PaletteEntry>, onPick: (PaletteEntry) -> Unit) {
     SuggestionPanel {
         LazyColumn {
-            itemsIndexed(commands, key = { _, c -> c.name }) { index, cmd ->
+            itemsIndexed(entries, key = { _, e -> e.name }) { index, entry ->
                 if (index > 0) HorizontalDivider(color = Hairline)
+                val rowModifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (entry.enabled) Modifier.clickable { onPick(entry) } else Modifier)
+                    .heightIn(min = 48.dp)
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onPick(cmd) }
-                        .heightIn(min = 48.dp)
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = rowModifier,
                 ) {
                     Text(
-                        text = "/${cmd.name}",
+                        text = "/${entry.name}",
                         fontFamily = ForgeMono,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Secondary,
+                        color = if (entry.enabled) Secondary else OnSurfaceFaint,
                     )
-                    cmd.description?.let {
+                    entry.description?.let {
                         Text(
                             text = it,
                             fontSize = 13.sp,
-                            color = OnSurfaceVariant,
+                            color = if (entry.enabled) OnSurfaceVariant else OnSurfaceFaint,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
                     }
-                    val src = cmd.source
-                    if (src == "mcp" || src == "skill") {
-                        SourcePill(src)
-                    }
+                    entry.badge?.let { SourcePill(it) }
                 }
             }
         }

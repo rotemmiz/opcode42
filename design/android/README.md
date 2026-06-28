@@ -172,7 +172,7 @@ The TUI status bar, compacted. `surface`, 1px `hairline` top. Roboto Mono 12sp, 
 - **Streaming:** blocks reveal sequentially (per-kind delay; see TUI spec — thought ~620ms, prose ~520ms, each tool row ~240ms, diff ~760ms, todos ~460ms). New blocks slide in `translateY(4dp)→0` over 0.2s (**transform only, no opacity** — opacity fades can stick if rendering pauses). Auto-scroll to newest. A blinking block cursor sits at the end while typing.
 - **Diff/tool cards:** tap header to expand/collapse (caret rotates). Diff body scrolls horizontally.
 - **Todos sheet:** drag handle (snap) + tap-to-toggle + tap-scrim-to-collapse, as above.
-- **Composer:** typing `/` opens the **command-palette bottom sheet**; typing `@` opens the **@-mention file sheet** (inserts a cyan mention). Send streams the turn.
+- **Composer:** typing `/` opens the **inline command panel** above the field (keyboard stays up while filtering) — built-in client actions merged ahead of daemon/MCP/skill commands; typing `@` opens the **@-mention file sheet** (inserts a cyan mention). Send streams the turn.
 - **App bar:** `info` → session-info sheet (tokens / % used / cost / LSP); `more` → overflow (rename, fork, compact, share, theme, …).
 - **Light theme:** planned toggle — invert the surface ramp and on-colors to a light M3 scheme while keeping the six semantic hues (tune them for AA contrast on light surfaces).
 - **Tablet:** widen the stream to a max content width (~720dp) centered; the todos/tasks board and session-info can become a persistent side pane instead of sheets.

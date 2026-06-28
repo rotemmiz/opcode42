@@ -434,6 +434,49 @@ Settings
     └── AppPreferences
 ```
 
+### Command palette (`/`) — built-in client actions + daemon commands
+
+Pressing `/` opens **one** discoverable launcher mixing two layers, exactly like opencode and the
+Forge TUI (`internal/tui/slash.go:31-45`, `builtinCommands` tagged `slashBuiltin`, merged ahead of
+the daemon list in `filterSlash`):
+
+1. **Daemon commands** — advertised over the wire by `GET /command` (`source: command | mcp |
+   skill`). Uniform across clients; rendered with an `mcp`/`skill` badge.
+2. **Built-in client actions** — defined by the client itself, because they are local UI
+   operations the daemon cannot represent (there is **no `builtin` value** in the `Command.source`
+   enum, and there must not be — this layer is intentionally client-owned).
+
+**No wire-contract change.** Android owns its built-in list; it is *not* fetched.
+
+Architecture (module `:feature:chat`, package `dev.forge.feature.chat.commands`, kept free of
+Compose/Android types so it is unit-testable):
+
+- `BuiltinCommand` — `name`, `description`, `implemented`, `isAvailable(actions)`, `execute(actions)`.
+  **One `object` per command, one file each** (`ModelsCommand.kt`, `NewSessionCommand.kt`, …).
+- `ChatCommandActions` — the capability surface a command may invoke (`openModelPicker`,
+  `newSession`, `openTerminal`, `toggleTheme`, `openInfo`, `renameSession`, `forkSession`,
+  `summarize`, `shareSession`, `archiveSession`, `deleteSession`, `openSessions`). Implemented by
+  `ChatScreen`, which owns the sheet/dialog state and nav callbacks. Commands never touch Compose
+  state or the ViewModel directly.
+- `builtinCommands` registry → `buildPaletteEntries(builtins, daemon, actions)` produces the
+  view-facing `PaletteEntry` list (builtins first, then daemon). `PromptInput` filters by name and
+  renders it; picking a `Builtin` calls `command.execute(actions)`, a `Daemon` calls
+  `POST /session/{id}/command`.
+
+The palette is an **inline panel** above the composer (keyboard stays up while filtering) — not the
+bottom sheet the design doc originally mentioned (`design/android/README.md` updated to match).
+
+**Scope:** the palette exposes every action the Android client can perform — navigation/mode
+(`/new`, `/sessions`, `/models`, `/agents`, `/terminal`, `/theme`, `/info`) **and** session
+management formerly only in the ⋮ overflow (`/rename`, `/fork`, `/summarize`, `/share`, `/archive`,
+`/delete`). Destructive actions (`/archive`, `/delete`) route through a shared `ConfirmActionDialog`.
+
+**Backlog (shown disabled with a "soon" badge until the screens land):** `/diff` (full-screen diff
+viewer), `/timeline` (revert to a turn), `/variant` (model-variant picker), `/stash` (prompt-draft
+store). Each becomes selectable by flipping `implemented = true` and adding a `ChatCommandActions`
+method once its screen exists. Daemon-command arguments (`/cmd <args>` → `$ARGUMENTS`) remain a
+pre-existing gap (commands run with empty args).
+
 ### Chat screen — LazyColumn streaming
 
 - Use `LazyColumn` with `reverseLayout = false`; `rememberLazyListState()` auto-scrolls to bottom

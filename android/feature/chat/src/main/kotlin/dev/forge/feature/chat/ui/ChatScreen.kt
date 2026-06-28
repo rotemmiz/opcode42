@@ -46,6 +46,10 @@ import dev.forge.core.model.PatchPart
 import dev.forge.core.model.SnapshotFileDiff
 import dev.forge.core.store.OptimisticMessage
 import dev.forge.feature.chat.ChatViewModel
+import dev.forge.feature.chat.commands.ChatCommandActions
+import dev.forge.feature.chat.commands.PaletteEntry
+import dev.forge.feature.chat.commands.buildPaletteEntries
+import dev.forge.feature.chat.commands.builtinCommands
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -54,6 +58,7 @@ fun ChatScreen(
     onNavigateBack: () -> Unit,
     onOpenTerminal: (directory: String) -> Unit = {},
     onNavigateToSession: (sessionId: String) -> Unit = {},
+    onNewSession: () -> Unit = {},
     onOpenTasksBoard: () -> Unit = {},
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {},
@@ -110,7 +115,30 @@ fun ChatScreen(
     var showModelPicker by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showArchiveConfirm by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+
+    // Capability surface for the `/` palette's built-in actions. Recreated each
+    // recomposition so it always closes over the current session state/callbacks.
+    val commandActions = object : ChatCommandActions {
+        override val hasDirectory: Boolean get() = sessionDirectory != null
+        override fun newSession() = onNewSession()
+        override fun openSessions() {
+            if (isMultiPane) onOpenNavRail() else onNavigateBack()
+        }
+        override fun openModelPicker() { showModelPicker = true }
+        override fun openTerminal() { sessionDirectory?.let { onOpenTerminal(it) } }
+        override fun toggleTheme() = onToggleTheme()
+        override fun openInfo() { showInfoSheet = true }
+        override fun renameSession() { showRenameDialog = true }
+        override fun forkSession() = viewModel.forkSession { newId -> onNavigateToSession(newId) }
+        override fun summarize() = viewModel.summarize()
+        override fun shareSession() { showShareDialog = true }
+        override fun archiveSession() { showArchiveConfirm = true }
+        override fun deleteSession() { showDeleteConfirm = true }
+    }
+    val paletteEntries = buildPaletteEntries(builtinCommands, commands, commandActions)
 
     // The strip shows the user's explicit pick if any, else the last-run state from the stream.
     val displayAgent = selectedAgent ?: uiState.agentMode
@@ -253,11 +281,11 @@ fun ChatScreen(
                             },
                             onArchive = {
                                 showOverflow = false
-                                viewModel.archiveSession { onNavigateBack() }
+                                showArchiveConfirm = true
                             },
                             onDelete = {
                                 showOverflow = false
-                                viewModel.deleteSession { onNavigateBack() }
+                                showDeleteConfirm = true
                             },
                             onToggleTheme = {
                                 showOverflow = false
@@ -294,9 +322,14 @@ fun ChatScreen(
                     enabled = pendingPermission == null && pendingQuestion == null,
                     busy = uiState.sessionStatus == "busy",
                     onStop = { viewModel.abort() },
-                    commands = commands,
+                    paletteEntries = paletteEntries,
                     onSearchFiles = { query -> viewModel.searchFiles(query) },
-                    onRunCommand = { name, args -> viewModel.runCommand(name, args) },
+                    onPickEntry = { entry ->
+                        when (entry) {
+                            is PaletteEntry.Builtin -> entry.command.execute(commandActions)
+                            is PaletteEntry.Daemon -> viewModel.runCommand(entry.name, "")
+                        }
+                    },
                 )
             }
         },
@@ -402,6 +435,33 @@ fun ChatScreen(
                 },
                 onCopy = { url -> clipboard.setText(AnnotatedString(url)) },
                 onDismiss = { showShareDialog = false },
+            )
+        }
+
+        if (showArchiveConfirm) {
+            ConfirmActionDialog(
+                title = "Archive session",
+                message = "Archive this session? It will be removed from the active list.",
+                confirmLabel = "Archive",
+                onConfirm = {
+                    showArchiveConfirm = false
+                    viewModel.archiveSession { onNavigateBack() }
+                },
+                onDismiss = { showArchiveConfirm = false },
+            )
+        }
+
+        if (showDeleteConfirm) {
+            ConfirmActionDialog(
+                title = "Delete session",
+                message = "Delete this session permanently? This can't be undone.",
+                confirmLabel = "Delete",
+                destructive = true,
+                onConfirm = {
+                    showDeleteConfirm = false
+                    viewModel.deleteSession { onNavigateBack() }
+                },
+                onDismiss = { showDeleteConfirm = false },
             )
         }
 

@@ -129,6 +129,11 @@ fun AdaptiveChatScreen(
                     onNavigateBack = onNavigateBack,
                     onOpenTerminal = onOpenTerminal,
                     onNavigateToSession = onNavigateToSession,
+                    onNewSession = {
+                        sessionListViewModel.createSession { session ->
+                            onNavigateToSession(session.id)
+                        }
+                    },
                     onOpenTasksBoard = onOpenTasksBoard,
                     isDarkTheme = isDarkTheme,
                     onToggleTheme = onToggleTheme,
