@@ -362,8 +362,12 @@ fun ChatScreen(
                     .fillMaxWidth()
                     .widthIn(max = 720.dp) // tablet: cap + center the stream
                     .align(Alignment.TopCenter)
-                    .nestedScroll(autoScrollConnection)
-                    .imeNestedScroll(),
+                    .nestedScroll(autoScrollConnection),
+                // NOTE: no imeNestedScroll() — on a reverseLayout list it applies an
+                // inverted IME offset for one frame on every scroll, so the stream visibly
+                // jumps and snaps back as you scroll. The bottomBar's
+                // windowInsetsPadding(WindowInsets.ime…) keeps the composer above the
+                // keyboard; the list just needs to scroll normally.
             ) {
                 // reverseLayout: emit newest-first so the freshest content is index 0 (bottom).
                 // Optimistic (just-sent, unconfirmed) messages are the newest, then the server
