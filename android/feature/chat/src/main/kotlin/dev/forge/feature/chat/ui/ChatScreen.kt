@@ -65,6 +65,9 @@ fun ChatScreen(
     isMultiPane: Boolean = false,
     onOpenNavRail: () -> Unit = {},
     attentionBadge: Boolean = false,
+    showInfoToggle: Boolean = false,
+    infoPanelOpen: Boolean = true,
+    onToggleInfoPanel: () -> Unit = {},
     showTodoSheet: Boolean = true,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
@@ -247,7 +250,19 @@ fun ChatScreen(
                                 modifier = Modifier.widthIn(max = 100.dp),
                             )
                         }
-                        Spacer(Modifier.width(2.dp))
+                        if (showInfoToggle) {
+                            // Collapse/expand the right session-info panel (on by default).
+                            IconButton(onClick = onToggleInfoPanel, modifier = Modifier.size(42.dp)) {
+                                Icon(
+                                    Icons.Default.Info,
+                                    contentDescription = if (infoPanelOpen) "Hide session info" else "Show session info",
+                                    tint = if (infoPanelOpen) Primary else OnSurfaceVariant,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        } else {
+                            Spacer(Modifier.width(2.dp))
+                        }
                     } else {
                         IconButton(onClick = { showInfoSheet = true }, modifier = Modifier.size(42.dp)) {
                             Icon(Icons.Default.Info, contentDescription = "Session info", tint = OnSurfaceVariant, modifier = Modifier.size(20.dp))
@@ -554,7 +569,7 @@ private fun MessageBlock(
     parts: List<Part>,
     diffs: Map<String, List<SnapshotFileDiff>> = emptyMap(),
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         if (message.role == "user") {
             UserMessageBlock(parts, diffs)
         } else {

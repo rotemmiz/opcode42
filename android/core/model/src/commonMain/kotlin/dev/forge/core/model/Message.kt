@@ -30,6 +30,10 @@ data class AssistantMessage(
     val providerID: String? = null,
     val mode: String? = null,
     val agent: String? = null,
+    /** Per-turn token usage for THIS assistant message (opencode sends it on the
+     *  message). Used to report live context-window occupancy — distinct from the
+     *  session's cumulative `tokens`. */
+    val tokens: TokenUsage? = null,
     /** True when this assistant message is a context-compaction summary. */
     val summary: Boolean? = null,
 )
@@ -65,6 +69,8 @@ data class Message(
     val providerID: String? = null,
     val mode: String? = null,
     val agent: String? = null,
+    /** Per-turn token usage (assistant turns only); see [AssistantMessage.tokens]. */
+    val tokens: TokenUsage? = null,
     /** True when this assistant message is a context-compaction summary. */
     val isSummary: Boolean = false,
 )
@@ -89,5 +95,6 @@ fun AssistantMessage.toMessage() = Message(
     providerID = providerID,
     mode = mode,
     agent = agent,
+    tokens = tokens,
     isSummary = summary == true,
 )

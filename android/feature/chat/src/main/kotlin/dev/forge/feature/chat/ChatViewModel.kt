@@ -38,6 +38,9 @@ data class ChatUiState(
     val agentMode: String? = null,
     val modelID: String? = null,
     val providerID: String? = null,
+    /** Live context-window occupancy: the most recent assistant turn's token usage
+     *  (NOT the session's cumulative total, which grows unbounded across turns). */
+    val contextTokens: TokenUsage? = null,
     val isLoading: Boolean = false,
     val isSending: Boolean = false,
 )
@@ -77,6 +80,10 @@ class ChatViewModel @Inject constructor(
                     ?: messages.lastOrNull { it.agent != null }?.agent,
                 modelID = lastModelled?.modelID,
                 providerID = lastModelled?.providerID,
+                // Context = the latest completed assistant turn's own token usage,
+                // so the gauge reflects what's actually in the window — not the
+                // session's cumulative lifetime total.
+                contextTokens = messages.lastOrNull { it.role == "assistant" && it.tokens != null }?.tokens,
             )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatUiState())

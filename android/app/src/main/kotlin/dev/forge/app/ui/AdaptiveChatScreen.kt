@@ -127,6 +127,11 @@ fun AdaptiveChatScreen(
         if (drawerState.isOpen) drawerState.close()
     }
 
+    // Right info panel: collapsible, but ON by default. Re-keyed on layout so it returns
+    // to open when the layout changes. Only meaningful when the layout has a right panel.
+    var infoPanelOpen by remember(layout) { mutableStateOf(true) }
+    val rightPanelVisible = layout.showRightPanel && infoPanelOpen
+
     // Badge the menu button when a session *other than the current one* needs the user,
     // so a background permission/question is noticeable while the menu is collapsed.
     val needsAttentionElsewhere = remember(
@@ -202,18 +207,21 @@ fun AdaptiveChatScreen(
                     isMultiPane = !layout.singlePane,
                     onOpenNavRail = toggleMenu,
                     attentionBadge = needsAttentionElsewhere,
-                    showTodoSheet = !layout.showRightPanel,
+                    showInfoToggle = layout.showRightPanel,
+                    infoPanelOpen = infoPanelOpen,
+                    onToggleInfoPanel = { infoPanelOpen = !infoPanelOpen },
+                    showTodoSheet = !rightPanelVisible,
                     viewModel = chatViewModel,
                 )
             }
-            if (layout.showRightPanel) {
+            if (rightPanelVisible) {
                 Box(Modifier.width(1.dp).fillMaxHeight().background(Hairline))
                 SessionInfoPanel(
                     session = chatUiState.session,
                     agentMode = chatUiState.agentMode,
                     modelID = chatUiState.modelID,
                     providerID = chatUiState.providerID,
-                    tokens = chatUiState.session?.tokens,
+                    tokens = chatUiState.contextTokens,
                     todos = chatUiState.todos,
                     diffs = aggregatedDiffs,
                     modifier = Modifier.width(280.dp).fillMaxHeight(),
@@ -444,38 +452,9 @@ internal fun SessionInfoPanel(
             .background(SurfaceContainerLowest)
             .verticalScroll(rememberScrollState()),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .padding(horizontal = 10.dp),
-        ) {
-            if (agentMode != null) {
-                Text(
-                    text = agentMode.replaceFirstChar { it.uppercase() },
-                    fontFamily = ForgeMono,
-                    fontSize = 13.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = OnPrimary,
-                    modifier = Modifier
-                        .clip(ForgeShapes.xs)
-                        .background(Primary)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-            }
-            Text(
-                text = modelID ?: "",
-                fontFamily = ForgeMono,
-                fontSize = 13.5.sp,
-                color = OnSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        HorizontalDivider(color = Hairline, thickness = 1.dp)
+        // The model + agent-mode are already shown in the chat top bar, so the panel
+        // skips a redundant header and starts straight at the SESSION section.
+        Spacer(Modifier.height(8.dp))
 
         if (session != null) {
             InfoSectionHeader("SESSION")
@@ -498,7 +477,7 @@ internal fun SessionInfoPanel(
             InfoSectionHeader("CONTEXT")
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp),
             ) {
                 Text(
                     text = formatTokens(total),
@@ -529,7 +508,7 @@ internal fun SessionInfoPanel(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
-                    .padding(start = 10.dp, end = 10.dp, top = 9.dp, bottom = 3.dp),
+                    .padding(start = 10.dp, end = 10.dp, top = 7.dp, bottom = 2.dp),
             ) {
                 Text(
                     text = "CHANGES",
@@ -589,7 +568,7 @@ internal fun SessionInfoPanel(
             todos.forEach { todo ->
                 Row(
                     verticalAlignment = Alignment.Top,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp),
                 ) {
                     val (dot, dotColor) = when (todo.status) {
                         "completed" -> "✓" to Tertiary
@@ -623,7 +602,7 @@ internal fun SessionInfoPanel(
 private fun InfoSectionHeader(label: String) {
     Text(
         text = label,
-        modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 9.dp, bottom = 3.dp),
+        modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 7.dp, bottom = 2.dp),
         fontSize = 11.5.sp,
         letterSpacing = 0.1.em,
         fontWeight = FontWeight.SemiBold,
@@ -634,7 +613,7 @@ private fun InfoSectionHeader(label: String) {
 
 @Composable
 private fun InfoRow(key: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp)) {
+    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp)) {
         Text(
             text = key,
             fontFamily = ForgeMono,

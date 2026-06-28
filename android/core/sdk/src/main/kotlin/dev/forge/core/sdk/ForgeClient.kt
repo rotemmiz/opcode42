@@ -70,10 +70,16 @@ class ForgeClient @Inject constructor(
                     } else null
                     val isSummary = role == "assistant" &&
                         info["summary"]?.jsonPrimitive?.booleanOrNull == true
+                    // Per-turn token usage (assistant turns) — drives the live context gauge.
+                    val tokens = if (role == "assistant") {
+                        info["tokens"]?.let {
+                            runCatching { ForgeJson.decodeFromJsonElement(TokenUsage.serializer(), it) }.getOrNull()
+                        }
+                    } else null
                     Message(id = id, sessionID = sessionID, role = role, time = time,
                         parts = parts, error = error, modelID = modelID,
                         providerID = providerID, mode = mode, agent = agent,
-                        isSummary = isSummary)
+                        tokens = tokens, isSummary = isSummary)
                 } catch (_: Exception) { null }
             }
         }

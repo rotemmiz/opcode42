@@ -73,7 +73,10 @@ private fun TextPartView(part: TextPart, modifier: Modifier = Modifier) {
 private fun ReasoningPartView(part: ReasoningPart, modifier: Modifier = Modifier) {
     var expanded by remember { mutableStateOf(false) }
     val duration = part.time?.let { t ->
-        t.end?.let { end -> "${(end - t.start)}ms" }
+        t.end?.let { end ->
+            // Reasoning time as seconds with 2-decimal precision (e.g. 740ms → "0.74s").
+            String.format(java.util.Locale.US, "%.2fs", (end - t.start) / 1000.0)
+        }
     }
 
     // Minimal mono line per design (`+ Thought: 740ms`); tap to reveal the

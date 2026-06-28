@@ -207,7 +207,7 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier) {
                 is MdBlock.Table -> TableBlock(block)
                 is MdBlock.Divider -> androidx.compose.material3.HorizontalDivider(
                     color = Hairline,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
                 )
             }
         }
@@ -222,14 +222,14 @@ private fun HeaderBlock(block: MdBlock.Header) {
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = HeaderPurple,
-            modifier = Modifier.padding(start = 14.dp, top = 12.dp, end = 14.dp, bottom = 2.dp),
+            modifier = Modifier.padding(start = 14.dp, top = 7.dp, end = 14.dp, bottom = 1.dp),
         )
         2 -> Text(
             text = block.text,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
             color = HeaderPurple,
-            modifier = Modifier.padding(start = 14.dp, top = 10.dp, end = 14.dp, bottom = 2.dp),
+            modifier = Modifier.padding(start = 14.dp, top = 6.dp, end = 14.dp, bottom = 1.dp),
         )
         else -> Text(
             text = block.text.uppercase(),
@@ -238,7 +238,7 @@ private fun HeaderBlock(block: MdBlock.Header) {
             fontFamily = ForgeMono,
             color = HeaderPurple,
             letterSpacing = 1.sp,
-            modifier = Modifier.padding(start = 14.dp, top = 10.dp, end = 14.dp, bottom = 2.dp),
+            modifier = Modifier.padding(start = 14.dp, top = 6.dp, end = 14.dp, bottom = 1.dp),
         )
     }
 }
@@ -247,7 +247,7 @@ private fun HeaderBlock(block: MdBlock.Header) {
 private fun CodeBlockView(block: MdBlock.CodeBlock) {
     Box(
         modifier = Modifier
-            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .padding(horizontal = 14.dp, vertical = 3.dp)
             .fillMaxWidth()
             .background(SurfaceContainerLowest, ForgeShapes.xs)
             .border(1.dp, Hairline, ForgeShapes.xs),
@@ -270,9 +270,9 @@ private fun ParagraphBlock(block: MdBlock.Paragraph) {
     Text(
         text = buildInlineSpans(block.text, codeColor = Secondary, linkColor = LinkCyan),
         fontSize = 14.5.sp,
-        lineHeight = 22.sp,
+        lineHeight = 20.sp,
         color = OnSurface,
-        modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
+        modifier = Modifier.padding(horizontal = 14.dp, vertical = 1.dp),
     )
 }
 
@@ -303,7 +303,7 @@ private fun TableBlock(block: MdBlock.Table) {
     val cols = block.header.size.coerceAtLeast(1)
     Column(
         modifier = Modifier
-            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .padding(horizontal = 14.dp, vertical = 4.dp)
             .clip(ForgeShapes.sm)
             .border(1.dp, Hairline, ForgeShapes.sm),
     ) {
