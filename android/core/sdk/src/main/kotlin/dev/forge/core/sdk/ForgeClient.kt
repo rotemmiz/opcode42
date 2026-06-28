@@ -34,6 +34,16 @@ class ForgeClient @Inject constructor(
         arr.map { ForgeJson.decodeFromJsonElement(Session.serializer(), it) }
     }
 
+    /**
+     * `GET /project` — the daemon's projects, each with a worktree + sandboxes. Used to
+     * enumerate every directory so the session list can aggregate across projects without
+     * a configured working folder. Tolerates a non-array body (returns empty).
+     */
+    suspend fun listProjects(): List<Project> = get("/project", null) { json ->
+        val arr = json as? JsonArray ?: return@get emptyList()
+        arr.mapNotNull { runCatching { ForgeJson.decodeFromJsonElement(Project.serializer(), it) }.getOrNull() }
+    }
+
     suspend fun createSession(directory: String? = null): Session = post(
         path = "/session",
         body = buildJsonObject { directory?.let { put("directory", it) } },

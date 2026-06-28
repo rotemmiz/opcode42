@@ -86,7 +86,7 @@ fun AddServerScreen(
                 value = directory,
                 onValueChange = { directory = it },
                 label = { Text("Working directory (optional)") },
-                placeholder = { Text("/Users/you/myproject") },
+                placeholder = { Text("Leave blank to see all projects") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )

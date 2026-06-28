@@ -1,28 +1,40 @@
 package dev.forge.feature.sessions.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.forge.core.model.PermissionRequest
-import dev.forge.core.model.QuestionRequest
 import dev.forge.core.model.Session
-import dev.forge.feature.sessions.SessionListUiState
 import dev.forge.feature.sessions.SessionListViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,8 +47,6 @@ fun SessionListScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isCreating by viewModel.isCreating.collectAsStateWithLifecycle()
-
-    var renameTarget by remember { mutableStateOf<Session?>(null) }
 
     Scaffold(
         topBar = {
@@ -52,9 +62,7 @@ fun SessionListScreen(
                 actions = {
                     if (!uiState.showArchived && uiState.archivedCount > 0) {
                         IconButton(onClick = { viewModel.toggleShowArchived() }) {
-                            BadgedBox(
-                                badge = { Badge { Text("${uiState.archivedCount}") } },
-                            ) {
+                            BadgedBox(badge = { Badge { Text("${uiState.archivedCount}") } }) {
                                 Icon(Icons.Default.Archive, contentDescription = "Archived sessions")
                             }
                         }
@@ -68,9 +76,7 @@ fun SessionListScreen(
         floatingActionButton = {
             if (!uiState.showArchived) {
                 FloatingActionButton(
-                    onClick = {
-                        if (!isCreating) viewModel.createSession { onSessionClick(it) }
-                    },
+                    onClick = { if (!isCreating) viewModel.createSession { onSessionClick(it) } },
                 ) {
                     if (isCreating) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -85,214 +91,28 @@ fun SessionListScreen(
             uiState.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
-            uiState.sessions.isEmpty() && uiState.showArchived -> EmptyArchivedList(
-                modifier = Modifier.padding(padding),
-            )
-            uiState.sessions.isEmpty() -> EmptySessionList(
+            uiState.showArchived && uiState.archivedCount == 0 -> EmptyArchivedList(Modifier.padding(padding))
+            !uiState.showArchived && uiState.allCount == 0 -> EmptySessionList(
                 onAddServer = onAddServerClick,
                 onNewSession = { viewModel.createSession { onSessionClick(it) } },
             )
-            else -> SessionList(
+            else -> SessionBrowser(
                 uiState = uiState,
-                onSessionClick = onSessionClick,
-                onRenameSession = { session -> renameTarget = session },
-                onArchiveSession = { sessionId -> viewModel.archiveSession(sessionId) },
-                onForkSession = { sessionId -> viewModel.forkSession(sessionId) { newSession -> onSessionClick(newSession) } },
-                onDeleteSession = { sessionId -> viewModel.deleteSession(sessionId) },
-                onReplyPermission = { id, allow -> viewModel.replyPermission(id, allow) },
-                onReplyQuestion = { id, answer -> viewModel.replyQuestion(id, answer) },
-                onSkipQuestion = { id -> viewModel.rejectQuestion(id) },
+                activeSessionId = null,
+                onOpen = onSessionClick,
+                onQueryChange = viewModel::setQuery,
+                onFilterChange = viewModel::setFilter,
+                onRename = viewModel::renameSession,
+                onArchive = viewModel::archiveSession,
+                onFork = { id -> viewModel.forkSession(id) { onSessionClick(it) } },
+                onDelete = viewModel::deleteSession,
+                onReplyPermission = viewModel::replyPermission,
+                onReplyQuestion = viewModel::replyQuestion,
+                onSkipQuestion = viewModel::rejectQuestion,
                 modifier = Modifier.padding(padding),
             )
         }
     }
-
-    renameTarget?.let { session ->
-        RenameSessionDialog(
-            current = session.title,
-            onConfirm = { title ->
-                viewModel.renameSession(session.id, title)
-                renameTarget = null
-            },
-            onDismiss = { renameTarget = null },
-        )
-    }
-}
-
-@Composable
-private fun SessionList(
-    uiState: SessionListUiState,
-    onSessionClick: (Session) -> Unit,
-    onRenameSession: (Session) -> Unit,
-    onArchiveSession: (String) -> Unit,
-    onForkSession: (String) -> Unit,
-    onDeleteSession: (String) -> Unit,
-    onReplyPermission: (String, Boolean) -> Unit,
-    onReplyQuestion: (String, String) -> Unit,
-    onSkipQuestion: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    LazyColumn(modifier = modifier.fillMaxSize()) {
-        items(uiState.sessions, key = { it.id }) { session ->
-            val permission = uiState.pendingPermissions[session.id]
-            val question = uiState.pendingQuestions[session.id]
-            SessionRow(
-                session = session,
-                showArchived = uiState.showArchived,
-                status = uiState.statuses[session.id],
-                pendingPermission = permission,
-                pendingQuestion = question,
-                onClick = { onSessionClick(session) },
-                onRename = { onRenameSession(session) },
-                onArchive = { onArchiveSession(session.id) },
-                onFork = { onForkSession(session.id) },
-                onDelete = { onDeleteSession(session.id) },
-                onApprove = { permission?.let { onReplyPermission(it.id, true) } },
-                onDeny = { permission?.let { onReplyPermission(it.id, false) } },
-                onReply = { answer -> question?.let { onReplyQuestion(it.id, answer) } },
-                onSkip = { question?.let { onSkipQuestion(it.id) } },
-            )
-            HorizontalDivider()
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun SessionRow(
-    session: Session,
-    showArchived: Boolean,
-    status: String?,
-    pendingPermission: PermissionRequest?,
-    pendingQuestion: QuestionRequest?,
-    onClick: () -> Unit,
-    onRename: () -> Unit,
-    onArchive: () -> Unit,
-    onFork: () -> Unit,
-    onDelete: () -> Unit,
-    onApprove: () -> Unit,
-    onDeny: () -> Unit,
-    onReply: (String) -> Unit,
-    onSkip: () -> Unit,
-) {
-    var showMenu by remember { mutableStateOf(false) }
-
-    Box(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth()) {
-            ListItem(
-                headlineContent = {
-                    Text(
-                        text = session.title ?: session.id,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                supportingContent = session.directory?.let { dir ->
-                    { Text(dir, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                },
-                trailingContent = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        SessionStatusSpinner(status, Modifier.padding(end = 8.dp))
-                        session.tokens?.let { tokens ->
-                            Text(
-                                text = "${(tokens.input + tokens.output).toLong() / 1000}K tokens",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                },
-                modifier = Modifier.combinedClickable(
-                    onClick = onClick,
-                    onLongClick = { showMenu = true },
-                ),
-            )
-            if (pendingPermission != null || pendingQuestion != null) {
-                SessionPendingActions(
-                    permission = pendingPermission,
-                    question = pendingQuestion,
-                    onApprove = onApprove,
-                    onDeny = onDeny,
-                    onReply = onReply,
-                    onSkip = onSkip,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                )
-            }
-        }
-        DropdownMenu(
-            expanded = showMenu,
-            onDismissRequest = { showMenu = false },
-        ) {
-            DropdownMenuItem(
-                text = { Text("Rename session") },
-                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                onClick = {
-                    showMenu = false
-                    onRename()
-                },
-            )
-            DropdownMenuItem(
-                text = { Text("Fork session") },
-                leadingIcon = { Icon(Icons.Default.CallSplit, contentDescription = null) },
-                onClick = {
-                    showMenu = false
-                    onFork()
-                },
-            )
-            // opencode has no un-archive path, so archive is offered only on active rows.
-            if (!showArchived) {
-                DropdownMenuItem(
-                    text = { Text("Archive session") },
-                    leadingIcon = { Icon(Icons.Default.Archive, contentDescription = null) },
-                    onClick = {
-                        showMenu = false
-                        onArchive()
-                    },
-                )
-            }
-            DropdownMenuItem(
-                text = { Text("Delete session") },
-                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                onClick = {
-                    showMenu = false
-                    onDelete()
-                },
-            )
-        }
-    }
-}
-
-/** Rename a session — prefilled with the current title; Save commits the trimmed text. */
-@Composable
-private fun RenameSessionDialog(
-    current: String?,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var text by remember { mutableStateOf(current.orEmpty()) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Rename session") },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                label = { Text("Title") },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {
-                    if (text.isNotBlank()) onConfirm(text)
-                }),
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(text) },
-                enabled = text.isNotBlank(),
-            ) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }
 
 @Composable

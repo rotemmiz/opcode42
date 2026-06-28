@@ -11,6 +11,10 @@ import dev.forge.core.network.ActiveConnectionProvider
 import dev.forge.core.sdk.ForgeClient
 import dev.forge.core.store.AppState
 import dev.forge.core.store.AppStore
+import dev.forge.feature.sessions.ui.isSessionBusy
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,9 +30,23 @@ import javax.inject.Inject
 val Session.isArchived: Boolean
     get() = time?.archived != null
 
+/** Status-filter tab (Claude Code style): everything, in-flight, or needs-the-user. */
+enum class SessionFilter { All, Working, NeedsInput }
+
+/** A date-bucketed run of sessions (e.g. header "Today" + its rows), recency-ordered. */
+data class SessionGroup(val header: String, val sessions: List<Session>)
+
 data class SessionListUiState(
-    /** Sessions to display: active sessions, or archived ones when [showArchived] is set. */
-    val sessions: List<Session> = emptyList(),
+    /** Sessions to display, filtered + searched + grouped under date headers. */
+    val groups: List<SessionGroup> = emptyList(),
+    /** Tab counts over the active (non-archived, top-level) set — independent of the active tab. */
+    val allCount: Int = 0,
+    val workingCount: Int = 0,
+    val needsInputCount: Int = 0,
+    /** Active status-filter tab. */
+    val filter: SessionFilter = SessionFilter.All,
+    /** Current search query (title/directory substring). */
+    val query: String = "",
     /** Count of archived sessions, for the "Archived (n)" affordance. */
     val archivedCount: Int = 0,
     /** When true the list shows archived sessions instead of active ones. */
@@ -45,29 +63,70 @@ data class SessionListUiState(
 
 /**
  * Pure projection from the global store to the list UI state. Kept side-effect-free and
- * top-level so the active/archived split, recency ordering, and the per-session
- * status/permission/question maps can be unit-tested without a ViewModel or coroutines.
+ * top-level so the child-hiding, tab counts, search/filter, recency ordering, and date
+ * grouping can be unit-tested without a ViewModel or coroutines. `now` is injectable so the
+ * date buckets are deterministic in tests.
  */
-internal fun projectSessionList(appState: AppState, showArchived: Boolean): SessionListUiState {
-    val (archived, active) = appState.sessions.partition { it.isArchived }
-    // Most-recently-active first (opencode bumps time.updated on each new message),
-    // falling back to creation time. The store keeps sessions in ID order for the
-    // binary-search upsert; recency ordering is a display-layer concern only.
-    val visible = (if (showArchived) archived else active)
+internal fun projectSessionList(
+    appState: AppState,
+    showArchived: Boolean,
+    query: String,
+    filter: SessionFilter,
+    now: Long = System.currentTimeMillis(),
+): SessionListUiState {
+    // Hide sub-agent (`task`) child sessions — they carry a parentID and are an
+    // implementation detail of the parent turn, not user-initiated sessions.
+    val topLevel = appState.sessions.filter { it.parentID == null }
+    val (archived, active) = topLevel.partition { it.isArchived }
+
+    val statuses = appState.sessionStatus
+    // First pending request per session — the menu shows one actionable affordance per row.
+    val pendingPermissions = appState.permissions
+        .mapNotNull { (id, list) -> list.firstOrNull()?.let { id to it } }
+        .toMap()
+    val pendingQuestions = appState.questions
+        .mapNotNull { (id, list) -> list.firstOrNull()?.let { id to it } }
+        .toMap()
+
+    fun working(s: Session) = isSessionBusy(statuses[s.id])
+    fun needsInput(s: Session) = pendingPermissions.containsKey(s.id) || pendingQuestions.containsKey(s.id)
+
+    // Tab counts always reflect the full active set, so the badges don't change with the tab.
+    val allCount = active.size
+    val workingCount = active.count { working(it) }
+    val needsInputCount = active.count { needsInput(it) }
+
+    val base = if (showArchived) archived else active
+    // Filter tabs apply to the active list only; archived is its own mode.
+    val afterFilter = if (showArchived) base else when (filter) {
+        SessionFilter.All -> base
+        SessionFilter.Working -> base.filter { working(it) }
+        SessionFilter.NeedsInput -> base.filter { needsInput(it) }
+    }
+    val q = query.trim()
+    val afterSearch = if (q.isEmpty()) afterFilter else afterFilter.filter { s ->
+        s.title?.contains(q, ignoreCase = true) == true ||
+            s.directory?.contains(q, ignoreCase = true) == true
+    }
+    // Most-recently-active first; group by date bucket. groupBy preserves encounter order,
+    // so the descending sort makes "Today" the first group, then "Yesterday", etc.
+    val groups = afterSearch
         .sortedByDescending { it.time?.updated ?: it.time?.created ?: 0L }
+        .groupBy { dateBucket(it.time?.updated ?: it.time?.created ?: 0L, now) }
+        .map { (header, sessions) -> SessionGroup(header, sessions) }
+
     return SessionListUiState(
-        sessions = visible,
+        groups = groups,
+        allCount = allCount,
+        workingCount = workingCount,
+        needsInputCount = needsInputCount,
+        filter = filter,
+        query = query,
         archivedCount = archived.size,
         showArchived = showArchived,
-        statuses = appState.sessionStatus,
-        // Surface only the first pending request per session — the menu shows one
-        // actionable affordance per row; the rest queue behind it as each is answered.
-        pendingPermissions = appState.permissions
-            .mapNotNull { (id, list) -> list.firstOrNull()?.let { id to it } }
-            .toMap(),
-        pendingQuestions = appState.questions
-            .mapNotNull { (id, list) -> list.firstOrNull()?.let { id to it } }
-            .toMap(),
+        statuses = statuses,
+        pendingPermissions = pendingPermissions,
+        pendingQuestions = pendingQuestions,
     )
 }
 
@@ -81,10 +140,12 @@ class SessionListViewModel @Inject constructor(
     // Local view toggle: active list vs. archived list. opencode's session list returns
     // both; filtering is client-side (the daemon does not drop archived sessions).
     private val _showArchived = MutableStateFlow(false)
+    private val _query = MutableStateFlow("")
+    private val _filter = MutableStateFlow(SessionFilter.All)
 
     val uiState: StateFlow<SessionListUiState> =
-        combine(store.state, _showArchived) { appState, showArchived ->
-            projectSessionList(appState, showArchived)
+        combine(store.state, _showArchived, _query, _filter) { appState, showArchived, query, filter ->
+            projectSessionList(appState, showArchived, query, filter)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SessionListUiState())
 
     private val _isCreating = MutableStateFlow(false)
@@ -105,12 +166,38 @@ class SessionListViewModel @Inject constructor(
         _showArchived.value = !_showArchived.value
     }
 
+    fun setQuery(query: String) {
+        _query.value = query
+    }
+
+    fun setFilter(filter: SessionFilter) {
+        _filter.value = filter
+    }
+
+    /**
+     * Aggregate sessions across **every project/directory** the daemon knows, so the list is
+     * a global view that needs no configured working folder. Enumerate `GET /project`, fan out
+     * `listSessions(dir)` per worktree + sandbox in parallel, plus one no-directory call (covers
+     * the daemon's default/CWD project and the Forge "all sessions" case), then dedupe by id.
+     * Every call is wrapped so one unreachable directory never blanks the whole list.
+     */
     fun loadSessions() {
         viewModelScope.launch {
             try {
-                val directory = connectionProvider.active?.directory
-                val sessions = client.listSessions(directory)
-                sessions.forEach { session ->
+                val projects = runCatching { client.listProjects() }.getOrDefault(emptyList())
+                val dirs = projects
+                    .flatMap { listOf(it.worktree) + it.sandboxes }
+                    .filterNotNull()
+                    .filter { it != "/" } // root worktree of the synthetic "global" project
+                    .toSet()
+                val sessions = coroutineScope {
+                    val perDir = dirs.map { dir ->
+                        async { runCatching { client.listSessions(dir) }.getOrDefault(emptyList()) }
+                    }
+                    val global = async { runCatching { client.listSessions(null) }.getOrDefault(emptyList()) }
+                    perDir.awaitAll().flatten() + global.await()
+                }
+                sessions.distinctBy { it.id }.forEach { session ->
                     store.dispatch(AppEvent.SessionUpdated(session))
                 }
             } catch (e: Exception) {

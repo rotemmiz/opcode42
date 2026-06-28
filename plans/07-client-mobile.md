@@ -550,6 +550,43 @@ render shared affordances (`feature/sessions/.../ui/SessionActivity.kt`):
 - the menu's hamburger shows an **attention badge** when a session *other than the current one* has a
   pending permission/question, so a background ask is noticeable while the menu is collapsed.
 
+### Global sessions browser (iteration 3)
+
+The sessions list is a **global, cross-directory view** that needs no configured working folder, and
+surfaces the data opencode's Sessions view + Claude Code mobile show. A single shared composable
+`feature/sessions/.../ui/SessionBrowser.kt` (search field + status filter tabs + date-grouped
+`LazyColumn`) renders in **both** the full-screen `SessionListScreen` and the in-chat left rail
+(`NavRailPane`, `compact = true`), so the two surfaces never drift.
+
+**Aggregate across projects (no folder required).** `SessionListViewModel.loadSessions()` enumerates
+`GET /project` (each project has a `worktree` + `sandboxes[]`), fans out `GET /session?directory=<dir>`
+per worktree + sandbox **in parallel** (skipping the synthetic "global" project's `/` worktree), plus
+one no-directory `GET /session`, then dedupes by `id`. Every call is wrapped so one unreachable
+directory can't blank the list. This works against opencode (which scopes a no-arg `/session` to its
+fallback CWD) **and** the Forge daemon (whose `store.List` already returns everything globally — the
+fan-out just dedupes to the same set). The connection's working-directory is now truly optional
+(`AddServerScreen` field relabeled "leave blank to see all projects"); opening any session uses that
+session's own `directory` for the per-directory parts stream, so cross-project open/stream still works.
+The new `Project`/`ProjectTime` models live in `core/model`; `ForgeClient.listProjects()` decodes them.
+
+**Pure projection** `projectSessionList(appState, showArchived, query, filter, now)`
+(`SessionListViewModel.kt`):
+- **Hides sub-agent (`task`) child sessions** (`parentID != null`) — they're an implementation detail
+  of the parent turn, not user-initiated sessions.
+- **Status filter tabs** — All / Working (`isSessionBusy`) / Needs input (pending permission/question),
+  each with a **tab-independent count** computed over the full active set.
+- **Search** — case-insensitive substring over `title` + `directory`.
+- **Date grouping** — recency-ordered, bucketed by `dateBucket(...)` into `Today` / `Yesterday` /
+  `"Sat Jun 27 2026"` (matching opencode). `relativeTime(...)` gives the per-row `now`/`3m`/`2h`/`4d`
+  trailing label. Both helpers (`feature/sessions/.../SessionTime.kt`) take an injectable `now`/`zone`
+  and are unit-tested directly.
+- Each row (`feature/sessions/.../ui/SessionRow.kt`) shows a leading status dot (spinner while busy,
+  else needs-input/active/idle color), title, a muted `directory · relativeTime` meta line, the inline
+  pending-action affordances, and a long-press menu (Rename / Fork / Archive / Delete).
+
+Deferred: **pin/unpin** — opencode/Forge have no pin field or endpoint (session PATCH writes only
+`title` + `time.archived`), so it would be device-local-only; punted for now.
+
 ### PTY terminal pane
 
 - WS-PTY over `wss://{host}/pty/{id}/connect` (or `ws://`).

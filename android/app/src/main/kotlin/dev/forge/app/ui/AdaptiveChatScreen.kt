@@ -6,10 +6,7 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -32,17 +29,16 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.core.layout.WindowHeightSizeClass
 import androidx.window.core.layout.WindowWidthSizeClass
-import dev.forge.core.model.PermissionRequest
-import dev.forge.core.model.QuestionRequest
 import dev.forge.core.model.Session
 import dev.forge.core.model.SnapshotFileDiff
 import dev.forge.core.model.TokenUsage
 import dev.forge.feature.chat.ChatViewModel
 import dev.forge.feature.chat.TodoItem
 import dev.forge.feature.chat.ui.*
+import dev.forge.feature.sessions.SessionFilter
+import dev.forge.feature.sessions.SessionListUiState
 import dev.forge.feature.sessions.SessionListViewModel
-import dev.forge.feature.sessions.ui.SessionPendingActions
-import dev.forge.feature.sessions.ui.SessionStatusSpinner
+import dev.forge.feature.sessions.ui.SessionBrowser
 import kotlinx.coroutines.launch
 
 /** How the collapsible left sessions menu is presented. Closed by default in both modes. */
@@ -154,17 +150,20 @@ fun AdaptiveChatScreen(
 
     val railPane: @Composable (Modifier, () -> Unit) -> Unit = { mod, onDone ->
         NavRailPane(
-            sessions = sessionListState.sessions,
+            uiState = sessionListState,
             activeSessionId = sessionId,
             activeDirectory = chatUiState.session?.directory,
-            statuses = sessionListState.statuses,
-            pendingPermissions = sessionListState.pendingPermissions,
-            pendingQuestions = sessionListState.pendingQuestions,
             onSelectSession = { id -> onDone(); onNavigateToSession(id) },
             onNewSession = {
                 onDone()
                 sessionListViewModel.createSession { session -> onNavigateToSession(session.id) }
             },
+            onQueryChange = sessionListViewModel::setQuery,
+            onFilterChange = sessionListViewModel::setFilter,
+            onRename = sessionListViewModel::renameSession,
+            onArchive = sessionListViewModel::archiveSession,
+            onFork = { id -> sessionListViewModel.forkSession(id) { onNavigateToSession(it.id) } },
+            onDelete = sessionListViewModel::deleteSession,
             onReplyPermission = sessionListViewModel::replyPermission,
             onReplyQuestion = sessionListViewModel::replyQuestion,
             onSkipQuestion = sessionListViewModel::rejectQuestion,
@@ -270,14 +269,17 @@ fun AdaptiveChatScreen(
 
 @Composable
 internal fun NavRailPane(
-    sessions: List<Session>,
+    uiState: SessionListUiState,
     activeSessionId: String,
     activeDirectory: String?,
-    statuses: Map<String, String>,
-    pendingPermissions: Map<String, PermissionRequest>,
-    pendingQuestions: Map<String, QuestionRequest>,
     onSelectSession: (String) -> Unit,
     onNewSession: () -> Unit,
+    onQueryChange: (String) -> Unit,
+    onFilterChange: (SessionFilter) -> Unit,
+    onRename: (String, String) -> Unit,
+    onArchive: (String) -> Unit,
+    onFork: (String) -> Unit,
+    onDelete: (String) -> Unit,
     onReplyPermission: (String, Boolean) -> Unit,
     onReplyQuestion: (String, String) -> Unit,
     onSkipQuestion: (String) -> Unit,
@@ -321,32 +323,22 @@ internal fun NavRailPane(
         }
         HorizontalDivider(color = Hairline, thickness = 1.dp)
 
-        Text(
-            text = "SESSIONS",
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-            fontSize = 10.sp,
-            letterSpacing = 0.1.em,
-            fontWeight = FontWeight.SemiBold,
-            color = Secondary,
-            fontFamily = ForgeMono,
+        SessionBrowser(
+            uiState = uiState,
+            activeSessionId = activeSessionId,
+            onOpen = { session -> onSelectSession(session.id) },
+            onQueryChange = onQueryChange,
+            onFilterChange = onFilterChange,
+            onRename = onRename,
+            onArchive = onArchive,
+            onFork = onFork,
+            onDelete = onDelete,
+            onReplyPermission = onReplyPermission,
+            onReplyQuestion = onReplyQuestion,
+            onSkipQuestion = onSkipQuestion,
+            compact = true,
+            modifier = Modifier.weight(1f),
         )
-
-        LazyColumn(Modifier.weight(1f)) {
-            items(sessions, key = { it.id }) { session ->
-                SessionRailRow(
-                    session = session,
-                    isActive = session.id == activeSessionId,
-                    status = statuses[session.id],
-                    pendingPermission = pendingPermissions[session.id],
-                    pendingQuestion = pendingQuestions[session.id],
-                    onClick = { onSelectSession(session.id) },
-                    onApprove = { pendingPermissions[session.id]?.let { onReplyPermission(it.id, true) } },
-                    onDeny = { pendingPermissions[session.id]?.let { onReplyPermission(it.id, false) } },
-                    onReply = { answer -> pendingQuestions[session.id]?.let { onReplyQuestion(it.id, answer) } },
-                    onSkip = { pendingQuestions[session.id]?.let { onSkipQuestion(it.id) } },
-                )
-            }
-        }
 
         if (activeDirectory != null) {
             HorizontalDivider(color = Hairline, thickness = 1.dp)
@@ -378,57 +370,6 @@ internal fun NavRailPane(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun SessionRailRow(
-    session: Session,
-    isActive: Boolean,
-    status: String?,
-    pendingPermission: PermissionRequest?,
-    pendingQuestion: QuestionRequest?,
-    onClick: () -> Unit,
-    onApprove: () -> Unit,
-    onDeny: () -> Unit,
-    onReply: (String) -> Unit,
-    onSkip: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(if (isActive) SurfaceContainerHigh else Surface)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-    ) {
-        // Only the title row opens the session; the inline actions below are siblings
-        // outside the clickable so tapping their text/gaps doesn't also navigate.
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        ) {
-            Text(
-                text = session.title?.takeIf { it.isNotBlank() } ?: "New session",
-                fontSize = 13.sp,
-                fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal,
-                color = if (isActive) OnSurface else OnSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 16.sp,
-                modifier = Modifier.weight(1f),
-            )
-            SessionStatusSpinner(status, Modifier.padding(start = 6.dp))
-        }
-        if (pendingPermission != null || pendingQuestion != null) {
-            Spacer(Modifier.height(8.dp))
-            SessionPendingActions(
-                permission = pendingPermission,
-                question = pendingQuestion,
-                onApprove = onApprove,
-                onDeny = onDeny,
-                onReply = onReply,
-                onSkip = onSkip,
-            )
         }
     }
 }
