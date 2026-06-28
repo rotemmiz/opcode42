@@ -29,7 +29,7 @@ class ForgeClient @Inject constructor(
 
     // ─── Session ──────────────────────────────────────────────────────────────
 
-    suspend fun listSessions(): List<Session> = get("/session") { json ->
+    suspend fun listSessions(directory: String? = null): List<Session> = get("/session", directory) { json ->
         val arr = json as? JsonArray ?: return@get emptyList()
         arr.map { ForgeJson.decodeFromJsonElement(Session.serializer(), it) }
     }

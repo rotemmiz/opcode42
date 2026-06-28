@@ -23,6 +23,7 @@ fun AddServerScreen(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
+    var directory by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -81,6 +82,15 @@ fun AddServerScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            OutlinedTextField(
+                value = directory,
+                onValueChange = { directory = it },
+                label = { Text("Working directory (optional)") },
+                placeholder = { Text("/Users/you/myproject") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             Spacer(Modifier.height(4.dp))
 
             Button(
@@ -91,6 +101,7 @@ fun AddServerScreen(
                             username = username.takeIf { it.isNotBlank() },
                             password = password.takeIf { it.isNotBlank() },
                             displayName = displayName.takeIf { it.isNotBlank() },
+                            directory = directory.takeIf { it.isNotBlank() },
                         )
                         onNavigateBack()
                     }

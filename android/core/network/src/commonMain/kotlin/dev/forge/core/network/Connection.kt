@@ -1,5 +1,7 @@
 package dev.forge.core.network
 
+import kotlinx.coroutines.flow.StateFlow
+
 /**
  * Lightweight contract so networking code (e.g. AuthInterceptor on Android)
  * doesn't depend on the full ServerConnectionManager.
@@ -8,11 +10,13 @@ package dev.forge.core.network
  */
 interface ActiveConnectionProvider {
     val active: ServerConnectionConfig?
+    val activeFlow: StateFlow<ServerConnectionConfig?>
 }
 
 data class ServerConnectionConfig(
     val url: String,
     val http: HttpConfig,
+    val directory: String? = null,
 )
 
 data class HttpConfig(

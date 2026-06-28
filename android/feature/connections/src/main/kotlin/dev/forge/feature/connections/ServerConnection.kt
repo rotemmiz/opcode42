@@ -19,6 +19,7 @@ sealed class ServerConnection {
     data class Http(
         override val http: HttpConfig,
         override val displayName: String? = null,
+        val directory: String? = null,
     ) : ServerConnection()
 }
 
@@ -28,11 +29,13 @@ data class PersistedConnection(
     val username: String? = null,
     val password: String? = null,
     val displayName: String? = null,
+    val directory: String? = null,
 )
 
 fun PersistedConnection.toServerConnection() = ServerConnection.Http(
     http = HttpConfig(url, username, password),
     displayName = displayName,
+    directory = directory,
 )
 
 fun ServerConnection.Http.toPersisted() = PersistedConnection(
@@ -40,6 +43,7 @@ fun ServerConnection.Http.toPersisted() = PersistedConnection(
     username = http.username,
     password = http.password,
     displayName = displayName,
+    directory = directory,
 )
 
 /**

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.forge.core.model.AppEvent
 import dev.forge.core.model.Session
+import dev.forge.core.network.ActiveConnectionProvider
 import dev.forge.core.sdk.ForgeClient
 import dev.forge.core.store.AppStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +13,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -35,6 +38,7 @@ data class SessionListUiState(
 class SessionListViewModel @Inject constructor(
     private val client: ForgeClient,
     private val store: AppStore,
+    private val connectionProvider: ActiveConnectionProvider,
 ) : ViewModel() {
 
     // Local view toggle: active list vs. archived list. opencode's session list returns
@@ -56,6 +60,13 @@ class SessionListViewModel @Inject constructor(
 
     init {
         loadSessions()
+        // Re-fetch when a connection becomes active (e.g., first-time server add)
+        viewModelScope.launch {
+            connectionProvider.activeFlow
+                .filterNotNull()
+                .distinctUntilChanged()
+                .collect { loadSessions() }
+        }
     }
 
     fun toggleShowArchived() {
@@ -65,8 +76,8 @@ class SessionListViewModel @Inject constructor(
     fun loadSessions() {
         viewModelScope.launch {
             try {
-                val sessions = client.listSessions()
-                // Seed the store so the StateFlow reflects fetched data
+                val directory = connectionProvider.active?.directory
+                val sessions = client.listSessions(directory)
                 sessions.forEach { session ->
                     store.dispatch(AppEvent.SessionUpdated(session))
                 }

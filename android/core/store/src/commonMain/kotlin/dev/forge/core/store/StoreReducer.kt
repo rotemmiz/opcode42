@@ -26,7 +26,15 @@ fun reduce(state: AppState, event: AppEvent): AppState = when (event) {
 
     is AppEvent.MessageUpdated -> {
         val sessionMessages = state.messages[event.message.sessionID] ?: emptyList()
-        val updated = sessionMessages.upsertById(event.message) { it.id }
+        // SSE `message.updated` events carry only metadata (role, modelID, etc.) and have
+        // no `parts` field — the parts arrive separately via `message.part.updated`. Preserve
+        // the existing parts so REST-loaded content is not wiped by metadata-only SSE events.
+        val incoming = if (event.message.parts.isEmpty()) {
+            val existing = sessionMessages.firstOrNull { it.id == event.message.id }
+            if (existing != null && existing.parts.isNotEmpty()) event.message.copy(parts = existing.parts)
+            else event.message
+        } else event.message
+        val updated = sessionMessages.upsertById(incoming) { it.id }
         // Remove optimistic entry when the server echoes back the user message
         val optimistic = state.optimisticMessages[event.message.sessionID] ?: emptyList()
         val confirmedOptimistic = if (event.message.role == "user") emptyList() else optimistic

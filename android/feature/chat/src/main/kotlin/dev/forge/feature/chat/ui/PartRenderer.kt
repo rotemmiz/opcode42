@@ -11,6 +11,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,6 +29,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.forge.core.model.*
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Renders a single Part.
@@ -36,6 +40,7 @@ fun PartRenderer(
     part: Part,
     modifier: Modifier = Modifier,
     diffs: Map<String, List<SnapshotFileDiff>> = emptyMap(),
+    editParts: List<ToolPart> = emptyList(),
 ) {
     when (part) {
         is TextPart -> TextPartView(part, modifier)
@@ -47,7 +52,7 @@ fun PartRenderer(
             else -> ToolRowGroup(listOf(part), modifier)
         }
         is FilePart -> FilePartView(part, modifier)
-        is PatchPart -> PatchPartView(part, modifier, diffs[part.messageID] ?: emptyList())
+        is PatchPart -> PatchPartView(part, modifier, diffs[part.messageID] ?: emptyList(), editParts)
         is StepStartPart, is StepFinishPart -> Unit  // invisible separators
         is UnknownPart -> Unit
     }
@@ -103,17 +108,55 @@ private fun ReasoningPartView(part: ReasoningPart, modifier: Modifier = Modifier
 
 // ─── Patch / Diff ─────────────────────────────────────────────────────────────
 
+/** Build a synthetic SnapshotFileDiff from an edit ToolPart's old/new strings. */
+private fun syntheticDiff(editPart: ToolPart, filePath: String): SnapshotFileDiff? {
+    val input = editPart.state.inputObject() ?: return null
+    // opencode sends camelCase: oldString / newString (snake_case as fallback)
+    fun strFor(vararg keys: String) = keys.firstNotNullOfOrNull { key ->
+        try { input[key]?.jsonPrimitive?.content } catch (_: Exception) { null }
+    }
+    val oldStr = strFor("oldString", "old_string") ?: ""
+    val newStr = strFor("newString", "new_string") ?: return null
+    val shortPath = filePath.substringAfterLast('/')
+    val oldLines = oldStr.lines()
+    val newLines = newStr.lines()
+    val patch = buildString {
+        appendLine("--- a/$shortPath")
+        appendLine("+++ b/$shortPath")
+        appendLine("@@ -1,${oldLines.size} +1,${newLines.size} @@")
+        oldLines.forEach { appendLine("-$it") }
+        newLines.forEach { appendLine("+$it") }
+    }
+    return SnapshotFileDiff(
+        file = filePath,
+        patch = patch,
+        additions = newLines.size,
+        deletions = oldLines.size,
+    )
+}
+
 @Composable
 private fun PatchPartView(
     part: PatchPart,
     modifier: Modifier = Modifier,
     fileDiffs: List<SnapshotFileDiff> = emptyList(),
+    editParts: List<ToolPart> = emptyList(),
 ) {
+    // When the diff API has no data, synthesize diffs from the edit ToolPart inputs.
+    val effectiveDiffs = remember(fileDiffs, editParts) {
+        if (fileDiffs.isNotEmpty()) fileDiffs
+        else part.files.mapNotNull { filePath ->
+            val ep = editParts.firstOrNull { tp ->
+                tp.inputString("file_path", "filePath", "path") == filePath
+            } ?: return@mapNotNull null
+            syntheticDiff(ep, filePath)
+        }
+    }
     var expanded by remember { mutableStateOf(false) }
     val fileCount = part.files.size
-    val additions = fileDiffs.sumOf { it.additions }
-    val deletions = fileDiffs.sumOf { it.deletions }
-    val hasCounts = fileDiffs.isNotEmpty() && (additions > 0 || deletions > 0)
+    val additions = effectiveDiffs.sumOf { it.additions }
+    val deletions = effectiveDiffs.sumOf { it.deletions }
+    val hasCounts = effectiveDiffs.isNotEmpty() && (additions > 0 || deletions > 0)
 
     // Captured for the (non-composable) drawBehind lambda.
     val railColor = Secondary
@@ -187,12 +230,12 @@ private fun PatchPartView(
             }
         }
 
-        if (expanded && (fileDiffs.isNotEmpty() || part.files.isNotEmpty())) {
+        if (expanded && (effectiveDiffs.isNotEmpty() || part.files.isNotEmpty())) {
             HorizontalDivider(color = Hairline)
-            if (fileDiffs.isNotEmpty()) {
-                UnifiedDiffView(diffs = fileDiffs)
+            if (effectiveDiffs.isNotEmpty()) {
+                UnifiedDiffView(diffs = effectiveDiffs)
             } else {
-                // Diff not yet loaded — show file list as placeholder
+                // No diff data at all — show file paths as a last-resort placeholder
                 part.files.forEach { file ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -248,23 +291,31 @@ fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier
     val perFile = diffs.map { it.patch?.lines().orEmpty().filterNot(::isDiffNoise) }
     val totalLines = perFile.sumOf { it.size }
     var budget = MAX_DIFF_LINES
+    // Track viewport width via onSizeChanged (a layout side-effect) instead of
+    // BoxWithConstraints (SubcomposeLayout). SubcomposeLayout inside LazyColumn
+    // items triggers a parent re-layout pass when items scroll into view, which
+    // was causing the TodoSheet to flicker as it remeasured.
+    var viewportWidthPx by remember { mutableIntStateOf(0) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(SurfaceContainerLowest),
+            .background(SurfaceContainerLowest)
+            .onSizeChanged { viewportWidthPx = it.width },
     ) {
+        val viewportWidthDp = with(density) { viewportWidthPx.toDp() }
         perFile.forEach { lines ->
             if (budget <= 0 || lines.isEmpty()) return@forEach
-            // Design DiffRow grammar: a 1-char gutter sign column (colored) + body
-            // in onSurface; whole-line tint for add/del, purple hunks, red/cyan
-            // ---/+++ headers (which name the file — no separate header bar). §2
             val shown = lines.take(budget)
             budget -= shown.size
             val scrollState = rememberScrollState()
             Box(modifier = Modifier.horizontalScroll(scrollState)) {
-                // IntrinsicSize.Max → all rows share the widest line's width,
-                // so add/del tints span the full row (design DiffRow look).
-                Column(modifier = Modifier.width(IntrinsicSize.Max).padding(vertical = 8.dp)) {
+                Column(
+                    modifier = Modifier
+                        .widthIn(min = viewportWidthDp)
+                        .width(IntrinsicSize.Max)
+                        .padding(vertical = 8.dp),
+                ) {
                     shown.forEach { line -> DiffLine(line) }
                 }
             }
@@ -283,41 +334,42 @@ fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier
 
 @Composable
 private fun DiffLine(line: String) {
-    // (bg, sign, signColor, textColor); empty sign = no gutter (headers/hunks).
-    data class Spec(val bg: Color, val sign: String, val signColor: Color, val text: Color, val body: String)
-    val s = when {
-        line.startsWith("+++") -> Spec(Color.Transparent, "", Color.Transparent, LinkCyan, line)
-        line.startsWith("---") -> Spec(Color.Transparent, "", Color.Transparent, Error, line)
-        line.startsWith("@@") -> Spec(DiffHunkBg, "", Color.Transparent, HeaderPurple, line)
+    val bg: Color
+    val sign: String
+    val signColor: Color
+    val textColor: Color
+    val body: String
+    when {
+        line.startsWith("+++") -> { bg = Color.Transparent; sign = ""; signColor = Color.Transparent; textColor = LinkCyan; body = line }
+        line.startsWith("---") -> { bg = Color.Transparent; sign = ""; signColor = Color.Transparent; textColor = Error; body = line }
+        line.startsWith("@@")  -> { bg = DiffHunkBg;        sign = ""; signColor = Color.Transparent; textColor = HeaderPurple; body = line }
         line.startsWith("Index:") || line.startsWith("===") ->
-            Spec(Color.Transparent, "", Color.Transparent, OnSurfaceFaint, line)
-        line.startsWith("+") -> Spec(DiffAddBg, "+", Tertiary, OnSurface, line.drop(1))
-        line.startsWith("-") -> Spec(DiffRemoveBg, "−", Error, OnSurface, line.drop(1))
-        else -> Spec(Color.Transparent, " ", Color.Transparent, OnSurfaceVariant, line.removePrefix(" "))
+                                   { bg = Color.Transparent; sign = ""; signColor = Color.Transparent; textColor = OnSurfaceFaint; body = line }
+        line.startsWith("+")   -> { bg = DiffAddBg;    sign = "+"; signColor = Tertiary;       textColor = OnSurface;       body = line.drop(1) }
+        line.startsWith("-")   -> { bg = DiffRemoveBg; sign = "−"; signColor = Error;           textColor = OnSurface;       body = line.drop(1) }
+        else                   -> { bg = Color.Transparent; sign = " "; signColor = Color.Transparent; textColor = OnSurfaceVariant; body = line.removePrefix(" ") }
     }
-    // Fixed 1ch gutter sign column + body (mock DiffRow), so body text aligns
-    // across context/add/del/hunk/header rows regardless of the sign.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(s.bg)
+            .background(bg)
             .padding(horizontal = 8.dp),
     ) {
         Text(
-            text = s.sign,
+            text = sign,
             fontFamily = ForgeMono,
             fontSize = 12.sp,
             lineHeight = 20.sp,
-            color = s.signColor,
+            color = signColor,
             softWrap = false,
-            modifier = Modifier.width(8.dp), // ≈1ch at 12sp mono
+            modifier = Modifier.width(8.dp),
         )
         Text(
-            text = s.body.ifEmpty { " " },
+            text = body.ifEmpty { " " },
             fontFamily = ForgeMono,
             fontSize = 12.sp,
             lineHeight = 20.sp,
-            color = s.text,
+            color = textColor,
             softWrap = false,
         )
     }

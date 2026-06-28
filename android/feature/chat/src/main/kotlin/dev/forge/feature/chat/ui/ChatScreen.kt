@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Terminal
@@ -22,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -36,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.forge.core.model.Message
 import dev.forge.core.model.ModelRef
 import dev.forge.core.model.Part
+import dev.forge.core.model.PatchPart
 import dev.forge.core.model.SnapshotFileDiff
 import dev.forge.core.store.OptimisticMessage
 import dev.forge.feature.chat.ChatViewModel
@@ -50,6 +53,10 @@ fun ChatScreen(
     onOpenTasksBoard: () -> Unit = {},
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {},
+    applySystemInsets: Boolean = true,
+    isMultiPane: Boolean = false,
+    onOpenNavRail: () -> Unit = {},
+    showTodoSheet: Boolean = true,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -100,7 +107,7 @@ fun ChatScreen(
     Scaffold(
         containerColor = Surface,
         floatingActionButton = {
-            if (sessionDirectory != null) {
+            if (!isMultiPane && sessionDirectory != null) {
                 FloatingActionButton(
                     onClick = { onOpenTerminal(sessionDirectory) },
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -112,7 +119,7 @@ fun ChatScreen(
         },
         topBar = {
             // Custom 52dp dense bar (design §1) — M3 TopAppBar's 64dp is too tall.
-            Column(Modifier.background(Surface).statusBarsPadding()) {
+            Column(Modifier.background(Surface).then(if (applySystemInsets) Modifier.statusBarsPadding() else Modifier)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -120,13 +127,24 @@ fun ChatScreen(
                         .height(52.dp)
                         .padding(horizontal = 6.dp),
                 ) {
-                    IconButton(onClick = onNavigateBack, modifier = Modifier.size(42.dp)) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = OnSurface,
-                            modifier = Modifier.size(21.dp),
-                        )
+                    if (isMultiPane) {
+                        IconButton(onClick = onOpenNavRail, modifier = Modifier.size(42.dp)) {
+                            Icon(
+                                Icons.Default.Menu,
+                                contentDescription = "Navigation menu",
+                                tint = OnSurface,
+                                modifier = Modifier.size(21.dp),
+                            )
+                        }
+                    } else {
+                        IconButton(onClick = onNavigateBack, modifier = Modifier.size(42.dp)) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = OnSurface,
+                                modifier = Modifier.size(21.dp),
+                            )
+                        }
                     }
                     Column(modifier = Modifier.weight(1f).padding(horizontal = 4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -159,8 +177,36 @@ fun ChatScreen(
                             )
                         }
                     }
-                    IconButton(onClick = { showInfoSheet = true }, modifier = Modifier.size(42.dp)) {
-                        Icon(Icons.Default.Info, contentDescription = "Session info", tint = OnSurfaceVariant, modifier = Modifier.size(20.dp))
+                    if (isMultiPane) {
+                        // Mode badge + model — right panel shows full session info so only compact version here.
+                        Text(
+                            text = (displayAgent ?: "build").replaceFirstChar { it.uppercase() },
+                            fontFamily = ForgeMono,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = OnPrimary,
+                            modifier = Modifier
+                                .clip(ForgeShapes.xs)
+                                .background(Primary)
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                        if (displayModel != null) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = displayModel,
+                                fontFamily = ForgeMono,
+                                fontSize = 11.sp,
+                                color = OnSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 100.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(2.dp))
+                    } else {
+                        IconButton(onClick = { showInfoSheet = true }, modifier = Modifier.size(42.dp)) {
+                            Icon(Icons.Default.Info, contentDescription = "Session info", tint = OnSurfaceVariant, modifier = Modifier.size(20.dp))
+                        }
                     }
                     Box {
                         IconButton(onClick = { showOverflow = true }, modifier = Modifier.size(42.dp)) {
@@ -253,11 +299,22 @@ fun ChatScreen(
                     .imeNestedScroll(),
             ) {
                 items(uiState.messages, key = { it.id }) { message ->
-                    // SSE live parts supersede REST-loaded parts when present
+                    // SSE live parts supersede REST-loaded parts when present, but
+                    // PatchParts from SSE may lack the `files` list that the REST
+                    // endpoint includes — fall back to the REST-loaded part in that case.
                     val liveParts = uiState.parts[message.id]
+                    val effectiveParts: List<Part> = if (liveParts == null) {
+                        message.parts
+                    } else {
+                        liveParts.map { lp ->
+                            if (lp is PatchPart && lp.files.isEmpty()) {
+                                message.parts.firstOrNull { it.id == lp.id } ?: lp
+                            } else lp
+                        }
+                    }
                     MessageBlock(
                         message = message,
-                        parts = if (liveParts != null) liveParts else message.parts,
+                        parts = effectiveParts,
                         diffs = uiState.diffs,
                     )
                 }
@@ -266,11 +323,13 @@ fun ChatScreen(
                 }
             }
 
-            // Todos dock — anchored above the status strip / composer
-            TodoSheet(
-                todos = uiState.todos,
-                onOpenTasksBoard = onOpenTasksBoard,
-            )
+            // Todos dock — only in single/medium pane; moves to info panel in expanded.
+            if (showTodoSheet) {
+                TodoSheet(
+                    todos = uiState.todos,
+                    onOpenTasksBoard = onOpenTasksBoard,
+                )
+            }
         }
 
         // A8 — Permission sheet (non-dismissible)
@@ -448,6 +507,7 @@ private fun StreamParts(parts: List<Part>, diffs: Map<String, List<SnapshotFileD
         when (item) {
             is RenderItem.Tools -> ToolRowGroup(item.parts)
             is RenderItem.Single -> PartRenderer(item.part, diffs = diffs)
+            is RenderItem.Patch -> PartRenderer(item.part, editParts = item.editParts, diffs = diffs)
         }
     }
 }

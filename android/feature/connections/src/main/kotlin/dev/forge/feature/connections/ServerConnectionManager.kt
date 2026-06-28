@@ -12,6 +12,11 @@ import dev.forge.core.sdk.BaseUrlProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -43,29 +48,40 @@ class ServerConnectionManager @Inject constructor(
     val connections: StateFlow<List<ServerConnection>> = _connections.asStateFlow()
 
     private val _active = MutableStateFlow<ServerConnection?>(null)
-    val activeFlow: StateFlow<ServerConnection?> = _active.asStateFlow()
+    /** Internal flow typed to ServerConnection — used by ConnectionsViewModel for UI. */
+    val activeServerConnectionFlow: StateFlow<ServerConnection?> = _active.asStateFlow()
+
+    private val _scope = CoroutineScope(SupervisorJob())
 
     init {
         load()
     }
 
     override val active: ServerConnectionConfig?
-        get() = _active.value?.let { conn ->
-            ServerConnectionConfig(url = conn.http.url, http = HttpConfig(
-                url = conn.http.url,
-                username = conn.http.username,
-                password = conn.http.password,
-            ))
-        }
+        get() = _active.value?.toConfig()
+
+    override val activeFlow: StateFlow<ServerConnectionConfig?> = _active
+        .map { it?.toConfig() }
+        .stateIn(_scope, SharingStarted.Eagerly, active)
 
     override val baseUrl: String?
         get() = _active.value?.http?.url
 
-    fun add(rawUrl: String, username: String? = null, password: String? = null, displayName: String? = null) {
+    val activeDirectory: String?
+        get() = (_active.value as? ServerConnection.Http)?.directory
+
+    private fun ServerConnection.toConfig() = ServerConnectionConfig(
+        url = http.url,
+        http = HttpConfig(url = http.url, username = http.username, password = http.password),
+        directory = (this as? ServerConnection.Http)?.directory,
+    )
+
+    fun add(rawUrl: String, username: String? = null, password: String? = null, displayName: String? = null, directory: String? = null) {
         val normalized = normalizeServerUrl(rawUrl)
         val conn = ServerConnection.Http(
             http = HttpConfig(normalized, username, password),
             displayName = displayName,
+            directory = directory?.trim()?.takeIf { it.isNotEmpty() },
         )
         val current = _connections.value
         if (current.any { it.key() == conn.key() }) return  // deduplicate

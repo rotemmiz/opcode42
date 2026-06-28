@@ -10,10 +10,10 @@ class ConnectionsViewModel @Inject constructor(
     private val manager: ServerConnectionManager,
 ) : ViewModel() {
     val connections: StateFlow<List<ServerConnection>> = manager.connections
-    val active: StateFlow<ServerConnection?> = manager.activeFlow
+    val active: StateFlow<ServerConnection?> = manager.activeServerConnectionFlow
 
-    fun addServer(rawUrl: String, username: String? = null, password: String? = null, displayName: String? = null) =
-        manager.add(rawUrl, username, password, displayName)
+    fun addServer(rawUrl: String, username: String? = null, password: String? = null, displayName: String? = null, directory: String? = null) =
+        manager.add(rawUrl, username, password, displayName, directory)
 
     fun removeServer(key: String) = manager.remove(key)
 

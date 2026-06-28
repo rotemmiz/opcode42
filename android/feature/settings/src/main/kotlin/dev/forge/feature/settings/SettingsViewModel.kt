@@ -25,7 +25,7 @@ class SettingsViewModel @Inject constructor(
 
     val uiState: StateFlow<SettingsUiState> = combine(
         connectionManager.connections,
-        connectionManager.activeFlow,
+        connectionManager.activeServerConnectionFlow,
         prefs.darkTheme,
     ) { connections, active, darkTheme ->
         SettingsUiState(
@@ -42,7 +42,7 @@ class SettingsViewModel @Inject constructor(
      * then re-sync registration against whichever server becomes active.
      */
     fun removeServer(key: String) {
-        val wasActive = connectionManager.activeFlow.value?.key() == key
+        val wasActive = connectionManager.activeServerConnectionFlow.value?.key() == key
         if (wasActive) {
             viewModelScope.launch {
                 pushController.logoutAndAwait()

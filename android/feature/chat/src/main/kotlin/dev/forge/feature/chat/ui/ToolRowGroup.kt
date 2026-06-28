@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.forge.core.model.Part
+import dev.forge.core.model.PatchPart
 import dev.forge.core.model.ToolPart
 import dev.forge.core.model.ToolState
 import dev.forge.core.model.ToolStateCompleted
@@ -123,6 +124,8 @@ internal fun ToolPart.rendersAsOwnBlock(): Boolean =
 sealed interface RenderItem {
     data class Tools(val parts: List<ToolPart>) : RenderItem
     data class Single(val part: Part) : RenderItem
+    /** A PatchPart carrying the edit ToolParts that produced it, for synthetic diffs. */
+    data class Patch(val part: PatchPart, val editParts: List<ToolPart>) : RenderItem
 }
 
 /**
@@ -131,27 +134,40 @@ sealed interface RenderItem {
  * stays a [RenderItem.Single]. Todo tool calls are dropped (shown in the sheet).
  */
 fun groupRenderItems(parts: List<Part>): List<RenderItem> {
+    // Pre-pass: map each file path to ALL edit ToolParts that touched it.
+    // A single file can be edited multiple times in one step; associateBy/toMap
+    // would only keep one, leaving the rest unclaimed and leaking into ToolRowGroup.
+    val editsByFile: Map<String, List<ToolPart>> = parts
+        .filterIsInstance<ToolPart>()
+        .filter { it.tool.lowercase() in setOf("edit", "patch") }
+        .mapNotNull { tp -> tp.inputString("file_path", "filePath", "path")?.let { it to tp } }
+        .groupBy({ it.first }, { it.second })
+    val claimedIds: Set<String> = parts
+        .filterIsInstance<PatchPart>()
+        .flatMap { pp -> pp.files.flatMap { editsByFile[it].orEmpty() }.map { it.id } }
+        .toSet()
+
     val items = mutableListOf<RenderItem>()
     var pending = mutableListOf<ToolPart>()
     fun flush() {
-        if (pending.isNotEmpty()) {
-            items += RenderItem.Tools(pending)
-            pending = mutableListOf()
-        }
+        // Exclude edit ToolParts already claimed by a PatchPart — they render there.
+        val visible = pending.filter { it.id !in claimedIds }
+        if (visible.isNotEmpty()) items += RenderItem.Tools(visible)
+        pending = mutableListOf()
     }
     for (part in parts) {
-        if (part is ToolPart) {
-            if (part.isHiddenFromRows()) continue
-            // bash/write break the row run and render as their own block.
-            if (part.rendersAsOwnBlock()) {
-                flush()
-                items += RenderItem.Single(part)
-            } else {
-                pending += part
+        when {
+            part is ToolPart -> {
+                if (part.isHiddenFromRows()) continue
+                if (part.rendersAsOwnBlock()) { flush(); items += RenderItem.Single(part) }
+                else pending += part
             }
-        } else {
-            flush()
-            items += RenderItem.Single(part)
+            part is PatchPart -> {
+                flush()
+                val editParts = part.files.flatMap { editsByFile[it].orEmpty() }
+                items += RenderItem.Patch(part, editParts)
+            }
+            else -> { flush(); items += RenderItem.Single(part) }
         }
     }
     flush()
