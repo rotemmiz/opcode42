@@ -25,7 +25,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -67,19 +71,33 @@ fun ChatScreen(
     val selectedAgent by viewModel.selectedAgent.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
-    // Only auto-scroll if the user is already near the bottom
-    val atBottom by remember {
-        derivedStateOf {
-            val info = listState.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
-            last.index >= info.totalItemsCount - 2
+    // ── Sticky-bottom auto-scroll ──────────────────────────────────────────────
+    // The message list is reverseLayout: the newest message is index 0, anchored at the
+    // bottom of the viewport. That gives requirements 1 and 2 almost for free:
+    //  1. Entering a chat starts at index 0 — already at the bottom, no scroll.
+    //  2. A streaming reply grows the bottom-anchored newest message upward, so the latest
+    //     output stays pinned with no work; a *new* message is revealed by snapping back to
+    //     index 0, but only while the user is still parked at the bottom.
+    //  3. Scrolling up moves off index 0 and stops the snap; returning to the bottom resumes
+    //     it. Only user drags/flings reach onPostScroll — our snap does not — so new content
+    //     never overrides where the user scrolled to.
+    val stickToBottom = remember(uiState.session?.id) { mutableStateOf(true) }
+    val autoScrollConnection = remember(stickToBottom) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                stickToBottom.value =
+                    listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                return Offset.Zero
+            }
         }
     }
-    val totalItems = uiState.messages.size + uiState.optimisticMessages.size
-    LaunchedEffect(totalItems) {
-        if (totalItems > 0 && atBottom) {
-            listState.animateScrollToItem(totalItems - 1)
-        }
+    // Key on stickToBottom (not listState): it is re-created — and reset to true — when the
+    // session id changes (including the initial null → id transition), so the collector must
+    // relaunch to read the live state object. Keying on the stable listState would freeze this
+    // coroutine onto the first state instance, so scroll-up could never stop the snap.
+    LaunchedEffect(stickToBottom) {
+        snapshotFlow { uiState.messages.size + uiState.optimisticMessages.size }
+            .collect { if (stickToBottom.value) listState.scrollToItem(0) }
     }
 
     // Show permission sheet if any are pending
@@ -290,15 +308,23 @@ fun ChatScreen(
         ) {
             LazyColumn(
                 state = listState,
+                reverseLayout = true, // newest at the bottom (index 0); see sticky-scroll note above
                 contentPadding = PaddingValues(top = 6.dp, bottom = 64.dp), // 6+8 ≈ 14dp top gutter; clear the sheet peek
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth()
                     .widthIn(max = 720.dp) // tablet: cap + center the stream
                     .align(Alignment.TopCenter)
+                    .nestedScroll(autoScrollConnection)
                     .imeNestedScroll(),
             ) {
-                items(uiState.messages, key = { it.id }) { message ->
+                // reverseLayout: emit newest-first so the freshest content is index 0 (bottom).
+                // Optimistic (just-sent, unconfirmed) messages are the newest, then the server
+                // messages newest→oldest above them.
+                items(uiState.optimisticMessages.asReversed(), key = { "opt:${it.id}" }) { opt ->
+                    OptimisticMessageBlock(opt)
+                }
+                items(uiState.messages.asReversed(), key = { it.id }) { message ->
                     // SSE live parts supersede REST-loaded parts when present, but
                     // PatchParts from SSE may lack the `files` list that the REST
                     // endpoint includes — fall back to the REST-loaded part in that case.
@@ -319,9 +345,6 @@ fun ChatScreen(
                         parts = effectiveParts,
                         diffs = uiState.diffs,
                     )
-                }
-                items(uiState.optimisticMessages, key = { "opt:${it.id}" }) { opt ->
-                    OptimisticMessageBlock(opt)
                 }
             }
 

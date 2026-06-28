@@ -7,8 +7,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import dev.forge.app.ui.AdaptiveChatScreen
 import dev.forge.feature.connections.ui.AddServerScreen
-import dev.forge.feature.chat.ui.ChatScreen
 import dev.forge.feature.chat.ui.TasksScreen
 import dev.forge.feature.sessions.ui.SessionListScreen
 import dev.forge.feature.settings.ui.SettingsScreen
@@ -79,8 +79,10 @@ fun ForgeNavGraph(
             arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
         ) { backStackEntry ->
             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
-            ChatScreen(
+            AdaptiveChatScreen(
                 sessionId = sessionId,
+                isDarkTheme = isDarkTheme,
+                onToggleTheme = onToggleTheme,
                 onNavigateBack = { navController.popBackStack() },
                 onOpenTerminal = { directory ->
                     navController.navigate(Screen.Terminal.route(directory))
@@ -91,8 +93,6 @@ fun ForgeNavGraph(
                 onOpenTasksBoard = {
                     navController.navigate(Screen.Tasks.route(sessionId))
                 },
-                isDarkTheme = isDarkTheme,
-                onToggleTheme = onToggleTheme,
             )
         }
 

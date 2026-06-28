@@ -57,8 +57,17 @@ class SseManager @Inject constructor(
     fun registerLifecycleObserver() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
-                val stale = System.currentTimeMillis() - lastEventAt >= HEARTBEAT_TIMEOUT_MS
-                if (stale) reconnect() else start()
+                // Cold start (and every foreground after onStop cancelled the loops) lands here
+                // with running == false → start() launches BOTH the connection loop and the
+                // flush loop. Only force a reconnect when we're already running but have gone
+                // stale (no event within the heartbeat window). Previously this routed cold
+                // starts through reconnect() — which never started the flush loop — so events
+                // piled up in batchChannel undrained and the UI never live-updated.
+                if (!running.get()) {
+                    start()
+                } else if (System.currentTimeMillis() - lastEventAt >= HEARTBEAT_TIMEOUT_MS) {
+                    reconnect()
+                }
             }
             override fun onStop(owner: LifecycleOwner) = stop()
         })
@@ -71,9 +80,20 @@ class SseManager @Inject constructor(
     fun start() {
         if (running.compareAndSet(false, true)) {
             connectionJob = scope.launch { connectionLoop("/global/event") }
-            if (flushJob?.isActive != true) {
-                flushJob = scope.launch { flushLoop() }
-            }
+        }
+        // Always ensure the single consumer of batchChannel is alive — without it,
+        // connectionLoop produces events that are never parsed/dispatched to the store.
+        ensureFlushLoop()
+    }
+
+    /**
+     * Launch the batch-flush loop if it isn't already running. [flushLoop] is the ONLY consumer
+     * of [batchChannel] and the only place SSE events are parsed and dispatched to the store, so
+     * every connection entry point (start/reconnect) must guarantee it is running.
+     */
+    private fun ensureFlushLoop() {
+        if (flushJob?.isActive != true) {
+            flushJob = scope.launch { flushLoop() }
         }
     }
 
@@ -91,6 +111,7 @@ class SseManager @Inject constructor(
     fun reconnect() {
         connectionJob?.cancel()
         running.set(true)
+        ensureFlushLoop()
         connectionJob = scope.launch { connectionLoop("/global/event") }
         subscribedDirectory?.let { subscribeDirectory(it) }
     }
@@ -221,8 +242,13 @@ class SseManager @Inject constructor(
             // Coalesce: keep latest per (type, compound key)
             val coalesced = coalesce(batch)
             for (raw in coalesced) {
-                val event = eventParser.parse(raw)
-                store.dispatch(event)
+                // Guard the sole batchChannel consumer: a throwing reducer must not kill the
+                // flush loop (it would silently stop all live updates — the very bug this fixes).
+                try {
+                    store.dispatch(eventParser.parse(raw))
+                } catch (e: Exception) {
+                    Log.w(TAG, "dropped SSE event; dispatch failed", e)
+                }
             }
         }
     }

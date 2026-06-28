@@ -48,8 +48,12 @@ class SessionListViewModel @Inject constructor(
     val uiState: StateFlow<SessionListUiState> =
         combine(store.state, _showArchived) { appState, showArchived ->
             val (archived, active) = appState.sessions.partition { it.isArchived }
+            // Most-recently-active first (opencode bumps time.updated on each new message),
+            // falling back to creation time. The store keeps sessions in ID order for the
+            // binary-search upsert; recency ordering is a display-layer concern only.
             SessionListUiState(
-                sessions = if (showArchived) archived else active,
+                sessions = (if (showArchived) archived else active)
+                    .sortedByDescending { it.time?.updated ?: it.time?.created ?: 0L },
                 archivedCount = archived.size,
                 showArchived = showArchived,
             )

@@ -29,6 +29,11 @@ kotlin {
             implementation(libs.android.lifecycle.process)
             implementation(libs.hilt.android)
         }
+        androidUnitTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.okhttp.mockwebserver)
+            implementation(libs.kotlinx.coroutines.core)
+        }
     }
 }
 
@@ -39,6 +44,12 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    testOptions {
+        // SseManager logs via android.util.Log; in local JVM unit tests the android.jar stubs
+        // throw unless we let them return defaults. The test exercises the coroutine/SSE logic,
+        // not logging, so default (no-op) stubs are exactly what we want.
+        unitTests.isReturnDefaultValues = true
     }
 }
 
