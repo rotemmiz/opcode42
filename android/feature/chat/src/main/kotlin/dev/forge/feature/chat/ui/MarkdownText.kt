@@ -257,7 +257,7 @@ private fun CodeBlockView(block: MdBlock.CodeBlock) {
             fontFamily = ForgeMono,
             fontSize = 12.sp,
             lineHeight = 18.sp,
-            color = Secondary,
+            color = OnSurface,
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
                 .padding(12.dp),
