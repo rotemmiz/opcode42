@@ -1,5 +1,5 @@
 /* ============================================================
-   forge-bits.jsx — shared primitives for the direction mockups
+   opcode42-bits.jsx — shared primitives for the direction mockups
    Syntax token colors, diff rows, status badges, spinner, and the
    real session diff data ported from the TUI's data.js.
    Exports (to window): Tok, DiffRow, CodeLine, Badge, Spinner,

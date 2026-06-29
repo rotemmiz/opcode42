@@ -1,6 +1,6 @@
-# Forge
+# Opcode42
 
-  Forge is a **ground-up, interop-first alternative to opencode**: a **Go daemon** that is
+  Opcode42 is a **ground-up, interop-first alternative to opencode**: a **Go daemon** that is
   **wire-compatible** with opencode's HTTP+SSE+WebSocket API and **ecosystem-compatible** with its
   config/resource formats (MCP, LSP, `.opencode/agent`, `AGENTS.md`, commands, skills, providers,
   plugins). **Mobile (Android) is the primary client.** A Go/Bubble Tea TUI is a dogfood vehicle.

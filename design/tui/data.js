@@ -208,7 +208,7 @@
 
   // ---- models ----
   const MODELS = {
-    "Forge Cloud": [
+    "Opcode42 Cloud": [
       { name: "Anvil Mini", tag: "Free" },
       { name: "Anvil Flash", tag: "Free" },
     ],
@@ -238,7 +238,7 @@
   // ---- themes ----
   const THEMES = [
     "ayu", "catppuccin", "everforest", "github", "gruvbox", "kanagawa",
-    "matrix", "monokai", "nightowl", "nord", "one-dark", "forge",
+    "matrix", "monokai", "nightowl", "nord", "one-dark", "opcode42",
     "rosepine", "solarized", "synthwave84", "system", "tokyonight",
     "vesper", "zenburn",
   ];

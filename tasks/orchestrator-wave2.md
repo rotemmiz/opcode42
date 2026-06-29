@@ -1,7 +1,7 @@
-# Forge v1 — ORCHESTRATOR kickoff (Wave 2)
+# Opcode42 v1 — ORCHESTRATOR kickoff (Wave 2)
 
-Paste this to start the next orchestrator session. You are the ORCHESTRATOR for Forge v1 parallel
-execution. Forge is a Go daemon, wire-compatible with opencode (reference: `/Users/rotemmiz/git/opencode`).
+Paste this to start the next orchestrator session. You are the ORCHESTRATOR for Opcode42 v1 parallel
+execution. Opcode42 is a Go daemon, wire-compatible with opencode (reference: `/Users/rotemmiz/git/opencode`).
 **Read `CLAUDE.md` first.** The generic mechanics (roles, dispatch loop, context hygiene, gate, worker
 templates) live in `tasks/orchestrator.md` — follow them, with the POLICY OVERRIDE below.
 
@@ -9,7 +9,7 @@ templates) live in `tasks/orchestrator.md` — follow them, with the POLICY OVER
 1. `~/.claude/plans/plan-execution-of-all-lively-kazoo.md` — the parallelized v1 roadmap (tracks A–F).
 2. `plans/00-masterplan.md` → "Decisions locked (2026-06-03)" — binding; do NOT re-litigate.
 3. Each `plans/*.md` "Review pass (2026-06-03)" section.
-4. Memories: `[[forge-v1-orchestration]]`, `[[orchestrator-lean-and-seams]]`, `[[feedback-mimic-ci-before-push]]`.
+4. Memories: `[[opcode42-v1-orchestration]]`, `[[orchestrator-lean-and-seams]]`, `[[feedback-mimic-ci-before-push]]`.
 
 ## POLICY OVERRIDE vs tasks/orchestrator.md (changed 2026-06-03)
 - **Hosted CI is AVAILABLE again — rely on it.** (The runbook/old memory said it was exhausted; ignore that.)
@@ -42,13 +42,13 @@ add only their field via the owner or land sequentially. Merge low-conflict PRs 
 - `opencode` is on PATH (a server also runs at `http://127.0.0.1:4096`, but the harness
   `scripts/run-conformance.sh` **spawns its own pristine opencode** with a fresh temp HOME, so it does
   NOT inherit that server's auth/config).
-- **Gemini key:** `~/.forge/conformance.env` (600, outside repo) — `export GOOGLE_GENERATIVE_AI_API_KEY=…`.
+- **Gemini key:** `~/.opcode42/conformance.env` (600, outside repo) — `export GOOGLE_GENERATIVE_AI_API_KEY=…`.
   Shared `~/.local/share/opencode/auth.json` has only an `opencode` entry (no google). Any agent/harness
-  needing the model must `set -a; . ~/.forge/conformance.env; set +a` first.
+  needing the model must `set -a; . ~/.opcode42/conformance.env; set +a` first.
 - **Pin scenarios to model `google/gemini-2.5-flash`** (confirm with user if auth fails). LLM output is
   non-deterministic → assert SHAPE, not text.
-- **VERIFY FIRST in Track D:** Forge's `internal/` reads no Google env var (opencode reads
-  GEMINI_API_KEY/GOOGLE_API_KEY/GOOGLE_GENERATIVE_AI_API_KEY) — Forge may not yet authenticate to Gemini.
+- **VERIFY FIRST in Track D:** Opcode42's `internal/` reads no Google env var (opencode reads
+  GEMINI_API_KEY/GOOGLE_API_KEY/GOOGLE_GENERATIVE_AI_API_KEY) — Opcode42 may not yet authenticate to Gemini.
   Close that gap (env-var read or shared-auth.json google entry) before live dual-run.
 - The EXISTING conformance gate is keyless and already gates every PR; the key is ONLY for new LLM
   scenarios (D2) and real-load perf (F).
@@ -62,7 +62,7 @@ add only their field via the owner or land sequentially. Merge low-conflict PRs 
   `operation` enum, 1-based→0-based, HasClients pre-check) and **B4 (M3-6)** bus wiring +
   real `ResolvePromptParts` (@file/@dir/@symbol via WorkspaceSymbol). **B3→B4 SEQUENTIAL after B2; B4
   owns `engine.go`/`resolvePromptParts` alone.**
-- **Track D — dual-run + scenarios (plan 12 / 02 M11).** Owns `conformance/`. Verify the Forge-Gemini
+- **Track D — dual-run + scenarios (plan 12 / 02 M11).** Owns `conformance/`. Verify the Opcode42-Gemini
   auth gap first. D1: live dual-run mode in the runner (loosen model-output fields — E1 already did the
   order-insensitive permission normalizer). D2: scenario suite (prompt text-only, one tool-call,
   permission round-trip, compaction, abort) replayed vs both daemons → the green baseline (Phase-B

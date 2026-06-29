@@ -1,4 +1,4 @@
-# Forge LSP — Language Server Protocol client (plan 03, Phase C)
+# Opcode42 LSP — Language Server Protocol client (plan 03, Phase C)
 
 ## Context
 
@@ -10,7 +10,7 @@ This is a faithful **re-port** of opencode's LSP (TS → Go), not a code copy. T
 - **Free from `go.lsp.dev`** (vetted lib, CLAUDE.md): all LSP protocol types + stdio JSON-RPC framing (`go.lsp.dev/protocol` + `go.lsp.dev/jsonrpc2`). Replaces opencode's `vscode-jsonrpc` + hand-rolled types.
 - **Portable as spec/data** (TS→Go): the config schema (`bool | {command,extensions,disabled,env,initialization}`), the built-in **server table** (id/extensions/root-markers/spawn cmd — trimmed to PATH-spawnable first), `NearestRoot` walk, diagnostic formatting (`ERROR [L:C] msg`, cap ~20), `/find/symbol` kind-filter + top-10, the `lsp.client.diagnostics` SSE shape, and the `touchFile → report` tool-integration pattern.
 - **Reimplement in Go** (TS-specific runtime, mirror MCP): client lifecycle, push+pull diagnostics + dedup/debounce, bus publishing, tool wiring, HTTP handlers.
-- **Deferred** (biggest TS-specific chunk): opencode's per-language **binary auto-download** (`go install`, `gem install`, GitHub-release fetch + platform/arch extraction). Forge uses a server only if its binary is on PATH; otherwise reports it unavailable. Logged as a divergence.
+- **Deferred** (biggest TS-specific chunk): opencode's per-language **binary auto-download** (`go install`, `gem install`, GitHub-release fetch + platform/arch extraction). Opcode42 uses a server only if its binary is on PATH; otherwise reports it unavailable. Logged as a divergence.
 
 ## Approach — phased (each phase = one PR through the full review/CI gate)
 
@@ -51,5 +51,5 @@ Pull diagnostics + dedup/debounce; `typescript`/`eslint`/`vue` (npm resolution);
 ## Verification
 - CI-mimic gate each PR: `go build`/`vet`, `gofmt -l`, `golangci-lint run`, `go test ./... -race`, `make gen` + clean gen-diff, `scripts/run-conformance.sh self`.
 - Unit/integration via an **in-test stub LSP server** (stdio JSON-RPC answering `initialize` + emitting `publishDiagnostics`/`workspace/symbol`) — deterministic, no real toolchain in CI.
-- Live-smoke (local, optional, needs a real server on PATH): point `forged` at a Go project with `gopls` installed; `GET /lsp` shows `gopls` connected; an edit that introduces a compile error surfaces the diagnostic in the tool output; `GET /find/symbol?query=...` returns symbols.
+- Live-smoke (local, optional, needs a real server on PATH): point `opcoded` at a Go project with `gopls` installed; `GET /lsp` shows `gopls` connected; an edit that introduces a compile error surfaces the diagnostic in the tool output; `GET /find/symbol?query=...` returns symbols.
 - Append human-verify items to `tasks/verify.md`.

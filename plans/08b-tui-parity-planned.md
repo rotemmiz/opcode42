@@ -1,7 +1,7 @@
 # Plan 08b — TUI feature parity: items that need a plan
 
-> **Scope.** The Forge-TUI-vs-opencode-TUI gaps that are **not** drop-in: each introduces a new
-> subsystem, depends on the Forge daemon (Phase B), or encodes opencode-specific semantics that must
+> **Scope.** The Opcode42-TUI-vs-opencode-TUI gaps that are **not** drop-in: each introduces a new
+> subsystem, depends on the Opcode42 daemon (Phase B), or encodes opencode-specific semantics that must
 > be understood before building. The cheap, drop-in gaps are in **plan 08a**.
 >
 > **Framing.** Same as 08a: the TUI is the **dogfood / conformance vehicle**, not the primary client.
@@ -47,7 +47,7 @@ daemon's own effort on top.
 ## 1. Diff viewer  ✅ SHIPPED (#79)
 **What opencode does.** A full-screen diff reviewer: `feature-plugins/system/diff-viewer.tsx` +
 `diff-viewer-file-tree.tsx` + `diff-viewer-ui.tsx`. It fetches patches via
-`props.api.client.session.diff(...)` (**`GET /session/{id}/diff`**, already in Forge's SDK) and
+`props.api.client.session.diff(...)` (**`GET /session/{id}/diff`**, already in Opcode42's SDK) and
 working-tree diffs via `client.vcs.diff(...)`. Features (~30 `diff_*` keybinds in `config/keybind.ts`):
 a **file tree** pane (`buildFileTree`/`flattenFileTree`) you can toggle (`diff_toggle_file_tree`),
 focus-switch between patches and files (`diff_switch_focus`), **unified vs split** view
@@ -59,14 +59,14 @@ acceleration (`getScrollAcceleration`). Split layout math: `patchPaneWidth = wid
 − 4`, file tree fixed 33 cols, `MIN_SPLIT_WIDTH` gate.
 
 **Why it needs a plan.** It's a self-contained sub-application: a scrollable, foldable, two-pane,
-syntax-aware diff renderer with its own keymap and persisted view state. Forge's Android client has a
+syntax-aware diff renderer with its own keymap and persisted view state. Opcode42's Android client has a
 diff *card* (`UnifiedDiffView`, C4) but nothing like the file-tree-plus-split reviewer.
 
-**Proposed Forge approach.**
+**Proposed Opcode42 approach.**
 - New `internal/tui/diff/` package: `model.go` (focus state, scroll, fold map, view mode),
   `filetree.go` (build/flatten/expand mirroring opencode), `render.go` (unified + side-by-side; reuse
   Android's DiffRow gutter grammar — 1ch colored sign + body).
-- Data: `SDK.SessionDiff(sessionID, messageID)` (Forge already calls `GET /session/{id}/diff` in the
+- Data: `SDK.SessionDiff(sessionID, messageID)` (Opcode42 already calls `GET /session/{id}/diff` in the
   Android `ForgeClient`; add the Go SDK equivalent). Working-tree source (`vcs.diff`) is **deferred**
   until the daemon exposes a VCS-diff endpoint (not in the current openapi surface) — ship session-patch
   source first.
@@ -85,8 +85,8 @@ add split later. **Conformance value:** medium (exercises `GET /session/{id}/dif
 ## 2. PTY pane (T11 — the TUI's interactive terminal)  ✅ SHIPPED (#80)
 **What opencode does.** The GUI app embeds a real terminal (`packages/app/src/components/terminal.tsx`
 via **`ghostty-web`**) over **`GET /pty/{id}/connect`** (WebSocket), created with `POST /pty`
-(`pty/index.ts`). Forge framing: `0x00` + UTF-8 JSON `{cursor}` control frames alongside raw bytes
-(CLAUDE.md). Forge's Go SDK **already has `CreatePTY`/`ConnectPTY`/`ResizePTY`** (`sdk/go/pty.go`), and
+(`pty/index.ts`). Opcode42 framing: `0x00` + UTF-8 JSON `{cursor}` control frames alongside raw bytes
+(CLAUDE.md). Opcode42's Go SDK **already has `CreatePTY`/`ConnectPTY`/`ResizePTY`** (`sdk/go/pty.go`), and
 **Android already ships a PTY pane** (C6, `TerminalScreen`).
 
 **Why it needs a plan.** Every other TUI pane renders styled text Bubble Tea controls. A PTY pane
@@ -94,7 +94,7 @@ streams raw ANSI (cursor moves, colors, scroll regions, clear-screen) that must 
 a virtual screen grid** and handed to Bubble Tea — a terminal emulator nested inside a terminal app.
 The GUIs "buy" an emulator (ghostty-web/xterm.js); the TUI has no drop-in equivalent.
 
-**Proposed Forge approach.**
+**Proposed Opcode42 approach.**
 - Adopt a Go VT parser/grid: evaluate `github.com/hinshun/vt10x` or `github.com/charmbracelet/x/...`
   (a cell-grid emulator) — **decision point: which library** (a spike is step 1; if none fit, the
   fallback is a minimal CSI/SGR subset, which is a real risk).
@@ -124,7 +124,7 @@ Workspaces are git-worktree-backed isolated working copies the agent operates in
 syncing worktrees is server-side orchestration. The TUI is only a thin control surface. It also sits
 behind `/experimental/*`, so the contract may move.
 
-**Proposed approach.** **Do not build in the TUI until the Forge daemon implements
+**Proposed approach.** **Do not build in the TUI until the Opcode42 daemon implements
 `/experimental/workspace*`** (a daemon plan, likely an extension of `plans/01`/`plans/13`). Once it
 does: a `dialog-workspace-list` + create/delete overlay + a sidebar workspace label, all thin wrappers
 over the experimental endpoints, plus a `workspace.*` SSE reducer for status. **Recommendation:**
@@ -159,13 +159,13 @@ mounted into named **slots**, and third-party plugins can register into those sl
 draw UI. Plugins run in a worker (`worker.ts`).
 
 **Why it needs a plan.** This is a whole extensibility architecture (slot registry, plugin lifecycle,
-sandboxed execution, a plugin API surface) — opencode rebuilt its TUI *around* it. Forge's
+sandboxed execution, a plugin API surface) — opencode rebuilt its TUI *around* it. Opcode42's
 `plans/05-plugin-host.md` covers the **daemon** plugin host (mark3labs/MCP, JS via a runtime); a *TUI*
 plugin host is a separate client-side concern with different constraints (Go host, no JS runtime in a
 Go binary without embedding one).
 
 **Proposed approach.** **Almost certainly out of scope for a dogfood TUI.** If pursued: (a) first
-introduce an **internal slot architecture** (refactor Forge TUI panes into named slots) — valuable
+introduce an **internal slot architecture** (refactor Opcode42 TUI panes into named slots) — valuable
 regardless, modest effort; (b) a *third-party* plugin host (loading external Go plugins via
 `hashicorp/go-plugin`, or a wasm/JS runtime) is a major project to spec separately and only if there's
 demand. **Recommendation:** at most do the internal-slot refactor (a) as an enabler; defer external
@@ -196,7 +196,7 @@ selects an alternate configuration of the same model (e.g. a reasoning/effort va
 picker tied to the model switch.
 
 **Why it needs a plan.** "Variant" is opencode-specific model-config semantics. Before building a
-picker, Forge must decide whether its daemon/provider model exposes variants at all (the data comes
+picker, Opcode42 must decide whether its daemon/provider model exposes variants at all (the data comes
 from `GET /provider` → `Model.variants`), and how a chosen variant threads into
 `POST /session/{id}/message` (alongside `model`/`agent`).
 
@@ -221,7 +221,7 @@ session list. **Recommendation:** lowest priority; daemon-gated and organization
 **What opencode does.** `routes/session/dialog-subagent.tsx` + `subagent-footer.tsx` +
 `session_child_*` keybinds, over **`GET /session/{id}/children`** (child sessions = sub-agent runs).
 Lets you see and cycle into sub-agent child sessions and watch their status
-(`fix(tui): surface subagent retry status`). Forge **Android renders sub-agent cards** (the `task`
+(`fix(tui): surface subagent retry status`). Opcode42 **Android renders sub-agent cards** (the `task`
 tool → SubAgentBlock) but has no child-session navigation.
 
 **Why it needs a plan.** Needs a child-session model in the TUI store (the reducer currently tracks one
@@ -230,7 +230,7 @@ structural change to how the TUI scopes "the current session".
 
 **Proposed approach.** Add `SDK.SessionChildren(id)` (`GET /session/{id}/children`); extend the store to
 hold child sessions; a `subagent` footer listing children + status; `session_child_cycle` to enter a
-child's stream and back. Forge already renders `task` parts inline (Android parity), so this is the
+child's stream and back. Opcode42 already renders `task` parts inline (Android parity), so this is the
 *navigation* layer on top. **Dependency:** none on the daemon (endpoint exists). **Conformance value:**
 medium (exercises `GET /session/{id}/children` + child-session event routing).
 

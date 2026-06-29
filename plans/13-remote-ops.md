@@ -1,10 +1,10 @@
-# Forge Plan 13 — Remote-First Hardening & Ops
+# Opcode42 Plan 13 — Remote-First Hardening & Ops
 
 > **Status:** design-ready, implementation in Phase D (after plan 02 agent loop is green)
 >
-> **Audience:** Go engineers building the Forge daemon; Android/mobile client engineers (plan 07)
+> **Audience:** Go engineers building the Opcode42 daemon; Android/mobile client engineers (plan 07)
 >
-> **Motivation:** opencode is loopback-first and TS/Bun-native. Forge is explicitly
+> **Motivation:** opencode is loopback-first and TS/Bun-native. Opcode42 is explicitly
 > remote-first and mobile-primary. This plan hardens the daemon for that posture:
 > TLS, stronger auth, push notifications for mobile, resilient reconnection/replay,
 > LAN discovery, and single-binary packaging. Nothing here breaks wire-compat with
@@ -14,7 +14,7 @@
 
 ## Context
 
-Forge's core transport (REST+SSE+WS PTY) is specified in plan 01 and must remain
+Opcode42's core transport (REST+SSE+WS PTY) is specified in plan 01 and must remain
 wire-compatible with the opencode v2 API (frozen in `packages/sdk/openapi.json`).
 This plan layers security, reliability, and operational concerns on top of that
 transport without changing any endpoint shapes.
@@ -34,33 +34,33 @@ Default bind `127.0.0.1` (line 14); default port `0` resolves to 4096 then any f
 port; `--hostname 0.0.0.0` opt-in; `--mdns` forces hostname to `0.0.0.0` when not
 explicitly set (line 54); `--mdns-domain` (default `opencode.local`); `--cors` accepts
 multiple origins. All flags fall back to `config.server.*` if the flag was not
-explicitly passed (lines 49-59). Forge must replicate this precedence:
+explicitly passed (lines 49-59). Opcode42 must replicate this precedence:
 `flag > config-file > env > built-in default`.
 
 `packages/opencode/src/cli/cmd/serve.ts:14-16`  
 No password emits a console warning: `"Warning: OPENCODE_SERVER_PASSWORD is not set;
-server is unsecured."` Forge must emit the same warning and block `--hostname 0.0.0.0`
-without a password (opencode warns; Forge must refuse/block to be more secure).
+server is unsecured."` Opcode42 must emit the same warning and block `--hostname 0.0.0.0`
+without a password (opencode warns; Opcode42 must refuse/block to be more secure).
 
 ### Auth model
 
 `packages/opencode/src/server/auth.ts:17-33`  
 Config reads `OPENCODE_SERVER_PASSWORD` (Option) and `OPENCODE_SERVER_USERNAME`
 (default `"opencode"`). `required()` is true when password Option is Some and non-empty.
-`authorized()` does plain string compare — no timing-safe compare. Forge must use
+`authorized()` does plain string compare — no timing-safe compare. Opcode42 must use
 `subtle.ConstantTimeCompare` / `hmac.Equal`.
 
 `packages/opencode/src/server/routes/instance/httpapi/middleware/authorization.ts:9-86`  
 Auth is Basic (header) or `?auth_token=base64(user:pass)` query param. Both paths
 use `decodeCredential()` (base64 → `user:pass` split). `authorizationRouterMiddleware`
 skips public UI paths (line 114); `ptyConnectAuthorizationLayer` skips Basic check
-when a PTY ticket is present (line 147). Forge must honour the same skip rules for
+when a PTY ticket is present (line 147). Opcode42 must honour the same skip rules for
 wire-compat.
 
 `packages/opencode/src/server/shared/pty-ticket.ts:1-15`  
 Path pattern `/pty/:id/connect` skips Basic Auth when `?ticket=` query param is present.
 Ticket is a `crypto.randomUUID()` with 60-second TTL, single-use, capacity 10 000
-(line 9-10 of `packages/opencode/src/pty/ticket.ts`). Forge must replicate: issue
+(line 9-10 of `packages/opencode/src/pty/ticket.ts`). Opcode42 must replicate: issue
 ticket via `POST /pty/:id/ticket`, consume-and-delete on WebSocket upgrade.
 
 ### Desktop sidecar security model
@@ -74,7 +74,7 @@ line argument.
 
 `packages/desktop/src/main/server.ts:204-228`  
 `checkHealth()` polls `GET /global/health` with Basic auth before marking the sidecar
-ready. Forge's local CLI mode must do the same: spawn daemon, poll `/global/health`,
+ready. Opcode42's local CLI mode must do the same: spawn daemon, poll `/global/health`,
 then hand off the URL to the TUI/shell.
 
 ### Client reconnection & heartbeat
@@ -87,7 +87,7 @@ the current SSE attempt on heartbeat timeout and retries after 250 ms (lines 107
 visible after a timeout (lines 208-215).
 
 `packages/opencode/src/server/routes/instance/httpapi/handlers/global.ts:45-52`  
-Server emits `server.heartbeat` every 10 seconds. Forge must do the same; mobile
+Server emits `server.heartbeat` every 10 seconds. Opcode42 must do the same; mobile
 clients set HEARTBEAT_TIMEOUT_MS=15s so a 10s server interval gives comfortable
 headroom.
 
@@ -109,7 +109,7 @@ Four endpoints:
 idempotency (seq <= latest → skip). `replayAll()` enforces same-aggregate constraint
 and contiguous seq range.
 
-These semantics are the durability contract. Forge's implementation must match exactly
+These semantics are the durability contract. Opcode42's implementation must match exactly
 for plan-12 conformance.
 
 ### mDNS
@@ -117,7 +117,7 @@ for plan-12 conformance.
 `packages/opencode/src/server/mdns.ts:1-58`  
 Uses `bonjour-service` npm package. Publishes service type `_http._tcp`, name
 `opencode-<port>`, host `opencode.local` (or custom domain), TXT `{ path: "/" }`.
-Forge uses `github.com/grandcat/zeroconf` (pure Go, no CGO, `_opencode._tcp`
+Opcode42 uses `github.com/grandcat/zeroconf` (pure Go, no CGO, `_opencode._tcp`
 service type with the same TXT).
 
 ---
@@ -132,7 +132,7 @@ service type with the same TXT).
 
 ### Threats
 
-| Threat | opencode handling | Forge target |
+| Threat | opencode handling | Opcode42 target |
 |--------|-------------------|--------------|
 | Unauthenticated remote access | Warn if no password; loopback default | Block `0.0.0.0` bind without password; warn on loopback |
 | Credential sniffing (HTTP) | None — no TLS | TLS opt-in; Tailscale/proxy recommended for remote |
@@ -170,11 +170,11 @@ passed via env (mirror `packages/desktop/src/main/sidecar.ts:54-84`).
 ### 2. Direct TLS (self-signed or ACME)
 
 ```
-Mobile → forge.example.com:4096 (TLS)
-Daemon  → listen 0.0.0.0 --tls-acme forge.example.com
+Mobile → opcode42.example.com:4096 (TLS)
+Daemon  → listen 0.0.0.0 --tls-acme opcode42.example.com
 ```
 
-Forge embeds `golang.org/x/crypto/acme/autocert` for Let's Encrypt, and
+Opcode42 embeds `golang.org/x/crypto/acme/autocert` for Let's Encrypt, and
 `crypto/tls` self-signed generation for LAN use. Self-signed certs are pinned
 on first connect (TOFU — Trust On First Use) on the mobile client (plan 07).
 
@@ -188,7 +188,7 @@ any TLS flag is set, the HTTP listener is replaced by `tls.NewListener`.
 ### 3. Tailscale (recommended for remote)
 
 ```
-Mobile (Tailscale app) → forge-machine.tailnet:4096 (WireGuard)
+Mobile (Tailscale app) → opcode42-machine.tailnet:4096 (WireGuard)
 Daemon  → bind on tailscale0 IP or 0.0.0.0, password required
 ```
 
@@ -200,28 +200,28 @@ the recommended topology for mobile remote access:
 - No TLS cert management.
 - Daemon logs `tailscale` as the detected interface type.
 
-Document: `forge serve --hostname $(tailscale ip -4) --port 4096`.
+Document: `opcode42 serve --hostname $(tailscale ip -4) --port 4096`.
 
 **Tradeoff:** Requires Tailscale on both ends; not available on all networks.
 
 ### 4. Cloudflare Tunnel (zero-config public URL)
 
 ```
-Mobile → https://forge.example.workers.dev (Cloudflare edge)
+Mobile → https://opcode42.example.workers.dev (Cloudflare edge)
          ← cloudflared tunnel → 127.0.0.1:4096
 Daemon → loopback (no open port)
 ```
 
 `cloudflared tunnel --url http://localhost:4096` creates a public HTTPS URL with
-Cloudflare TLS. The daemon stays on loopback; the Forge daemon needs no changes.
-Forge docs should include a one-liner setup.
+Cloudflare TLS. The daemon stays on loopback; the Opcode42 daemon needs no changes.
+Opcode42 docs should include a one-liner setup.
 
 **Tradeoff:** Traffic transits Cloudflare; free for personal use. No offline access.
 
 ### 5. SSH Tunnel (mirrors opencode's `ssh` connection type)
 
 `packages/app/src/context/server.tsx:99-104` defines `ServerConnection.Ssh` — the
-desktop app can SSH into a remote host and expose a local proxy port. Forge documents
+desktop app can SSH into a remote host and expose a local proxy port. Opcode42 documents
 the equivalent:
 
 ```
@@ -239,13 +239,13 @@ ssh -R 4096:127.0.0.1:4096 user@mobile-gateway -N
 ### 6. Reverse Proxy (Caddy or nginx, production)
 
 ```
-Mobile → https://forge.example.com (Caddy, TLS via Let's Encrypt)
+Mobile → https://opcode42.example.com (Caddy, TLS via Let's Encrypt)
           → proxy_pass http://127.0.0.1:4096
 ```
 
 Caddy example `Caddyfile`:
 ```
-forge.example.com {
+opcode42.example.com {
     reverse_proxy localhost:4096
     header {
         X-Accel-Buffering no    # required for SSE
@@ -255,7 +255,7 @@ forge.example.com {
 
 nginx requires `proxy_buffering off; proxy_read_timeout 3600s;` for SSE.
 
-**Key:** SSE streams must not be buffered. Forge emits `X-Accel-Buffering: no` and
+**Key:** SSE streams must not be buffered. Opcode42 emits `X-Accel-Buffering: no` and
 `Cache-Control: no-cache, no-transform` on the event endpoint (matching
 `handlers/global.ts:58-64`).
 
@@ -265,9 +265,9 @@ nginx requires `proxy_buffering off; proxy_read_timeout 3600s;` for SSE.
 
 ### Compatibility layer (keep for wire-compat)
 
-Forge keeps Basic Auth + `?auth_token=base64(user:pass)` exactly as opencode does
+Opcode42 keeps Basic Auth + `?auth_token=base64(user:pass)` exactly as opencode does
 (`authorization.ts:83-86`). PTY ticket flow (issue + consume) is also preserved. These
-let unmodified opencode clients (TUI, web, desktop) connect to Forge.
+let unmodified opencode clients (TUI, web, desktop) connect to Opcode42.
 
 ### Bearer token layer (new for mobile)
 
@@ -323,7 +323,7 @@ codes are ephemeral). The QR code encodes `{ "url": "https://...", "code": "8472
 ### opencode-compat auth_token query param
 
 The `?auth_token=` param continues to work — it is used by the TUI and web clients
-(`authorization.ts:83`). Forge accepts both Basic-encoded and bearer-encoded values
+(`authorization.ts:83`). Opcode42 accepts both Basic-encoded and bearer-encoded values
 here for the transition period.
 
 ---
@@ -366,7 +366,7 @@ Firebase Cloud Messaging ──► Android device (plan 07)
 | `session.status` where status transitions to `idle` | "Agent finished" | Session title or first 60 chars of last assistant message |
 | `permission.asked` | "Permission needed" | Tool name + description |
 | `question.asked` | "Agent has a question" | Question text truncated to 120 chars |
-| `global.disposed` | "Forge daemon stopped" | "Reconnect when ready" |
+| `global.disposed` | "Opcode42 daemon stopped" | "Reconnect when ready" |
 
 Only events for sessions the device is registered to follow are dispatched (default:
 all sessions).
@@ -412,14 +412,14 @@ Content-Type: application/json
 ```
 
 Google OAuth2 token obtained via `golang.org/x/oauth2/google` with a service-account
-JSON key (`FORGE_FCM_SERVICE_ACCOUNT` env var or `--fcm-service-account` flag).
+JSON key (`OPCODE_FCM_SERVICE_ACCOUNT` env var or `--fcm-service-account` flag).
 
 **Offline delivery:** FCM queues messages for up to 4 weeks for offline Android devices.
-The Forge notification queue marks `sent_at` once FCM returns 200; `acked_at` is set
+The Opcode42 notification queue marks `sent_at` once FCM returns 200; `acked_at` is set
 when the mobile client calls `POST /push/ack/:notification_id`. Unacked notifications
 older than 30 days are pruned.
 
-**No FCM configured:** if `FORGE_FCM_SERVICE_ACCOUNT` is not set, the push subsystem
+**No FCM configured:** if `OPCODE_FCM_SERVICE_ACCOUNT` is not set, the push subsystem
 is disabled and the `/push/*` endpoints return 503. Log a startup notice.
 
 **Rate limiting:** max 1 notification per device per session per minute to avoid
@@ -435,21 +435,21 @@ flooding during rapid agent loops.
 - On SSE stream failure: wait `RECONNECT_DELAY_MS=250ms`, retry indefinitely.
 - If no heartbeat within 15 000ms: abort current attempt and reconnect.
 
-Forge must emit `server.heartbeat` every 10 seconds (matching `handlers/global.ts:45`).
+Opcode42 must emit `server.heartbeat` every 10 seconds (matching `handlers/global.ts:45`).
 The heartbeat payload is `{ id, type: "server.heartbeat", properties: {} }`.
 
 ### Event cursor / buffering
 
-Forge's SSE stream does not replay missed events on reconnect today (opencode has the
+Opcode42's SSE stream does not replay missed events on reconnect today (opencode has the
 same gap — `server.connected` is the only reconnect signal). The `/sync/*` endpoints
 fill this gap for session state, but raw SSE events are not buffered in opencode.
 
-Forge adds a lightweight in-memory ring buffer per active SSE stream:
+Opcode42 adds a lightweight in-memory ring buffer per active SSE stream:
 - Ring buffer capacity: 1 000 events, 5-minute retention.
 - Client sends `Last-Event-ID` HTTP header (standard SSE field) on reconnect.
-- Forge replays buffered events with `id ≤ Last-Event-ID` skipped, ids > that value
+- Opcode42 replays buffered events with `id ≤ Last-Event-ID` skipped, ids > that value
   replayed in order, then live events resume.
-- If the `Last-Event-ID` has aged out of the buffer, Forge emits `server.connected`
+- If the `Last-Event-ID` has aged out of the buffer, Opcode42 emits `server.connected`
   (triggering full client re-sync, same behaviour as today).
 
 This is an **additive, non-breaking extension** — opencode clients that ignore
@@ -457,9 +457,9 @@ This is an **additive, non-breaking extension** — opencode clients that ignore
 
 ### /sync/* implementation
 
-Forge implements all four sync endpoints with identical semantics:
+Opcode42 implements all four sync endpoints with identical semantics:
 
-**`POST /sync/start`** — triggers workspace sync loops. In Forge, this is a no-op
+**`POST /sync/start`** — triggers workspace sync loops. In Opcode42, this is a no-op
 returning `true` in single-workspace mode; extended in multi-workspace mode.
 
 **`POST /sync/replay`** — validate contiguous seq range for single aggregateID; apply
@@ -508,9 +508,9 @@ type SyncEvent struct {
 **opencode:** `bonjour-service` publishes `_http._tcp`, name `opencode-<port>`, host
 `opencode.local`, TXT `{ path: "/" }` (mdns.ts:17-23).
 
-**Forge:** `github.com/grandcat/zeroconf` (pure Go, no CGO). Service type
+**Opcode42:** `github.com/grandcat/zeroconf` (pure Go, no CGO). Service type
 `_opencode._tcp` (keep same for client compat; also advertise `_http._tcp` as an alias
-for non-Forge browsers). Instance name `forge-<port>`. TXT records:
+for non-Opcode42 browsers). Instance name `opcode42-<port>`. TXT records:
 ```
 path=/
 auth=required   // or "open"
@@ -522,8 +522,8 @@ and `_http._tcp`. On discovery, stores `{ url, txtVersion }` and prompts the use
 
 **CLI flag parity:**
 ```
-forge serve --mdns                      # enables mDNS, forces 0.0.0.0
-forge serve --mdns-domain mydev.local   # custom host announced in mDNS
+opcode42 serve --mdns                      # enables mDNS, forces 0.0.0.0
+opcode42 serve --mdns-domain mydev.local   # custom host announced in mDNS
 ```
 
 `--mdns` with no explicit `--hostname` defaults to `0.0.0.0` (same as opencode,
@@ -532,7 +532,7 @@ forge serve --mdns-domain mydev.local   # custom host announced in mDNS
 ### WAN: Manual URL entry
 
 For remote (non-LAN) access, the mobile app provides a URL entry screen:
-1. User enters `http://192.168.1.100:4096` or `https://forge.example.com`.
+1. User enters `http://192.168.1.100:4096` or `https://opcode42.example.com`.
 2. App normalizes (adds `http://` if missing, strips trailing slash) — mirrors
    `packages/app/src/context/server.tsx:10-15`.
 3. App calls `GET /global/health` with the user's credentials to validate before saving.
@@ -556,80 +556,80 @@ goreleaser release --clean
 - `darwin/amd64`, `darwin/arm64`
 - `windows/amd64`
 
-Build flags: `CGO_ENABLED=0 GOFLAGS="-trimpath"`. Embed `FORGE_VERSION` via
+Build flags: `CGO_ENABLED=0 GOFLAGS="-trimpath"`. Embed `OPCODE_VERSION` via
 `-ldflags "-X main.version=$(git describe --tags)"`.
 
 Binary size target: < 40 MB uncompressed (no CGO, no embedded JS/TS runtime). SQLite
 via `modernc.org/sqlite` (pure Go, no CGO).
 
-Artifact naming: `forge_linux_amd64.tar.gz`, etc. Checksums in `checksums.txt`.
+Artifact naming: `opcode42_linux_amd64.tar.gz`, etc. Checksums in `checksums.txt`.
 GitHub Releases via goreleaser + `gh release`.
 
 Install one-liner:
 ```sh
-curl -fsSL https://forge.dev/install.sh | sh
+curl -fsSL https://opcode42.dev/install.sh | sh
 ```
 
 ### Container image
 
 ```dockerfile
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY forge /forge
-ENTRYPOINT ["/forge"]
+COPY opcode42 /opcode42
+ENTRYPOINT ["/opcode42"]
 ```
 
 Multi-arch manifest via `goreleaser`'s `dockers` + `docker_manifests` config.
-Published to `ghcr.io/forge-dev/forge:{version}` and `:latest`.
+Published to `ghcr.io/opcode42-dev/opcode42:{version}` and `:latest`.
 
 Usage:
 ```sh
 docker run -d \
   -p 4096:4096 \
-  -v ~/.config/forge:/home/nonroot/.config/forge \
+  -v ~/.config/opcode42:/home/nonroot/.config/opcode42 \
   -v ~/projects:/projects \
-  -e FORGE_SERVER_PASSWORD=secret \
-  ghcr.io/forge-dev/forge:latest \
+  -e OPCODE_SERVER_PASSWORD=secret \
+  ghcr.io/opcode42-dev/opcode42:latest \
   serve --hostname 0.0.0.0 --port 4096
 ```
 
 ### systemd unit (Linux)
 
-`/etc/systemd/system/forge.service`:
+`/etc/systemd/system/opcode42.service`:
 ```ini
 [Unit]
-Description=Forge AI coding daemon
+Description=Opcode42 AI coding daemon
 After=network.target
 
 [Service]
 Type=simple
-User=forge
-ExecStart=/usr/local/bin/forge serve --hostname 127.0.0.1 --port 4096
+User=opcode42
+ExecStart=/usr/local/bin/opcode42 serve --hostname 127.0.0.1 --port 4096
 Restart=on-failure
 RestartSec=5s
-Environment=FORGE_SERVER_PASSWORD_FILE=/etc/forge/password
-EnvironmentFile=-/etc/forge/env
+Environment=OPCODE_SERVER_PASSWORD_FILE=/etc/opcode42/password
+EnvironmentFile=-/etc/opcode42/env
 
 # Hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/forge
+ReadWritePaths=/var/lib/opcode42
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-`forge install-service` command generates and installs the unit, writes a random
-password to `/etc/forge/password` (0600), and runs `systemctl enable --now forge`.
+`opcode42 install-service` command generates and installs the unit, writes a random
+password to `/etc/opcode42/password` (0600), and runs `systemctl enable --now opcode42`.
 
 ### launchd plist (macOS)
 
-`~/Library/LaunchAgents/dev.forge.daemon.plist` generated by `forge install-service`.
+`~/Library/LaunchAgents/dev.opcode42.daemon.plist` generated by `opcode42 install-service`.
 Uses `KeepAlive` + `StandardOutPath`/`StandardErrorPath` for logs.
 
 ### Windows Service
 
-`golang.org/x/sys/windows/svc` wraps the daemon. `forge install-service` calls
+`golang.org/x/sys/windows/svc` wraps the daemon. `opcode42 install-service` calls
 `sc create` and starts the service. Password stored in Windows Credential Manager
 via `github.com/danieljoos/wincred`.
 
@@ -638,8 +638,8 @@ via `github.com/danieljoos/wincred`.
 Priority: CLI flag > env var > config file > built-in default (same as opencode's
 precedence in `network.ts:45-61`).
 
-Config file location: `$FORGE_CONFIG` env > `$XDG_CONFIG_HOME/forge/config.yaml` >
-`~/.config/forge/config.yaml` (Linux/macOS) > `%APPDATA%\forge\config.yaml` (Windows).
+Config file location: `$OPCODE_CONFIG` env > `$XDG_CONFIG_HOME/opcode42/config.yaml` >
+`~/.config/opcode42/config.yaml` (Linux/macOS) > `%APPDATA%\opcode42\config.yaml` (Windows).
 
 YAML structure (subset):
 ```yaml
@@ -653,7 +653,7 @@ server:
     cert: ""
     key: ""
     acme_domain: ""
-  password: ""          # prefer env FORGE_SERVER_PASSWORD
+  password: ""          # prefer env OPCODE_SERVER_PASSWORD
   username: "opencode"
 
 logging:
@@ -661,12 +661,12 @@ logging:
   format: "json"        # json|text
 
 push:
-  fcm_service_account: ""  # prefer env FORGE_FCM_SERVICE_ACCOUNT
+  fcm_service_account: ""  # prefer env OPCODE_FCM_SERVICE_ACCOUNT
 ```
 
-Env vars: `FORGE_SERVER_PASSWORD`, `FORGE_SERVER_USERNAME`, `FORGE_SERVER_PORT`,
-`FORGE_SERVER_HOSTNAME`, `FORGE_FCM_SERVICE_ACCOUNT`, `FORGE_LOG_LEVEL`,
-`FORGE_LOG_FORMAT`, `FORGE_DB` (path to SQLite).
+Env vars: `OPCODE_SERVER_PASSWORD`, `OPCODE_SERVER_USERNAME`, `OPCODE_SERVER_PORT`,
+`OPCODE_SERVER_HOSTNAME`, `OPCODE_FCM_SERVICE_ACCOUNT`, `OPCODE_LOG_LEVEL`,
+`OPCODE_LOG_FORMAT`, `OPCODE_DB` (path to SQLite).
 
 ### Structured logging
 
@@ -683,34 +683,34 @@ but not the presented credential.
 ```json
 { "healthy": true, "version": "0.1.0" }
 ```
-Forge adds: no auth required on this endpoint (matches opencode; the desktop sidecar
+Opcode42 adds: no auth required on this endpoint (matches opencode; the desktop sidecar
 polls it without auth in some paths — `server.ts:204-228` passes password optionally).
 
-**`GET /global/metrics`** (Forge extension, not in opencode spec, not surfaced in
+**`GET /global/metrics`** (Opcode42 extension, not in opencode spec, not surfaced in
 generated OpenAPI spec to avoid drift). Returns Prometheus text format. Protected by
 the same auth middleware. Metrics:
 
 ```
-forge_http_requests_total{method,path,status} counter
-forge_http_request_duration_seconds{method,path} histogram
-forge_sse_connections_active gauge
-forge_sse_events_emitted_total counter
-forge_push_notifications_sent_total{status} counter
-forge_agent_sessions_active gauge
-forge_sync_replays_total counter
+opcode42_http_requests_total{method,path,status} counter
+opcode42_http_request_duration_seconds{method,path} histogram
+opcode42_sse_connections_active gauge
+opcode42_sse_events_emitted_total counter
+opcode42_push_notifications_sent_total{status} counter
+opcode42_agent_sessions_active gauge
+opcode42_sync_replays_total counter
 ```
 
 Use `github.com/prometheus/client_golang/prometheus` and `promhttp.Handler()`.
 
 Scrape config for Prometheus:
 ```yaml
-- job_name: forge
+- job_name: opcode42
   static_configs:
     - targets: ["localhost:4096"]
   metrics_path: /global/metrics
   basic_auth:
     username: opencode
-    password_file: /etc/forge/password
+    password_file: /etc/opcode42/password
 ```
 
 ### Graceful shutdown
@@ -745,7 +745,7 @@ Emit `global.disposed` SSE event before step 1 so connected clients know to reco
 | 13.10 | Prometheus metrics | `/global/metrics`, all counters/gauges/histograms | plan 01 |
 | 13.11 | Graceful shutdown | `SIGTERM` handler, `global.disposed` SSE event | plan 02 |
 | 13.12 | goreleaser | Multi-arch binary + container, `goreleaser.yaml`, GitHub Actions | — |
-| 13.13 | Service installation | `forge install-service` for systemd / launchd / Windows | 13.12 |
+| 13.13 | Service installation | `opcode42 install-service` for systemd / launchd / Windows | 13.12 |
 | 13.14 | Config file | YAML config loader with flag > env > file precedence | 13.1 |
 
 ---
@@ -764,9 +764,9 @@ Emit `global.disposed` SSE event before step 1 so connected clients know to reco
 | Device pairing happy path | Start pairing, complete with code, use returned token |
 | Device pairing code expiry | Complete pairing after 5 minutes; expect 410 Gone |
 | PTY ticket single-use | Issue ticket, connect WS (succeeds), reconnect with same ticket (fails) |
-| Block `0.0.0.0` without password | `forge serve --hostname 0.0.0.0`; expect startup error |
+| Block `0.0.0.0` without password | `opcode42 serve --hostname 0.0.0.0`; expect startup error |
 | TLS self-signed TOFU | `--tls-self-signed`; client pins cert; reconnect succeeds |
-| mDNS advertise | Browse `_opencode._tcp` on LAN; find forge instance |
+| mDNS advertise | Browse `_opencode._tcp` on LAN; find opcode42 instance |
 | CORS allowlist | Request from unlisted origin; expect 403 |
 
 ### Performance
@@ -783,9 +783,9 @@ Emit `global.disposed` SSE event before step 1 so connected clients know to reco
 
 | Scenario | How |
 |----------|-----|
-| opencode unmodified TUI connects to Forge | `opencode attach http://localhost:4096` with Basic auth; check all sessions visible |
-| opencode web client connects to Forge | Point browser at `http://localhost:4096`; SSE stream runs; no JS errors |
-| Forge mobile client connects to real opencode | Use bearer token on opencode... it falls back to Basic (token not supported there); confirm graceful fallback |
+| opencode unmodified TUI connects to Opcode42 | `opencode attach http://localhost:4096` with Basic auth; check all sessions visible |
+| opencode web client connects to Opcode42 | Point browser at `http://localhost:4096`; SSE stream runs; no JS errors |
+| Opcode42 mobile client connects to real opencode | Use bearer token on opencode... it falls back to Basic (token not supported there); confirm graceful fallback |
 | Simulate network drop + resume | Drop loopback route for 30s; restore; verify SSE reconnects and `Last-Event-ID` replay delivers missed events |
 | `sync/history` after disconnect | Disconnect for 5 min, reconnect, call `POST /sync/history`; verify no missed events |
 
@@ -793,10 +793,10 @@ Emit `global.disposed` SSE event before step 1 so connected clients know to reco
 
 ## Verification (Concrete)
 
-1. **Binary size:** `go build -o forge . && ls -lh forge` → must be < 40 MB.
+1. **Binary size:** `go build -o opcode42 . && ls -lh opcode42` → must be < 40 MB.
 2. **Auth regression:** `go test ./internal/auth/...` with subtests for constant-time
    compare, token lifecycle, and pairing flow.
-3. **`0.0.0.0` block:** `forge serve --hostname 0.0.0.0` exits non-zero when no
+3. **`0.0.0.0` block:** `opcode42 serve --hostname 0.0.0.0` exits non-zero when no
    password is configured; CI catches regressions.
 4. **mDNS round-trip:** integration test starts daemon with `--mdns`, browses via
    `zeroconf.Browse`, asserts service discovered within 5s.
@@ -805,10 +805,10 @@ Emit `global.disposed` SSE event before step 1 so connected clients know to reco
 6. **`Last-Event-ID` replay:** integration test: subscribe SSE → disconnect after 3
    events → reconnect with `Last-Event-ID: <id-of-event-2>` → assert event 3 replayed.
 7. **`/sync/history` parity:** record golden fixture from real opencode `/sync/history`
-   response; replay identical body against Forge; diff responses (plan 12 pattern).
+   response; replay identical body against Opcode42; diff responses (plan 12 pattern).
 8. **goreleaser dry run:** `goreleaser release --snapshot --clean` in CI; assert all
    platform binaries produced.
-9. **Container health:** `docker run --rm forge serve &` → `curl /global/health` → 200.
+9. **Container health:** `docker run --rm opcode42 serve &` → `curl /global/health` → 200.
 10. **Graceful shutdown timing:** send `SIGTERM`, measure time to `Exit 0` ≤ 35s.
 
 ---
@@ -819,7 +819,7 @@ Emit `global.disposed` SSE event before step 1 so connected clients know to reco
 |------|-----------|------------|
 | FCM service account key management in self-hosted deployments | Medium | Push subsystem is opt-in; daemon runs fine without it |
 | ACME Let's Encrypt rate limits in dev environments | Low | `--tls-self-signed` for dev; ACME only for prod |
-| Ring buffer memory pressure with many concurrent SSE connections | Medium | Cap at 1 000 events per stream; evict by age (5 min); add metric `forge_sse_buffer_evictions_total` |
+| Ring buffer memory pressure with many concurrent SSE connections | Medium | Cap at 1 000 events per stream; evict by age (5 min); add metric `opcode42_sse_buffer_evictions_total` |
 | `zeroconf` on Linux without mDNS daemon (no avahi) | Medium | `zeroconf` uses raw multicast sockets; test on minimal Docker; document that `avahi-daemon` is not required |
 | Windows service credential storage | Low | `wincred` is well-maintained; fallback to env var |
 | opencode clients expect `_http._tcp` not `_opencode._tcp` | High | Advertise both; `_http._tcp` is the fallback |
@@ -834,11 +834,11 @@ Emit `global.disposed` SSE event before step 1 so connected clients know to reco
    plan 07 iOS follow-up, but design the interface now.
 
 2. **Multi-user:** opencode is single-user (one `OPENCODE_SERVER_PASSWORD`). Should
-   Forge support multiple named users with per-user session isolation? Decision needed
+   Opcode42 support multiple named users with per-user session isolation? Decision needed
    before 13.2 (token schema assumes single user today).
 
-3. **Sync semantics for Forge-only features:** the `/sync/*` endpoints were designed for
-   workspace sync (experimental in opencode). Should Forge support multi-workspace? If
+3. **Sync semantics for Opcode42-only features:** the `/sync/*` endpoints were designed for
+   workspace sync (experimental in opencode). Should Opcode42 support multi-workspace? If
    yes, `sync/start` must do real work. Decision: implement no-op returning `true` for
    now; flag-gate multi-workspace for later.
 
@@ -885,7 +885,7 @@ Resolves open-question #2 below.
 **OAuth — DECIDED: deferred, API keys only for now** (masterplan "Decisions locked" #4). When picked
 up, the shared loopback callback server lives here (plan 13), with optional `--oauth-callback-proxy-url`
 for remote reachability. **Note:** verification uses
-`go build -o forge` but the binary is **`forged`** (`cmd/forged`) — align with plan 09.
+`go build -o opcode42` but the binary is **`opcoded`** (`cmd/opcoded`) — align with plan 09.
 
 ## Links to Sibling Plans
 
@@ -898,4 +898,4 @@ for remote reachability. **Note:** verification uses
   browsing, and Tailscale topology.
 - **Plan 12** (`12-test-compatibility.md`) — conformance harness; auth bypass tests,
   `sync/history` golden fixtures, SSE replay scenarios, and the check that opencode
-  unmodified clients connect to Forge are all hooks for plan 12's test runner.
+  unmodified clients connect to Opcode42 are all hooks for plan 12's test runner.

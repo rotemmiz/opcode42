@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Forge — All Screens</title>
+<title>Opcode42 — All Screens</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet" />
@@ -29,7 +29,7 @@ function screen(id, label, view) {
   return (
     <DCArtboard id={id} label={label} width={W} height={H}>
       <iframe className="screen-frame" loading="lazy"
-        src={"Forge TUI.html" + (view ? "?view=" + view : "")}
+        src={"Opcode42 TUI.html" + (view ? "?view=" + view : "")}
         width={W} height={H} />
     </DCArtboard>
   );

@@ -1,6 +1,6 @@
-# Forge — Master Plan
+# Opcode42 — Master Plan
 
-> Forge is a ground-up, **interop-first alternative to opencode**: a **Go daemon** that is
+> Opcode42 is a ground-up, **interop-first alternative to opencode**: a **Go daemon** that is
 > wire-compatible with opencode's HTTP+SSE+WebSocket API and ecosystem-compatible with its
 > config/resource formats, with **mobile (Android) as the primary client**.
 
@@ -35,7 +35,7 @@ desktop, SolidJS web, VSCode) consume **REST + SSE (`/event`, `/global/event`) +
 `x-opencode-directory`, and mDNS discovery. The missing client is **mobile**; the daemon is
 single-user TS/Bun + Effect.
 
-Forge exists for three reasons: **mobile + remote-first**, **ownership/license/control**, and a
+Opcode42 exists for three reasons: **mobile + remote-first**, **ownership/license/control**, and a
 **faster Go runtime / single-binary deployment**. We deliberately stay interoperable until interop
 becomes a wall worth breaking.
 
@@ -66,7 +66,7 @@ the product goal and the development methodology.
 
 ```
                 ┌─────────────────────────────────────────────┐
-   Mobile  ─────┤   Forge Daemon (Go, single static binary)   │── SQLite (sessions/msgs/parts)
+   Mobile  ─────┤   Opcode42 Daemon (Go, single static binary)   │── SQLite (sessions/msgs/parts)
    (primary) ───┤   - HTTP/REST + SSE bus + WS PTY            │── repo + built-in tools
    TUI (Go) ────┤   - Auth + directory/instance routing       │── MCP clients (stdio/http/sse)
    opencode's   │   - Agent engine (LLM stream + tool loop)   │── LSP servers (jsonrpc)
@@ -95,7 +95,7 @@ the product goal and the development methodology.
 ## Cross-cutting validation
 
 Every plan's verification ties back to **plan 12 (conformance)**: identical scenarios pass against
-opencode and Forge; SSE streams diffed event-for-event; opencode's unmodified clients run against Forge.
+opencode and Opcode42; SSE streams diffed event-for-event; opencode's unmodified clients run against Opcode42.
 
 ## Open decisions (settle in the referenced plans)
 - Plugin compat now vs deferred (plan 05).
@@ -166,8 +166,8 @@ These resolve the cross-cutting ambiguities above; the referenced plans inherit 
 5. **Windows is not supported for now** — Linux/macOS only. LSP/MCP spawn code, path handling, and
    server-table `.cmd`/`.bat`/`.exe` variants (plan 03 risk #9) target POSIX; Windows is explicitly
    out of scope, not "best-effort." Revisit only if a Windows client is prioritized.
-6. **`GET /command` ordering: Forge sorts by name (deterministic) — a known-addition.** opencode
-   returns commands in non-deterministic (map/glob) order; Forge already sorts
+6. **`GET /command` ordering: Opcode42 sorts by name (deterministic) — a known-addition.** opencode
+   returns commands in non-deterministic (map/glob) order; Opcode42 already sorts
    (`internal/resource/command.go:50`). Record this in `known-additions.json` and make the
    conformance differ **order-insensitive** for the `/command` list so it isn't a false failure.
 7. **Build plan 06 M10 (handler↔spec conformance).** The served spec must be provably accurate, not
@@ -177,5 +177,5 @@ These resolve the cross-cutting ambiguities above; the referenced plans inherit 
    dual-run. Closes the circular-drift gap (spec served verbatim today).
 
 ## Notes on where these plans live
-This `forge/` directory is a scratch home for the plan suite, kept separate from the opencode
-reference repo. Move it into the real Forge project repo when it's created.
+This `opcode42/` directory is a scratch home for the plan suite, kept separate from the opencode
+reference repo. Move it into the real Opcode42 project repo when it's created.

@@ -1,11 +1,11 @@
-# Forge — Finish Phase B (plan 02: agent engine) + API/SSE confirm
+# Opcode42 — Finish Phase B (plan 02: agent engine) + API/SSE confirm
 
 Continuation handoff for a fresh context. **Do not touch `android/`** (a parallel agent owns it).
 
 ## Orientation
 
-- **Repo:** `/Users/rotemmiz/git/forge`, branch `main`, clean, at `b546037`.
-  (If you were pointed at a different clone like `forge-2`, first confirm it is synced to this
+- **Repo:** `/Users/rotemmiz/git/opcode42`, branch `main`, clean, at `b546037`.
+  (If you were pointed at a different clone like `opcode42-2`, first confirm it is synced to this
   `main` — PRs #32/#34/#35 below must be present, or you'll rebuild merged work.)
 - **Plans are the source of truth.** Read `plans/00-masterplan.md` (phases), then
   `plans/02-agent-engine.md` (this is Phase B), and `plans/12-test-compatibility.md` (the
@@ -18,7 +18,7 @@ Continuation handoff for a fresh context. **Do not touch `android/`** (a paralle
 
 ## What is ALREADY DONE — do not redo
 
-The TUI gap-closing track is merged; Forge's daemon now serves (was 501 before):
+The TUI gap-closing track is merged; Opcode42's daemon now serves (was 501 before):
 - **#32:** `POST /permission/{id}/reply`, `POST /question/{id}/reply|reject`,
   `GET /session/{id}/todo`. Reshaped `question.Manager` to opencode's multi-question model;
   registered the `question` tool; shared `tool.TodoStore`.
@@ -35,10 +35,10 @@ harness (`conformance/`, ~16 scenarios, normalizer that scrubs temp-dir/HOME pat
 
 ### Conformance harness — READ THIS, it's a common trap
 - `scripts/run-conformance.sh self` = **opencode-vs-opencode** (two fresh opencode runs diffed
-  for determinism). It does **NOT** exercise Forge at all. This is the CI gate
+  for determinism). It does **NOT** exercise Opcode42 at all. This is the CI gate
   (`.github/workflows/conformance.yml`).
-- `scripts/run-conformance.sh dual <forgeURL>` = **opencode (truth) vs Forge**. This is how you
-  validate Forge. It is NOT in CI; run it manually with a `forged` instance up.
+- `scripts/run-conformance.sh dual <opcode42URL>` = **opencode (truth) vs Opcode42**. This is how you
+  validate Opcode42. It is NOT in CI; run it manually with a `opcoded` instance up.
 - Known divergences (provider/agent/command/find, plus the temp-path notes) are logged in
   `conformance/known-divergences.json`. `/agent`,`/command`,`/provider` are intentionally not
   byte-parity with opencode and are NOT gated by a scenario.
@@ -63,7 +63,7 @@ holes. The DoD "conformance self passes + a prompt round-trips" is already true 
    immediately and no `permission.asked` SSE is published — so the U10 permission overlay can't
    be exercised end-to-end. Replacing this with the resolved agent's rulesets is what unblocks it.
 3. **Subagent `task` tool unwired.** `internal/engine/tool/agentic.go` `Task{Runner SubagentRunner}`
-   exists but is NOT registered in `builtinRegistry` (`cmd/forged/main.go:220`) and has a nil
+   exists but is NOT registered in `builtinRegistry` (`cmd/opcoded/main.go:220`) and has a nil
    runner → "task: not available". Spawning nested agent runs is core plan-02 M6.
 4. **`websearch`/`skill` tools stubbed** — these lean Phase C (web-search provider is plan 03;
    skill loader is plan 04). Optional for "finish Phase B"; note and defer.
@@ -85,13 +85,13 @@ holes. The DoD "conformance self passes + a prompt round-trips" is already true 
 - Validate against opencode: a `build` prompt still runs tools without prompting; a tool not
   allowed by a restrictive agent publishes `permission.asked` and blocks until
   `POST /permission/:id/reply`. Cite `permission/index.ts` + `agent/agent.ts`.
-- **This makes the U10 permission overlay live against Forge** — the deferred item in
+- **This makes the U10 permission overlay live against Opcode42** — the deferred item in
   `tasks/verify.md`.
 
 ### PR-5 — Wire the subagent `task` tool (gap #3)
 - Implement a `SubagentRunner` that, given `TaskRequest{Description,Prompt,Agent,ParentSessionID}`,
   creates a child session, runs `engine.Prompt` under the requested agent, and returns the final
-  assistant text. Register `tool.Task{Runner: …}` in `builtinRegistry` (`cmd/forged/main.go`).
+  assistant text. Register `tool.Task{Runner: …}` in `builtinRegistry` (`cmd/opcoded/main.go`).
 - Mind the run lock (`runstate`): a subagent runs on a *child* session id, not the parent's, so
   it must not deadlock against the parent's lock.
 - Validate against opencode's `task` tool semantics (`packages/opencode/src/tool/task.ts`).

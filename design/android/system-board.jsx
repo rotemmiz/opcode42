@@ -91,17 +91,17 @@ function SystemBoard() {
       {/* header */}
       <div style={{ gridColumn: 'span 12', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 2 }}>
         <div>
-          <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, letterSpacing: 2, color: 'var(--on-surface-faint)', textTransform: 'uppercase' }}>Forge · Android</div>
+          <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, letterSpacing: 2, color: 'var(--on-surface-faint)', textTransform: 'uppercase' }}>Opcode42 · Android</div>
           <div style={{ fontSize: 30, fontWeight: 500, marginTop: 6, letterSpacing: -0.5 }}>The system, before we build</div>
           <div style={{ fontSize: 15, color: 'var(--on-surface-variant)', marginTop: 6, maxWidth: 720, lineHeight: 1.5 }}>
-            A touch-first sibling of the Forge TUI. Same charcoal, same semantic colors, same agent-conversation model —
+            A touch-first sibling of the Opcode42 TUI. Same charcoal, same semantic colors, same agent-conversation model —
             translated into Material 3 patterns. Not a terminal emulator on a phone.
           </div>
         </div>
         <div style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--on-surface-faint)', lineHeight: 1.7 }}>
           <div>phone-primary · tablet-adaptive</div>
           <div>dark primary · light toggle</div>
-          <div>M3 bones · Forge character</div>
+          <div>M3 bones · Opcode42 character</div>
         </div>
       </div>
 
@@ -143,7 +143,7 @@ function SystemBoard() {
       {/* type scale */}
       <Card span={7} kicker="Roboto + Roboto Mono" title="Type scale">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-          <TypeRow label="Display / wordmark" note="Roboto Mono 700 · 28" style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 28, letterSpacing: -0.5 }}>forge</TypeRow>
+          <TypeRow label="Display / wordmark" note="Roboto Mono 700 · 28" style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 28, letterSpacing: -0.5 }}>opcode42</TypeRow>
           <TypeRow label="Title large" note="Roboto 400 · 22" style={{ fontSize: 22 }}>Add retry + backoff</TypeRow>
           <TypeRow label="Title medium" note="Roboto 500 · 16" style={{ fontSize: 16, fontWeight: 500 }}>Adding retry with backoff</TypeRow>
           <TypeRow label="Body large" note="Roboto 400 · 15" style={{ fontSize: 15 }}>I&rsquo;ll wrap the request path with a bounded retry loop…</TypeRow>
@@ -153,7 +153,7 @@ function SystemBoard() {
       </Card>
 
       {/* shape & density */}
-      <Card span={5} kicker="Forge character" title="Shape & density">
+      <Card span={5} kicker="Opcode42 character" title="Shape & density">
         <div style={{ fontSize: 13, color: 'var(--on-surface-variant)', lineHeight: 1.55, marginBottom: 14 }}>
           Tighter corners than stock M3 — developer-grade, not bubbly. Code surfaces are nearly square so monospace reads as code.
         </div>
@@ -205,7 +205,7 @@ function SystemBoard() {
       <Card span={12} kicker="Pick one — then I build it out fully" title="Three directions, same screen">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 22, fontSize: 13.5, lineHeight: 1.55 }}>
           <DirBlurb tag="A" color="var(--blue)" name="Faithful M3" desc="By-the-book Material 3 in charcoal. Rounded cards, M3 elevation tints, friendly. The safe, recognizable baseline." />
-          <DirBlurb tag="B" color="var(--amber)" name="Terminal-Material" desc="M3 bones, Forge skin. Hairline borders, tight radii, monospace-forward, the amber active rail. The true sibling of the TUI." />
+          <DirBlurb tag="B" color="var(--amber)" name="Terminal-Material" desc="M3 bones, Opcode42 skin. Hairline borders, tight radii, monospace-forward, the amber active rail. The true sibling of the TUI." />
           <DirBlurb tag="C" color="var(--purple)" name="Expressive spine" desc="M3 Expressive. A semantic-colored timeline spine threads the turn; bigger type, more air, color-forward. The bold take." />
         </div>
         <div style={{ marginTop: 16, fontSize: 12.5, color: 'var(--on-surface-variant)' }}>

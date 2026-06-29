@@ -1,11 +1,11 @@
-# Handoff: Forge for Android — Conversation Stream (Direction B · "Terminal-Material")
+# Handoff: Opcode42 for Android — Conversation Stream (Direction B · "Terminal-Material")
 
 ## Overview
-Forge for Android is a **touch-first mobile client** for the same coding-agent backend as the Forge TUI. It presents a streaming agent conversation — reasoning, collapsible tool calls, a syntax-highlighted diff, command output, todos, sub-agents, and a summary — plus a composer with slash/@ autocomplete, command/model/agent/session sheets, a tasks board, and a session-info sheet.
+Opcode42 for Android is a **touch-first mobile client** for the same coding-agent backend as the Opcode42 TUI. It presents a streaming agent conversation — reasoning, collapsible tool calls, a syntax-highlighted diff, command output, todos, sub-agents, and a summary — plus a composer with slash/@ autocomplete, command/model/agent/session sheets, a tasks board, and a session-info sheet.
 
 This package covers the **agreed design system** and the **chosen visual direction (B · "Terminal-Material")** for the hero screen: the **conversation stream**. It is the foundation other screens build on.
 
-The product is **phone-primary, tablet-adaptive**, **dark-primary with a planned light-theme toggle**. The aesthetic is **"Material 3 bones + custom Forge character"**: M3 structure and components, but skinned to feel like a sibling of the charcoal terminal client — hairline borders instead of heavy elevation, tighter corners, monospace-forward content, and the TUI's semantic-color system carried over intact.
+The product is **phone-primary, tablet-adaptive**, **dark-primary with a planned light-theme toggle**. The aesthetic is **"Material 3 bones + custom Opcode42 character"**: M3 structure and components, but skinned to feel like a sibling of the charcoal terminal client — hairline borders instead of heavy elevation, tighter corners, monospace-forward content, and the TUI's semantic-color system carried over intact.
 
 ## About the Design Files
 The files in this bundle are **design references built in HTML/CSS/React (via in-browser Babel)** — high-fidelity prototypes that show the intended look, layout, and behavior. **They are not production code to ship directly.**
@@ -23,7 +23,7 @@ Treat the HTML's pixel values as **dp** (1px ≈ 1dp at the 412dp design width) 
 
 ## Design Tokens
 
-Defined in `tokens.css` under `:root`. Carried from the Forge TUI's charcoal palette and aliased onto Material 3 color roles.
+Defined in `tokens.css` under `:root`. Carried from the Opcode42 TUI's charcoal palette and aliased onto Material 3 color roles.
 
 ### Surfaces (dark scheme)
 | M3 role | Hex | Use |
@@ -71,7 +71,7 @@ Defined in `tokens.css` under `:root`. Carried from the Forge TUI's charcoal pal
 - Scale (sp): wordmark 28/700 mono · titleLarge 22 · titleMedium 16/500 · bodyLarge 15 · bodyMedium 14 · label 13/500 · **code 13/1.5 mono** · kicker 11/700 mono, uppercase, +1 letter-spacing.
 - No ligatures in code/diffs (alignment).
 
-### Shape (Forge character — tighter than stock M3)
+### Shape (Opcode42 character — tighter than stock M3)
 | Token | Radius | Use |
 |---|---|---|
 | `r-xs` | 4dp | Code/diff blocks, mode chip, status pills, composer send |
@@ -93,7 +93,7 @@ A vertical `Scaffold`: pinned **top app bar** → scrolling **stream** (`LazyCol
 
 ### 1. Top app bar (pinned, 52dp + underline)
 - Leading: 42dp back icon button (`onSurface`).
-- Two-line title block: line 1 `Add retry + backoff to http client` — 15sp/500 `onSurface`, single line, ellipsized. line 2 `~/git/forge · fixture:main` — 11.5sp Roboto Mono, faint (`#585f67`).
+- Two-line title block: line 1 `Add retry + backoff to http client` — 15sp/500 `onSurface`, single line, ellipsized. line 2 `~/git/opcode42 · fixture:main` — 11.5sp Roboto Mono, faint (`#585f67`).
 - Trailing: `info` (session-info sheet) + `more` (overflow) icon buttons, 20dp icons, `onSurfaceVariant`.
 - Bottom: 1px `hairline` divider. Background `surface`.
 
@@ -113,7 +113,7 @@ Blocks, in order of a typical turn:
   - Glyph grammar: `→ Read src/http.ts` · `↳ Loaded src/http.ts · 64 lines` · `* Grep "fetch(" · 2` · `* Glob "src/**/*.ts" · 5`.
 - **Diff card (collapsible)** — `surfaceContainer`, 1px `outlineVariant`, 8dp radius.
   - **Header** (46dp): the **active state** — background `secondaryContainer` (amber tint) with a **2dp amber inset-start bar** (`box-shadow: inset 2px 0 0 amber`). Caret (`chevdown` when open) + `Edit ` + filename in `green` (mono 13sp) + right `+14 −1` (green / red).
-  - **Body**: 1px `hairline` top divider; inset, Roboto Mono 12sp / 1.65, horizontal scroll. Real unified diff (see `forge-bits.jsx → DIFF_LINES`): `---`/`+++` headers (`red`/`cyan`), `@@` hunks (`purple` on tint), context lines `onSurfaceVariant`, added lines `+` on green tint (sign `green`), removed `-` on red tint (sign `red`), with brighter **inline-change spans** for the changed token (e.g. `sleep`, `withRetry(...)`). Gutter sign is one char wide.
+  - **Body**: 1px `hairline` top divider; inset, Roboto Mono 12sp / 1.65, horizontal scroll. Real unified diff (see `opcode42-bits.jsx → DIFF_LINES`): `---`/`+++` headers (`red`/`cyan`), `@@` hunks (`purple` on tint), context lines `onSurfaceVariant`, added lines `+` on green tint (sign `green`), removed `-` on red tint (sign `red`), with brighter **inline-change spans** for the changed token (e.g. `sleep`, `withRetry(...)`). Gutter sign is one char wide.
 
   The full diff content is the `src/http.ts` retry edit — porting it verbatim:
   ```diff
@@ -191,10 +191,10 @@ Per the TUI app model (`app.jsx`), reusable here:
 No raster assets. All glyphs are Unicode/vector: tool glyphs `→ ↳ *`, checkbox/diff signs `✓ + −`, braille spinner `⠋⠙⠹…`, and the line icons in `icons.jsx` (back, info, more, send, add, search, chevron, file, diff, tasks, check, spark). Fonts: **Roboto** + **Roboto Mono** (Google Fonts) — both ship with Android; use the system families. Use real Material Symbols in the app where an equivalent exists.
 
 ## Files
-- `Forge Android (B) — reference.html` — open this to see the **System board** + the **Direction-B phone** rendered together. (Type is interactive: drag/tap the todo sheet, scroll the diff.)
+- `Opcode42 Android (B) — reference.html` — open this to see the **System board** + the **Direction-B phone** rendered together. (Type is interactive: drag/tap the todo sheet, scroll the diff.)
 - `tokens.css` — the design tokens (palette + M3 role aliases + shape scale). Source of truth for color/type/shape.
 - `system-board.jsx` — the system proposal board (mapping, type scale, shape/density, idiom translation, component inventory).
 - `dir-b.jsx` — the Direction-B conversation stream + `TodoSheet`. The screen to rebuild.
-- `forge-bits.jsx` — shared primitives: syntax/diff colors, `DiffRow`, `Badge`, `Spinner`, and `DIFF_LINES` (the real diff content).
+- `opcode42-bits.jsx` — shared primitives: syntax/diff colors, `DiffRow`, `Badge`, `Spinner`, and `DIFF_LINES` (the real diff content).
 - `icons.jsx` — the line-icon set.
 - `android-frame.jsx` — the device bezel used for the mock (not part of the app — ignore when rebuilding).

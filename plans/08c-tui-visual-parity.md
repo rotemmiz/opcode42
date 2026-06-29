@@ -12,7 +12,7 @@
 > `internal/tui/`: theme/{theme,loader}.go, markdown.go, syntax.go, diff.go, toolrender.go, chrome.go,
 > modal.go, spinner.go, logo.go, toast.go; harness at `tools/tui-shots/`.
 
-> **Scope.** Make the Forge TUI *visually* convincing as an opencode alternative: the theme/token
+> **Scope.** Make the Opcode42 TUI *visually* convincing as an opencode alternative: the theme/token
 > system, markdown + syntax rendering, diff fidelity, chrome (logo/footer/sidebar/dialogs), and
 > motion (spinner/logo/toasts). Where 08a/08b closed **feature** gaps (endpoints, navigation, panes),
 > this plan closes **aesthetic** gaps — the difference between "functionally equivalent" and "looks
@@ -25,7 +25,7 @@
 > work (Tier 3) is real but isolated so it can be deferred without blocking the rest.
 >
 > **The honest architecture gap.** opencode's TUI is **opentui** (SolidJS over a frame-buffer
-> compositor with per-cell control and live `requestRender` animation loops). Forge's TUI is
+> compositor with per-cell control and live `requestRender` animation loops). Opcode42's TUI is
 > **Bubble Tea** (a string-diff renderer). Everything static — themes, painted backgrounds, markdown,
 > syntax, diff — is achievable to pixel parity. The *animations* (gradient-scanner spinner, shimmer
 > wordmark, `bg-pulse` field) are achievable but cost more in Bubble Tea (a `tea.Tick` loop + manual
@@ -33,10 +33,10 @@
 
 ## Links
 - Siblings: `plans/08-client-tui.md`, `plans/08a-tui-parity-now.md`, `plans/08b-tui-parity-planned.md`.
-- Forge TUI: `internal/tui/` (Go/Bubble Tea, ~5k LOC); theme in `internal/tui/theme/theme.go`.
+- Opcode42 TUI: `internal/tui/` (Go/Bubble Tea, ~5k LOC); theme in `internal/tui/theme/theme.go`.
 - Reference TUI: `/Users/rotemmiz/git/opencode/packages/opencode/src/cli/cmd/tui/` (TS/opentui).
 - **Visual oracle:** `/Users/rotemmiz/git/opencode/screenshots-harness/` (VHS; see §V).
-- Design handoff already mirrored in Forge: `design/tui/styles.css` (the `:root` tokens `theme.go` lifts).
+- Design handoff already mirrored in Opcode42: `design/tui/styles.css` (the `:root` tokens `theme.go` lifts).
 
 ---
 
@@ -60,12 +60,12 @@ tools-diff, summary-table, write-bash-todos, slash/palette/model/theme/session/a
 
 **Workflow this plan mandates for each visual item:**
 1. `cd screenshots-harness && ./capture.sh opencode dark` (and `light`) → refresh `out/opencode-*/`.
-2. Build the matching Forge scene; capture Forge the same way (new harness, §V.1).
+2. Build the matching Opcode42 scene; capture Opcode42 the same way (new harness, §V.1).
 3. Eyeball side-by-side (and, Tier 1+, run the pixel-diff gate, §T).
 
-### V.1 Build a Forge screenshot harness (Tier 1 deliverable)
-Port `screenshots-harness/` to `tools/tui-shots/` for `forge-tui`: a `.tape` per scene driving the
-same keystrokes, output to `out/forge-{dark,light}/`, same scene numbering so frames line up 1:1 with
+### V.1 Build a Opcode42 screenshot harness (Tier 1 deliverable)
+Port `screenshots-harness/` to `tools/tui-shots/` for `opcode-tui`: a `.tape` per scene driving the
+same keystrokes, output to `out/opcode42-{dark,light}/`, same scene numbering so frames line up 1:1 with
 opencode's. Seed a deterministic fixture session (reuse the shape of `fixture-session.json`). This is
 the regression harness referenced in §T — build it early; it pays for itself every subsequent item.
 
@@ -82,9 +82,9 @@ func (m Model) paintsBackground() bool {
 }
 ```
 
-The default `forge-dark` theme is **deliberately excluded** from background painting (`model.go:1045`
+The default `opcode42-dark` theme is **deliberately excluded** from background painting (`model.go:1045`
 returns `body` unpainted "→ terminal-native background"). On a **light/white terminal**, the
-forge-dark palette's light-gray foregrounds (`Fg #d6dade`, `FgDim #8b929a`) render on the terminal's
+opcode42-dark palette's light-gray foregrounds (`Fg #d6dade`, `FgDim #8b929a`) render on the terminal's
 white background → washed-out, near-illegible text on white. opencode never has this: its compositor
 **always** fills every cell with the theme background.
 
@@ -93,7 +93,7 @@ background; deferring to the terminal is what breaks it. Concretely:
 - Delete the default-theme exclusion; `View()` always wraps the frame in
   `lipgloss.NewStyle().Background(p.Bg).Width(m.width).Height(m.height)`.
 - **Auto-pick light vs dark by terminal** at startup: `lipgloss.HasDarkBackground()` (already a
-  lipgloss capability) → default to `forge-dark` on dark terminals, `forge-light` on light ones, unless
+  lipgloss capability) → default to `opcode42-dark` on dark terminals, `opcode42-light` on light ones, unless
   the user pinned a theme. This mirrors opencode's `theme_mode_lock` (`kv.json`) + `dark/light` token
   resolution (`context/theme.tsx`).
 - Ensure **every** child style that draws text also sets `.Background(p.Bg)` (or the appropriate
@@ -102,17 +102,17 @@ background; deferring to the terminal is what breaks it. Concretely:
   helper in `theme.Styles` and route all renderers through it.
 
 **Test:** golden render of `viewSplash` + `renderSession` asserts every line is background-filled to
-`m.width` (no `\x1b[0m`-terminated cell shorter than width). Add a `forge-light`-on-dark and
-`forge-dark`-on-light capture to the harness to prove the auto-pick.
+`m.width` (no `\x1b[0m`-terminated cell shorter than width). Add a `opcode42-light`-on-dark and
+`opcode42-dark`-on-light capture to the harness to prove the auto-pick.
 
 ---
 
 ## Tier 1 — Foundation: the token & theme system (the unlock for everything else)
 
-Forge has **3 hand-coded palettes** (`theme.go`: `Default/Light/Mono`) with a **narrow token set**.
+Opcode42 has **3 hand-coded palettes** (`theme.go`: `Default/Light/Mono`) with a **narrow token set**.
 opencode has **33 JSON themes** and a **much richer token schema** (`context/theme/*.json`,
 `$schema: opencode.ai/theme.json`). Parity on themes is the foundation: markdown, syntax, and diff
-rendering below all consume tokens that Forge's palette doesn't even have yet (`diffAddedBg`,
+rendering below all consume tokens that Opcode42's palette doesn't even have yet (`diffAddedBg`,
 `markdownHeading`, `syntaxKeyword`, …).
 
 ### 1a. Extend `theme.Palette` to opencode's token surface
@@ -124,9 +124,9 @@ diffAddedBg, diffRemovedBg, diffContextBg, diffLineNumber, diffAddedLineNumberBg
 diffRemovedLineNumberBg`), and a **markdown/syntax group** (`markdownText, markdownHeading,
 markdownLink, …, syntaxKeyword, syntaxString, syntaxFunction, syntaxType, syntaxComment, …`).
 
-**Forge mapping** (extend the struct in `theme.go`; existing names mostly survive):
+**Opcode42 mapping** (extend the struct in `theme.go`; existing names mostly survive):
 
-| opencode token | Forge `Palette` field |
+| opencode token | Opcode42 `Palette` field |
 |---|---|
 | `background` / `backgroundPanel` / `backgroundElement` | `Bg` / `BgPanel` / `BgElev` |
 | `border` / `borderActive` / `borderSubtle` | `Border` / *(new)* `BorderActive` / `BorderSoft` |
@@ -144,12 +144,12 @@ sensible diff/markdown/syntax defaults derived from their existing semantic colo
 Add `theme/loader.go`: parse the `opencode.ai/theme.json` shape — a `defs` map of color literals + a
 `theme` map whose leaves are `{dark, light}` references-or-literals — into a `Palette` for the active
 mode. **Copy all 33 JSON files** into `internal/tui/theme/themes/` and `//go:embed` them. The registry
-(`Palettes()`) becomes: the 3 native Forge themes **plus** the embedded opencode set, so the theme
-picker (`/themes`, `dialog-theme-list`) lists ~36 and **a Forge user can pick `gruvbox`, `tokyonight`,
+(`Palettes()`) becomes: the 3 native Opcode42 themes **plus** the embedded opencode set, so the theme
+picker (`/themes`, `dialog-theme-list`) lists ~36 and **a Opcode42 user can pick `gruvbox`, `tokyonight`,
 `catppuccin`, etc., exactly as in opencode** — instant credibility, and it makes the screenshot-diff
 gate (§T) trivially apply across themes.
 
-- Honor the user's `config.theme` (opencode reads it from config; Forge should read the same key so a
+- Honor the user's `config.theme` (opencode reads it from config; Opcode42 should read the same key so a
   shared `opencode.json`/`AGENTS.md` config "just works" — wire-/ecosystem-compat per CLAUDE.md).
 - Resolve `dark`/`light` per the Tier 0 terminal detection + `theme_mode_lock` KV (08a §H).
 
@@ -215,11 +215,11 @@ Re-style to the references:
   the prompt mode line and `cwd:branch` + version in the footer. Match the chip grammar (mode chip
   exists as `ModeChip` in `theme.go:136`) and the dim/accent split.
 - **Right sidebar** (`chrome.go:93`): scene 06 shows title + **Context token counts** + **LSP status**.
-  Forge has a sidebar; align its sections/labels/spacing to opencode's.
+  Opcode42 has a sidebar; align its sections/labels/spacing to opencode's.
 - **Dialogs** (`modal.go`): opencode's `dialog-select.tsx` (18KB) is the workhorse — bordered,
-  title, filter input, selected-row bar, scroll. Forge's `modalView` (`modal.go:442`) should match the
+  title, filter input, selected-row bar, scroll. Opcode42's `modalView` (`modal.go:442`) should match the
   border (`border.tsx`), the selection bar (already `Selection` style), and the filter affordance.
-  Audit each Forge modal against its opencode dialog screenshot (15–23 scenes).
+  Audit each Opcode42 modal against its opencode dialog screenshot (15–23 scenes).
 
 ---
 
@@ -238,14 +238,14 @@ sweep head using the theme `primary`/`accent` ramp. Use it for the "thinking/str
 
 ### 3b. Logo shimmer (home screen)
 The home wordmark (scene 03) is a **block-pixel "opencode"** with a left→right light→white shimmer
-(`component/logo.tsx` `ShimmerConfig`: `period 4600ms`, rings, sweep, halo). Forge's splash renders a
-flat bold `"forge"` (`model.go:1061`). Build `theme/logo.go`: a block-pixel "forge" glyph matrix +
+(`component/logo.tsx` `ShimmerConfig`: `period 4600ms`, rings, sweep, halo). Opcode42's splash renders a
+flat bold `"opcode42"` (`model.go:1061`). Build `theme/logo.go`: a block-pixel "opcode42" glyph matrix +
 a per-frame brightness sweep over the active theme's text→primary ramp. The shimmer config can be a
 straight numeric port. (Stretch within 3b: the `bg-pulse` framebuffer field behind the logo —
 `bg-pulse-render.ts` — is the single most opentui-specific effect; treat as optional.)
 
 ### 3c. Toasts & transient notices
-`ui/toast.tsx` — transient bottom-corner notices (share-URL copied, errors, "interrupted"). Forge uses
+`ui/toast.tsx` — transient bottom-corner notices (share-URL copied, errors, "interrupted"). Opcode42 uses
 inline status lines today. Add a `toast` overlay model: a queue of `{text, kind, ttl}` rendered
 bottom-right with the panel/elevated background, fading via the animTick. Ties to 08a §A (share toast)
 and §I (notifications).
@@ -265,7 +265,7 @@ Two readings of "test and code styling"; cover both:
 (markdown 2a, syntax 2b, diff 2c). A test file in a code block or a diff should highlight like
 opencode's.
 
-**(b) Keep Forge's own Go code/test style consistent** as this lands — non-negotiable per CLAUDE.md's
+**(b) Keep Opcode42's own Go code/test style consistent** as this lands — non-negotiable per CLAUDE.md's
 review gate:
 - `gofmt -l` clean, `go vet`, `golangci-lint run` clean each PR.
 - New theme/render packages follow the existing `internal/tui/` idiom: small files per concern
@@ -281,12 +281,12 @@ review gate:
 ## T. Testing posture
 
 - **Golden render tests (Go, table-driven):** each renderer (`prose`/markdown, `toolRow`, diff line,
-  splash, footer) golden-tested per theme (at least `forge-dark`, `forge-light`, `opencode`,
+  splash, footer) golden-tested per theme (at least `opcode42-dark`, `opcode42-light`, `opencode`,
   `gruvbox`). Assert full-width background fill (Tier 0 regression guard).
 - **Theme loader tests:** every embedded JSON theme resolves all tokens (dark + light), no zero-values;
   golden one resolved palette against its JSON.
 - **Spinner/logo frame tests (Tier 3):** `frame(i)` is pure and deterministic — golden a few frames.
-- **Screenshot-diff gate (the visual oracle, §V):** the Forge harness (V.1) captures the same scene
+- **Screenshot-diff gate (the visual oracle, §V):** the Opcode42 harness (V.1) captures the same scene
   set as opencode; a CI-local step renders both and reports per-scene pixel-diff %. This is a
   *guidance* signal (layouts won't be byte-identical), but it catches regressions and quantifies
   "how close." Run it each Tier 1+ PR for the scenes that PR touches.
@@ -302,14 +302,14 @@ review gate:
 | M0 | White-bg fix: always-paint + terminal light/dark auto-pick + `Surface()` helper | 0 | 0.5d | — |
 | M1 | `Palette` extended to opencode token surface (diff/markdown/syntax sub-structs) | 1 | 1d | M2,M3,M4 |
 | M2 | JSON theme loader + embed all 33 opencode themes + registry/picker wiring | 1 | 1.5d | — |
-| M3 | Forge screenshot harness (`tools/tui-shots/`) + fixture, scene parity w/ opencode | 1 | 1d | screenshot-diff gate |
+| M3 | Opcode42 screenshot harness (`tools/tui-shots/`) + fixture, scene parity w/ opencode | 1 | 1d | screenshot-diff gate |
 | M4 | Markdown rendering via glamour, theme-driven styles | 2 | 1.5d | — |
 | M5 | Syntax highlighting via chroma (code blocks + diff bodies) | 2 | 1.5d | M4 |
 | M6 | Diff viewer re-style: bg tints, line-number gutter, hunk/intra-line, syntax | 2 | 1.5d | M5 |
 | M7 | Tool/message richness: per-tool headers, collapsible output, todos, foldable reasoning | 2 | 2d | — |
 | M8 | Chrome pass: footer chips, sidebar (context/LSP), dialog styling audit | 2 | 1.5d | — |
 | M9 | Spinner (gradient scanner) + animTick infra | 3 | 1d | — |
-| M10 | Logo shimmer (block-pixel "forge" + sweep); bg-pulse optional | 3 | 1.5d | M9 |
+| M10 | Logo shimmer (block-pixel "opcode42" + sweep); bg-pulse optional | 3 | 1.5d | M9 |
 | M11 | Toasts + connecting/loading states | 3 | 1d | M9 |
 
 **Critical path to "convincing":** M0 → M1 → M2 → M4 → M5 → M6 (theme system + markdown + syntax +
@@ -330,4 +330,4 @@ shippable last or independently.
 2. **glamour + chroma** as the markdown + syntax stack (Charm-family, single-binary friendly; vs.
    tree-sitter cgo, which would break the pure-Go single-binary posture).
 3. **Embed opencode's 33 theme JSONs verbatim** and read `config.theme` — ecosystem-compat, and it
-   makes Forge instantly recognizable to opencode users.
+   makes Opcode42 instantly recognizable to opencode users.

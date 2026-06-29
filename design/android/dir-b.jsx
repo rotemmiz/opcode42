@@ -1,6 +1,6 @@
 /* ============================================================
    dir-b.jsx — Direction B · "Terminal-Material"
-   M3 bones, Forge skin. Hairline borders, tight radii, mono-forward,
+   M3 bones, Opcode42 skin. Hairline borders, tight radii, mono-forward,
    the amber active rail carried from the TUI. Exports: DirB
    ============================================================ */
 
@@ -113,7 +113,7 @@ function DirB() {
           <button style={iconBtnB}><Icon n="back" s={21} c="var(--on-surface)" /></button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--on-surface)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Add retry + backoff to http client</div>
-            <div style={{ fontSize: 11.5, color: 'var(--on-surface-faint)', fontFamily: 'var(--mono)' }}>~/git/forge · fixture:main</div>
+            <div style={{ fontSize: 11.5, color: 'var(--on-surface-faint)', fontFamily: 'var(--mono)' }}>~/git/opcode42 · fixture:main</div>
           </div>
           <button style={iconBtnB}><Icon n="info" s={20} c="var(--on-surface-variant)" /></button>
           <button style={iconBtnB}><Icon n="more" s={20} c="var(--on-surface-variant)" /></button>

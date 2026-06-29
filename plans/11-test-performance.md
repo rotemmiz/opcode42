@@ -11,7 +11,7 @@
 
 opencode's daemon is TypeScript on Bun. It is single-process, single-user, and
 starts with meaningful warm-up overhead (TS JIT, Bun runtime init, Effect runtime
-init). Forge replaces it with a Go binary compiled to native code.
+init). Opcode42 replaces it with a Go binary compiled to native code.
 
 The performance claim is not "Go is always faster than Bun" (hot JS is fast). It is:
 1. **Startup time** is deterministically faster: no JIT warm-up.
@@ -35,10 +35,10 @@ prompt handler at `packages/opencode/src/session/prompt.ts`.
 > **No baseline has been measured yet — these are aspirational targets, not measurements.**
 > The "vs opencode" column is a *hypothesis* to confirm. **W0 of this plan is to measure the real
 > opencode daemon** on the same machine + workload and record actual baselines; only then are the
-> Forge SLOs and the multipliers below validated or revised. Do not cite any "Nx faster" figure
+> Opcode42 SLOs and the multipliers below validated or revised. Do not cite any "Nx faster" figure
 > until both daemons have been run head-to-head per the methodology in this doc.
 
-| Metric | SLO (Forge, target) | Aspirational ratio vs opencode (UNMEASURED) |
+| Metric | SLO (Opcode42, target) | Aspirational ratio vs opencode (UNMEASURED) |
 |--------|---------------------|---------------------------------------------|
 | Cold start to first `/global/health` 200 | < 50ms | ≥ 5x faster than opencode |
 | Cold start to first `/event` SSE connected | < 100ms | ≥ 3x faster than opencode |
@@ -63,7 +63,7 @@ goals are best-effort; the tooling records deltas for trend analysis.
 ### Suite 1: Startup benchmarks
 
 **Method**: shell `time` + Go `testing.B`.
-- `BenchmarkStartupHealthCheck`: fork `forged` as child process; time from
+- `BenchmarkStartupHealthCheck`: fork `opcoded` as child process; time from
   `cmd.Start()` to first successful `GET /global/health`; 20 iterations.
 - `BenchmarkStartupSSEConnect`: fork daemon; time to first SSE `server.connected`
   event on `GET /event`; 20 iterations.
@@ -74,7 +74,7 @@ goals are best-effort; the tooling records deltas for trend analysis.
 ```go
 func BenchmarkStartupHealthCheck(b *testing.B) {
     for b.N > 0; b.N-- {
-        cmd := exec.Command("./forged", "--dir", tmpDir)
+        cmd := exec.Command("./opcoded", "--dir", tmpDir)
         start := time.Now()
         cmd.Start()
         waitForHTTP(b, "http://127.0.0.1:"+port+"/global/health", 5*time.Second)
@@ -186,13 +186,13 @@ measure total time and per-call latency.
 ### Setup
 - Same physical machine (or same CI runner class) for both runs.
 - Same Git commit of opencode (pin to a specific tag, e.g. `v0.3.x`).
-- `forged` built with `CGO_ENABLED=0 GOARCH=amd64 GOOS=linux` (or native arch).
+- `opcoded` built with `CGO_ENABLED=0 GOARCH=amd64 GOOS=linux` (or native arch).
 - opencode daemon started with `opencode serve --port 4096`.
-- Forge daemon started with `forged --port 4097`.
+- Opcode42 daemon started with `opcoded --port 4097`.
 - Both use the same SQLite-on-tmpfs scratch directory.
 - **Mock LLM**: both use a local HTTP echo server that returns a fixed JSON
   response in < 1ms. For opencode: set `OPENAI_BASE_URL=http://localhost:9999/v1`;
-  for Forge: use the built-in `MockLLMProvider`.
+  for Opcode42: use the built-in `MockLLMProvider`.
 
 ### Workloads
 
@@ -210,10 +210,10 @@ measure total wall time and per-session latency.
 ### Report format
 
 **ILLUSTRATIVE TEMPLATE ONLY — the cells below are placeholders, NOT measurements.** No run
-has been performed; the runner (below) populates `forge` and `opencode` columns from real data,
+has been performed; the runner (below) populates `opcode42` and `opencode` columns from real data,
 computes `ratio`, and fills `SLO met?` against the targets table above.
 ```
-metric                     forge      opencode   ratio   SLO met?
+metric                     opcode42      opencode   ratio   SLO met?
 startup_p50_ms             <fill>     <fill>     <calc>  <calc>
 startup_p99_ms             <fill>     <fill>     <calc>  <calc>
 idle_rss_mb                <fill>     <fill>     <calc>  <calc>
@@ -260,8 +260,8 @@ func TestMain(m *testing.M) {
 ```
 
 ### Continuous profiling (production)
-`forged` exposes `GET /debug/pprof/*` behind the auth middleware when
-`FORGE_PPROF_ENABLED=1`. This enables on-demand profiling of live instances.
+`opcoded` exposes `GET /debug/pprof/*` behind the auth middleware when
+`OPCODE_PPROF_ENABLED=1`. This enables on-demand profiling of live instances.
 
 ### Trace for SSE latency
 ```bash
@@ -308,11 +308,11 @@ in any benchmark fails the PR. Manual override available for intentional trade-o
 
 | Risk | Notes |
 |------|-------|
-| Mock LLM not equivalent | opencode uses AI SDK which adds middleware overhead; Forge's mock bypasses this. Measure only daemon-side overhead explicitly; don't conflate with LLM latency. |
+| Mock LLM not equivalent | opencode uses AI SDK which adds middleware overhead; Opcode42's mock bypasses this. Measure only daemon-side overhead explicitly; don't conflate with LLM latency. |
 | SQLite WAL mode differences | opencode may use different SQLite pragmas. Align pragmas before comparing. Document configuration in bench runner. |
 | GC pauses in Go | Go GC can cause latency spikes at high allocation rates. Profile with `GOGC=off` and `GOGC=100` to characterize. |
 | Bun JIT warm-up | First N requests to opencode are slower due to JIT. Warm up both daemons with 100 un-measured requests before recording results. |
-| Resource loader cost | Forge loads agents/rules/skills on startup; opencode may be lazy. Measure with and without resource loading enabled. |
+| Resource loader cost | Opcode42 loads agents/rules/skills on startup; opencode may be lazy. Measure with and without resource loading enabled. |
 | CGO vs pure Go SQLite | Pure Go SQLite (`modernc.org/sqlite`) is slower than CGO SQLite. Decide per plan 01 and document the choice here. |
 | Machine variance | Run benchmarks 5 times each; report mean ± stddev; discard outliers > 2σ. |
 
@@ -326,9 +326,9 @@ W0 = measure opencode first). The caveats are thorough. Minimal additions:
 - **Status: W0 not done.** No baseline has been recorded and no benchmark harness is built yet, so
   every ratio in the table remains a hypothesis. Until W0 runs, this plan contributes zero validated
   claims — keep that explicit so no "Nx faster" figure leaks into docs/marketing.
-- **The unsolved prerequisite is a deterministic provider for *opencode*, not Forge.** The "same
+- **The unsolved prerequisite is a deterministic provider for *opencode*, not Opcode42.** The "same
   mock provider" fairness condition requires opencode to be driven by a scripted, zero-network LLM.
-  Forge owns its mock (`internal/engine/enginetest`), but opencode does not expose one — so W0 must
+  Opcode42 owns its mock (`internal/engine/enginetest`), but opencode does not expose one — so W0 must
   first stand up a **local OpenAI-compatible mock HTTP endpoint** that *both* daemons point at (same
   scripted SSE). Without it the head-to-head conflates daemon overhead with provider middleware.
   This is the gating task; add it as W0.a before any measurement.
@@ -341,13 +341,13 @@ W0 = measure opencode first). The caveats are thorough. Minimal additions:
 ## W0 update (2026-06-03) — first baseline recorded
 
 W0 is **partially done**: a reproducible head-to-head harness now lives in [`bench/`](../bench/) and a
-first baseline has been recorded against the **real opencode daemon** (`opencode` 1.15.12) and `forged`
+first baseline has been recorded against the **real opencode daemon** (`opencode` 1.15.12) and `opcoded`
 on an Apple M1 Mac mini. See [`bench/results/`](../bench/results/) for the dated, machine-described
 numbers and [`bench/README.md`](../bench/README.md) for methodology and caveats.
 
 - **Measured (this pass):** cold start, idle RSS, SSE *connection* fan-out (dial → `server.connected`,
   N subscribers + RSS-with-subs), and request throughput (`GET /global/health`, `GET /session`). On the
-  M1 baseline, forged measured materially faster/leaner on every metric — but those ratios are valid
+  M1 baseline, opcoded measured materially faster/leaner on every metric — but those ratios are valid
   only for that host + those versions; **do not generalize them**. The harness re-derives ratios from
   real data on each run.
 - **Still open (correctly deferred, not fabricated):**
@@ -355,10 +355,10 @@ numbers and [`bench/README.md`](../bench/README.md) for methodology and caveats.
     still the gating prerequisite for the prompt/tool-loop workloads (W2/W3, Suites 5–8). Until it
     exists, those rows stay unmeasured.
   - **Per-event** SSE publish→receive fan-out (Suite 3) needs a symmetric trigger both daemons emit on
-    demand; opencode publishes `session.updated` on create, Forge's create path does not yet publish.
+    demand; opencode publishes `session.updated` on create, Opcode42's create path does not yet publish.
     The current harness measures connection fan-out (symmetric) in the interim.
 - The pure-Go-SQLite constraint and resource-loader-enabled startup from the review pass above are both
-  honored by the harness (forged is measured as it ships).
+  honored by the harness (opcoded is measured as it ships).
 
 ## Links
 

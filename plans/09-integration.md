@@ -1,6 +1,6 @@
 # Plan 09 — Integration: How the Components Wire Together
 
-> Scope: end-to-end wiring of plans 01–08 inside the Forge Go daemon and across the
+> Scope: end-to-end wiring of plans 01–08 inside the Opcode42 Go daemon and across the
 > build/release pipeline. Read this alongside every sibling plan; the sequence diagram
 > and milestone table here are the authoritative cross-plan integration contract.
 
@@ -8,7 +8,7 @@
 
 ## Context
 
-Forge is a single static Go binary (`forged`) that owns the full request lifecycle:
+Opcode42 is a single static Go binary (`opcoded`) that owns the full request lifecycle:
 HTTP transport → instance/directory router → agent engine → tool registry →
 MCP/LSP clients and plugin-host sidecar. Plans 01–08 each own a vertical slice;
 this plan defines how those slices are composed, the exact in-process service
@@ -68,11 +68,11 @@ Plan 11 (Performance) ─── benchmarks plan 01+02 ────────�
 ## Internal Service Boundaries
 
 All services live in the same Go process. Boundaries are Go interfaces, not RPC.
-The composition root (`cmd/forged/main.go`) wires them via constructor injection.
+The composition root (`cmd/opcoded/main.go`) wires them via constructor injection.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  forged process                                                      │
+│  opcoded process                                                      │
 │                                                                      │
 │  ┌─────────────┐   ┌──────────────────────────────────────────────┐ │
 │  │ HTTP layer  │   │  Instance layer (one per directory)          │ │
@@ -155,7 +155,7 @@ Reference: `prompt.ts:286-300`, `processor.ts:305-449`, `event.ts:21-53`,
 `authorization.ts:81-87`, `workspace-routing.ts:86-88`.
 
 ```
-Mobile client                Forge daemon (Go)                  LLM API
+Mobile client                Opcode42 daemon (Go)                  LLM API
      │                              │                              │
      │  POST /session/abc/prompt    │                              │
      │  Authorization: Basic ...    │                              │
@@ -235,7 +235,7 @@ Mobile client                Forge daemon (Go)                  LLM API
 every bus event via `GET /event`. The SSE handler (`event.ts:21-53`) subscribes
 eagerly at connection time (before the response body pump starts) to close the
 race window where events published during connection handshake could be lost. The
-Forge implementation must replicate this: subscribe to BusService inside the
+Opcode42 implementation must replicate this: subscribe to BusService inside the
 request handler, before returning the streaming response.
 
 **Sync vs async**: `POST /session/:id/prompt` blocks until the agent loop
@@ -254,7 +254,7 @@ All subprocesses are owned and supervised by the daemon. The supervision contrac
   instance init if `mcp.startOnInit = true` in config.
 - **Transport**: stdio (most common) or HTTP/SSE. For stdio: `os/exec.Cmd` with
   `stdin/stdout` pipes; JSON-RPC 2.0 framing.
-- **Health**: no built-in keepalive in MCP spec; Forge pings with
+- **Health**: no built-in keepalive in MCP spec; Opcode42 pings with
   `initialize` or a no-op custom method on a configurable interval.
 - **Restart**: exponential backoff (1s, 2s, 4s, max 30s). After 5 consecutive
   failures the server is marked `error` and a `mcp.updated` event is published.
@@ -276,7 +276,7 @@ All subprocesses are owned and supervised by the daemon. The supervision contrac
 - **Restart**: same backoff policy as MCP. Plugin-host failures are non-fatal;
   affected plugin calls return errors, not daemon crashes.
 - **Isolation**: sidecar runs as same OS user; no sandbox today. Feature-flagged
-  (`FORGE_PLUGIN_HOST_ENABLED=1`).
+  (`OPCODE_PLUGIN_HOST_ENABLED=1`).
 
 All three supervisor implementations share a common `SubprocessSupervisor`
 interface in `internal/supervisor/`:
@@ -296,8 +296,8 @@ type SubprocessSupervisor interface {
 Config flows top-down at startup and on hot-reload (file watcher triggers).
 
 ```
-~/.config/forge/config.toml   (global, plan 01)
-    └── .forge/config.toml    (project, plan 01)  ← merged, project wins
+~/.config/opcode42/config.toml   (global, plan 01)
+    └── .opcode42/config.toml    (project, plan 01)  ← merged, project wins
             │
             ├──► AuthConfig       → auth middleware (plan 01)
             ├──► ProviderConfigs  → LLM provider factories (plan 02)
@@ -322,7 +322,7 @@ Hot-reload behaviour:
 ## Build and Release Integration
 
 ### Single binary
-`forged` is a single static Go binary embedding:
+`opcoded` is a single static Go binary embedding:
 - All Go packages (plans 01–05, 08 TUI assets if compiled in).
 - Default config schema (JSON Schema, embedded via `embed.FS`).
 - OpenAPI spec (`packages/sdk/openapi.json`, embedded for self-description).
@@ -330,7 +330,7 @@ Hot-reload behaviour:
   (see below).
 
 ```
-cmd/forged/
+cmd/opcoded/
     main.go          ← composition root
 internal/
     transport/       ← plan 01
@@ -350,26 +350,26 @@ pkg/
 
 ### Build targets
 ```makefile
-make build          # go build -o forged ./cmd/forged  (CGO_ENABLED=0)
+make build          # go build -o opcoded ./cmd/opcoded  (CGO_ENABLED=0)
 make generate       # oapi-codegen → pkg/sdk/; buf → proto stubs if any
 make test           # go test ./... (plan 10)
 make bench          # go test -bench=. ./... (plan 11)
-make conformance    # plan 12 harness against real opencode + forge
+make conformance    # plan 12 harness against real opencode + opcode42
 make release        # goreleaser: linux-amd64, linux-arm64, darwin-arm64
 ```
 
 ### Sidecar packaging
 The plugin-host sidecar (`plugin-host/`) is a Node/Bun package. It is:
-- Shipped as a pre-built JS bundle alongside `forged` in the release archive
-  (`forged`, `plugin-host.js`, `plugin-host-node_modules/` or bundled single file).
-- Located by `forged` via `FORGE_PLUGIN_HOST_PATH` env var or a convention path
-  (`$FORGE_HOME/plugin-host/index.js`).
+- Shipped as a pre-built JS bundle alongside `opcoded` in the release archive
+  (`opcoded`, `plugin-host.js`, `plugin-host-node_modules/` or bundled single file).
+- Located by `opcoded` via `OPCODE_PLUGIN_HOST_PATH` env var or a convention path
+  (`$OPCODE_HOME/plugin-host/index.js`).
 - Not embedded in the binary (too large; version-pinned separately).
 
 ### Mobile SDK release
 The Kotlin SDK (plan 06) is published as a Maven artifact; the Swift SDK as a
 Swift Package. Both are generated from `packages/sdk/openapi.json` via
-`openapi-generator-cli` and versioned alongside `forged` releases.
+`openapi-generator-cli` and versioned alongside `opcoded` releases.
 
 ---
 
@@ -377,7 +377,7 @@ Swift Package. Both are generated from `packages/sdk/openapi.json` via
 
 | Phase | End state | Cross-plan handshake |
 |-------|-----------|----------------------|
-| **A — Kickoff** | `forged` starts, serves `/global/health`, `/event` SSE, `/session` CRUD with no-op agent | Plan 01 + Plan 06 stubs must compile; Plan 07 mobile connects to real opencode daemon for development; Plan 12 harness can diff responses |
+| **A — Kickoff** | `opcoded` starts, serves `/global/health`, `/event` SSE, `/session` CRUD with no-op agent | Plan 01 + Plan 06 stubs must compile; Plan 07 mobile connects to real opencode daemon for development; Plan 12 harness can diff responses |
 | **A — Mobile v0** | Mobile app lists sessions, connects to SSE, reads message history — all against opencode daemon | Plan 07 validates Plan 06 Kotlin SDK against real opencode; no Plan 02 dependency |
 | **B — Engine** | `POST /session/:id/prompt` drives a real LLM stream through the Go processor; SSE events match opencode's catalog; Plan 12 conformance suite goes green for prompt+tool scenarios | Plan 02 integrates with Plan 01 bus+store; Plan 06 stubs used for request/response types; Plan 08 TUI dogfoods the engine |
 | **C — Ecosystem** | MCP tools available in tool registry; LSP diagnostics flow; agents/commands/rules load from `.opencode/` | Plan 03 subprocess supervisors integrated into Plan 02 tool registry; Plan 04 loaders feed Plan 02 system prompt builder |
@@ -405,11 +405,11 @@ from the built daemon; corrected below (per CLAUDE.md's reality rule). The diagr
 as the design intent — these are the binding overrides.
 
 ### Contradictions to fix
-1. **Config is JSONC at opencode paths, not TOML at forge paths.** The Config Propagation section
-   shows `~/.config/forge/config.toml` + `.forge/config.toml` (TOML). Reality and the wire-compat
+1. **Config is JSONC at opencode paths, not TOML at opcode42 paths.** The Config Propagation section
+   shows `~/.config/opcode42/config.toml` + `.opcode42/config.toml` (TOML). Reality and the wire-compat
    mandate: **`~/.config/opencode/{config.json,opencode.json,opencode.jsonc}`** global +
    **`opencode.json[c]`** walked from the worktree down (`internal/config/config.go:35-37,50-62,82`).
-   Forge reads opencode's own config files — that is the point. Replace all TOML/forge-path
+   Opcode42 reads opencode's own config files — that is the point. Replace all TOML/opcode42-path
    references.
 2. **Permission reply endpoint is wrong in the sequence diagram.** It shows
    `POST /session/abc/permissions/xyz {"response":"once"}`. Real contract:
@@ -421,14 +421,14 @@ as the design intent — these are the binding overrides.
    `pkg/sdk/`). `lsp/`, `plugin/`, and the shared `supervisor/` package **do not exist yet** — the
    `SubprocessSupervisor` abstraction is still aspirational (MCP spawns its own subprocess directly).
    Treat the layout table as the target, not the current tree.
-4. **Binary is `forged` (`cmd/forged`)** — plan 09 is correct here; note that **plan 01's
-   verification block (`forge`/`cmd/forge`) is the stale one** and should be reconciled to `forged`.
+4. **Binary is `opcoded` (`cmd/opcoded`)** — plan 09 is correct here; note that **plan 01's
+   verification block (`opcode42`/`cmd/opcode42`) is the stale one** and should be reconciled to `opcoded`.
 
 ### Testing & Validation (this plan had none — add it)
 Plan 09's validation was implicit in the phase end-states. Make it explicit as **integration tests
 that exercise the composition root**, distinct from per-plan unit tests (plan 10) and conformance
 (plan 12):
-- **Composition-root wiring test:** boot `cmd/forged` in-process against a temp dir + mock LLM;
+- **Composition-root wiring test:** boot `cmd/opcoded` in-process against a temp dir + mock LLM;
   assert every interface in "Key interface contracts" is non-nil and the instance graph builds.
 - **End-to-end prompt→tool→permission flow:** the sequence diagram above, asserted event-for-event
   over `/event` (user `message.updated` → part deltas → tool `part.updated` pending →

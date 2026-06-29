@@ -1,9 +1,9 @@
 # 00-splash.tape — true splash/home screen.
 # Spins up a second, empty opencode daemon on port 4200 (no sessions imported)
-# so forge-tui has nothing to auto-open and displays the splash/wordmark.
+# so opcode-tui has nothing to auto-open and displays the splash/wordmark.
 #
 # Scenes captured:
-#   00-splash   — forge wordmark + empty composer (Tier 0 bg proof: fully painted)
+#   00-splash   — opcode42 wordmark + empty composer (Tier 0 bg proof: fully painted)
 Output out/_00.gif
 Set Shell "bash"
 Set FontSize 14
@@ -19,11 +19,11 @@ Sleep 200ms
 Type "XDG_DATA_HOME=$HARNESS_DIR/state/empty-data XDG_CONFIG_HOME=$HARNESS_DIR/state/empty-config XDG_CACHE_HOME=$HARNESS_DIR/state/empty-cache XDG_STATE_HOME=$HARNESS_DIR/state/empty-xstate opencode serve --port 4200 >/dev/null 2>&1 &"
 Enter
 Sleep 5s
-Type "./bin/forge-tui --url http://127.0.0.1:4200 --dir ./fixture-empty --theme $FORGE_THEME"
+Type "./bin/opcode-tui --url http://127.0.0.1:4200 --dir ./fixture-empty --theme $OPCODE_THEME"
 Enter
 Sleep 4s
 Show
 Sleep 1s
 
-# True splash: forge wordmark + empty composer + fully painted background
+# True splash: opcode42 wordmark + empty composer + fully painted background
 Screenshot out/00-splash.png

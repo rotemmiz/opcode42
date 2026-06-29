@@ -1,4 +1,4 @@
-# Forge
+# Opcode42
 
 A ground-up, interop-first alternative to opencode: a Go daemon that is wire-compatible with opencode's HTTP+SSE+WebSocket API.
 
@@ -10,7 +10,7 @@ Wire compatibility is kept deliberately until interop becomes a wall worth break
 
 ```
                 ┌─────────────────────────────────────────────┐
-   Mobile  ─────┤   Forge Daemon (Go, single static binary)   │── SQLite (sessions/msgs/parts)
+   Mobile  ─────┤   Opcode42 Daemon (Go, single static binary)   │── SQLite (sessions/msgs/parts)
    (primary) ───┤   - HTTP/REST + SSE bus + WS PTY            │── repo + built-in tools
    TUI (Go) ────┤   - Auth + directory/instance routing       │── MCP clients (stdio/http/sse)
    opencode's   │   - Agent engine (LLM stream + tool loop)   │── LSP servers (jsonrpc)
@@ -28,9 +28,9 @@ All clients — mobile, Go TUI, and unmodified opencode web/desktop — speak th
 
 ```sh
 git clone https://github.com/rotemmiz/forge
-cd forge
-make build          # outputs bin/forged
-./bin/forged        # flags: --host, --port, --mdns, --version, ...
+cd opcode42
+make build          # outputs bin/opcoded
+./bin/opcoded        # flags: --host, --port, --mdns, --version, ...
 ```
 
 The daemon listens on `localhost:4096` by default. Clients authenticate via HTTP Basic or `?auth_token=base64(user:pass)` and route to per-directory instances using the `x-opencode-directory` header.
@@ -47,7 +47,7 @@ docker run -d -p 4096:4096 -e OPENCODE_SERVER_PASSWORD=secret \
   ghcr.io/rotemmiz/forge:latest --host 0.0.0.0 --port 4096
 ```
 
-Service unit templates live under [`packaging/`](packaging/): a hardened systemd unit (`packaging/systemd/forge.service`) and a macOS launchd agent (`packaging/launchd/dev.forge.daemon.plist`). For remote access, prefer Tailscale, an SSH tunnel, or a TLS-terminating reverse proxy (SSE needs unbuffered proxying) over an open port — see [`plans/13-remote-ops.md`](plans/13-remote-ops.md).
+Service unit templates live under [`packaging/`](packaging/): a hardened systemd unit (`packaging/systemd/opcode42.service`) and a macOS launchd agent (`packaging/launchd/dev.opcode42.daemon.plist`). For remote access, prefer Tailscale, an SSH tunnel, or a TLS-terminating reverse proxy (SSE needs unbuffered proxying) over an open port — see [`plans/13-remote-ops.md`](plans/13-remote-ops.md).
 
 ## Testing
 

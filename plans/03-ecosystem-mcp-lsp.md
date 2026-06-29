@@ -1,11 +1,11 @@
-# Forge Plan 03 — Ecosystem: MCP + LSP
+# Opcode42 Plan 03 — Ecosystem: MCP + LSP
 
 ## Context
 
-This plan covers two protocol integrations that are central to Forge's ecosystem compatibility
+This plan covers two protocol integrations that are central to Opcode42's ecosystem compatibility
 promise: **MCP (Model Context Protocol)** client support and **LSP (Language Server Protocol)**
 client support. Both must be wire-compatible with opencode's config formats and runtime behavior
-so that users migrating from opencode to Forge see identical tool surfaces, diagnostics, and
+so that users migrating from opencode to Opcode42 see identical tool surfaces, diagnostics, and
 status payloads.
 
 This plan is **Phase C** in the master sequencing (see plan 00). It depends on plan 01
@@ -41,14 +41,14 @@ the Go design below.
 
 - Default timeout constant: `DEFAULT_TIMEOUT = 30_000` ms (line 37), **not** 5000. The
   `timeout` field in config overrides this; the description text says "defaults to 5000" but the
-  code uses 30 000. Forge must match the code, not the description text.
+  code uses 30 000. Opcode42 must match the code, not the description text.
 - Status union (lines 76–100): five variants — `connected`, `disabled`, `failed { error:string }`,
   `needs_auth`, `needs_client_registration { error:string }`. Discriminated on `status` field.
 - Transport fallback order for remote servers (lines 340–356): try `StreamableHTTP` first, then
   `SSE`. If either triggers an auth error the loop breaks immediately.
 - `convertMcpTool()` (lines 158–186): wraps an MCP `ToolDef` into an AI SDK `dynamicTool`.
   The schema is always forced to `type: "object"` and `additionalProperties: false`. The key
-  insight for Forge: the output is a **dynamic tool with a JSON Schema** — no static Zod/Yup
+  insight for Opcode42: the output is a **dynamic tool with a JSON Schema** — no static Zod/Yup
   type. Go's equivalent is a struct with `json.RawMessage` for the schema (ties to plan 02).
 - Tool key naming (line 697): `sanitize(clientName) + "_" + sanitize(toolName)` where
   `sanitize` (line 115) replaces all non-`[a-zA-Z0-9_-]` with `_`.
@@ -96,7 +96,7 @@ for (const [key, item] of Object.entries(yield* mcp.tools())) {
 MCP tools are merged into the session tool map unconditionally (subject to the same permission
 gate as built-in tools). The `inputSchema` is potentially transformed by `ProviderTransform`
 (provider-specific schema massaging) before being forwarded to the model. This is the exact
-injection point Forge must replicate in plan 02's tool-loop.
+injection point Opcode42 must replicate in plan 02's tool-loop.
 
 **`packages/opencode/src/session/prompt.ts` (lines 1387–1401)**
 
@@ -297,10 +297,10 @@ Evaluation:
 **Recommendation: `mark3labs/mcp-go`** for its complete transport coverage. The official SDK
 (`modelcontextprotocol/go-sdk`) is tracked and should be switched to once it reaches stable
 state, as it will have the canonical `tools/list` / `tools/call` semantics by spec. If neither
-provides OAuth, Forge implements OAuth client-side (see below).
+provides OAuth, Opcode42 implements OAuth client-side (see below).
 
 For the actual JSON-RPC framing, `mark3labs/mcp-go` handles the MCP protocol framing;
-Forge wraps it in a per-server `MCPConn` abstraction:
+Opcode42 wraps it in a per-server `MCPConn` abstraction:
 
 ```go
 // internal/mcp/client.go
@@ -330,7 +330,7 @@ SSE, break on any auth error as opencode does.
 
 ### OAuth Flow
 
-Neither Go MCP library provides OAuth. Forge implements it natively:
+Neither Go MCP library provides OAuth. Opcode42 implements it natively:
 
 ```go
 // internal/mcp/oauth.go
@@ -369,7 +369,7 @@ daemon (reachable only if the daemon's callback port is forwarded or if the redi
 to a client-side URL). The `callbackPort`/`redirectUri` config fields handle this. This is an
 **open risk** — see Risks section.
 
-Token storage: `~/.config/forge/mcp-auth/<server-name>.json` (or equivalent XDG path),
+Token storage: `~/.config/opcode42/mcp-auth/<server-name>.json` (or equivalent XDG path),
 mirroring `McpAuth` storage in opencode (`packages/opencode/src/mcp/auth.ts`).
 
 ### Tool and Prompt/Resource Surfacing
@@ -490,7 +490,7 @@ from `filepath.Dir(file)` to `instanceDir`, checking for target files, optionall
 exclusion files appear first. This directly ports `server.ts:34–56`.
 
 **Auto-download servers**: several servers (gopls, clangd, zls, elixir-ls, JDTLS, kotlin-ls,
-etc.) have download logic. In Forge, the download flag is controlled by a config option
+etc.) have download logic. In Opcode42, the download flag is controlled by a config option
 `lsp.disableAutoInstall` (maps to opencode's `RuntimeFlags.disableLspDownload`). Downloads use
 Go's `net/http` and archive extraction via `archive/zip` + `compress/gzip` + `archive/tar`.
 
@@ -635,7 +635,7 @@ Constant, Struct, Enum}` and caps at 10 results per client (matching `lsp.ts:441
 
 ### LSP Tool Integration
 
-The `lsp` built-in tool in Forge (plan 02 tool registry):
+The `lsp` built-in tool in Opcode42 (plan 02 tool registry):
 
 ```go
 // internal/tool/lsp.go
@@ -660,7 +660,7 @@ Operations map exactly to `tool/lsp.ts:83–103`. The `hover` operation returns 
 
 ### `lsp.updated` SSE Event
 
-When any new LSP client spawns successfully, Forge publishes to the global SSE bus:
+When any new LSP client spawns successfully, Opcode42 publishes to the global SSE bus:
 ```json
 { "id": "<uuid>", "type": "lsp.updated", "properties": {} }
 ```
@@ -758,7 +758,7 @@ gopls errors if any.
 **MCP**
 
 1. **Stdio MCP**: start `@modelcontextprotocol/server-filesystem` (Node.js), configure it in
-   Forge config, call `GET /mcp` — assert `status: "connected"`, tool count > 0, tool schemas
+   Opcode42 config, call `GET /mcp` — assert `status: "connected"`, tool count > 0, tool schemas
    valid JSON Schema objects, key format matches `sanitize(name)_sanitize(toolName)`.
 2. **Remote MCP (Streamable-HTTP)**: run `mcp-proxy` in streamable-http mode locally, assert
    connect + tools surface.
@@ -810,7 +810,7 @@ gopls errors if any.
 ### Compatibility Tests (plan 12)
 
 - Run the same scenario (read a directory of files, get diagnostics, execute an LSP tool) against
-  both opencode and Forge; diff the tool results and SSE event sequences.
+  both opencode and Opcode42; diff the tool results and SSE event sequences.
 - Assert `GET /mcp` response body schema is identical between the two daemons.
 - Assert `GET /lsp` status response matches opencode's format exactly.
 - Assert `lsp.updated` and `mcp.tools.changed` SSE events contain identical shapes.
@@ -840,7 +840,7 @@ gopls errors if any.
 ### LSP Verification
 
 **Servers to use:**
-- `gopls` (requires Go installed — always available in the Forge dev environment).
+- `gopls` (requires Go installed — always available in the Opcode42 dev environment).
 - `typescript-language-server` (requires Node.js + `npm i -g typescript typescript-language-server`).
 
 **Test repository:** a small Go module with at least one intentional type error and one
@@ -879,7 +879,7 @@ gopls errors if any.
    `--oauth-callback-proxy-url` config option for a future iteration.
 
 4. **Dynamic client registration (RFC 7591)**: Some MCP servers require `clientId` and reject
-   DCR. opencode surfaces this as `needs_client_registration` status. Forge must implement the
+   DCR. opencode surfaces this as `needs_client_registration` status. Opcode42 must implement the
    same fallback: attempt DCR, catch the rejection, set status accordingly, and prompt the user
    to supply `clientId` in config.
 
@@ -890,7 +890,7 @@ gopls errors if any.
    avoid zombie MCP servers.
 
 6. **`TolerantListToolsResultSchema` fallback**: opencode retries `tools/list` without
-   `outputSchema` validation on JSON schema resolution errors (`mcp/index.ts:128–155`). Forge
+   `outputSchema` validation on JSON schema resolution errors (`mcp/index.ts:128–155`). Opcode42
    must implement an equivalent: catch the JSON unmarshal error on `tools/list` response,
    retry with a schema that ignores the `outputSchema` field.
 
@@ -904,8 +904,8 @@ gopls errors if any.
 8. **Auto-download in production**: downloading language servers from GitHub releases / npm /
    dotnet tool at runtime is a significant attack surface and can fail in air-gapped
    environments. Strategy: the `disableAutoInstall` flag disables all downloads. Document
-   that Forge respects the same flag opencode uses. For the initial release, only auto-install
-   gopls (since Forge is a Go project and Go will always be present).
+   that Opcode42 respects the same flag opencode uses. For the initial release, only auto-install
+   gopls (since Opcode42 is a Go project and Go will always be present).
 
 9. **Windows support — DECIDED (2026-06-03): not supported.** Linux/macOS only; Windows is out of
    scope, not "best-effort" (masterplan "Decisions locked" #5). Do not spend effort on
@@ -920,7 +920,7 @@ gopls errors if any.
 
 11. **`textDocument/diagnostic` pull vs push**: some servers (e.g., older rust-analyzer)
     only push diagnostics and don't support the pull protocol. The `documentPullState()` logic
-    correctly gates pull requests on capability advertisement; Forge must faithfully check
+    correctly gates pull requests on capability advertisement; Opcode42 must faithfully check
     `ServerCapabilities.diagnosticProvider` and the registered capabilities before attempting
     pull.
 

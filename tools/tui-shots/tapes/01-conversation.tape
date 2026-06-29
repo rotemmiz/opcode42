@@ -1,5 +1,5 @@
 # 01-conversation.tape — conversation surfaces.
-# Launches forge-tui attached to the opencode daemon with the fixture session
+# Launches opcode-tui attached to the opencode daemon with the fixture session
 # pre-loaded (ses_00000000000000000000000000). Scrolls through the transcript
 # and screenshots each content region.
 #
@@ -16,7 +16,7 @@ Set Height 1000
 Set Padding 8
 
 Hide
-Type "source ./env.sh && ./bin/forge-tui --url http://127.0.0.1:4199 --dir ./fixture --session ses_00000000000000000000000000 --theme $FORGE_THEME"
+Type "source ./env.sh && ./bin/opcode-tui --url http://127.0.0.1:4199 --dir ./fixture --session ses_00000000000000000000000000 --theme $OPCODE_THEME"
 Enter
 Sleep 7s
 Show

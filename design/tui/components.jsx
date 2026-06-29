@@ -32,9 +32,9 @@ function Sidebar({ title, ctx, hidden, model, subagentRunning }) {
 
       <div className="sb-spacer" />
       <div className="sb-foot">
-        <div>~/git/forge/screenshots</div>
+        <div>~/git/opcode42/screenshots</div>
         <div>fixture:main</div>
-        <div className="ver">• <b>Forge</b> 0.4.2</div>
+        <div className="ver">• <b>Opcode42</b> 0.4.2</div>
       </div>
     </aside>
   );

@@ -14,8 +14,8 @@ describes a **Node/Bun sidecar process** ("plugin-host") that loads opencode-for
 and bridges their hooks to the Go daemon over a local RPC channel, plus the full lifecycle,
 failure isolation, and deferral story.
 
-Everything in this plan is **flag-gated** (`--plugin-host` / env `FORGE_PLUGIN_HOST=1`).
-When the flag is off (the default in early phases), Forge behaves as a zero-plugin daemon.
+Everything in this plan is **flag-gated** (`--plugin-host` / env `OPCODE_PLUGIN_HOST=1`).
+When the flag is off (the default in early phases), Opcode42 behaves as a zero-plugin daemon.
 
 ---
 
@@ -99,7 +99,7 @@ All citations are from the reference source at `/Users/rotemmiz/git/opencode`.
 ### Overview
 
 ```
-┌─────────────────────── Forge Go Daemon ───────────────────────────┐
+┌─────────────────────── Opcode42 Go Daemon ───────────────────────────┐
 │  HTTP/SSE/WS server    Agent engine      Tool registry             │
 │                                                                     │
 │  PluginBridge (Go)                                                  │
@@ -115,11 +115,11 @@ All citations are from the reference source at `/Users/rotemmiz/git/opencode`.
              ▼
 ┌──────────────────── Plugin Host (Bun/Node process) ──────────────────┐
 │  plugin-host.ts                                                        │
-│    - Starts: bun run plugin-host.ts --socket /tmp/forge-ph-<pid>.sock │
+│    - Starts: bun run plugin-host.ts --socket /tmp/opcode42-ph-<pid>.sock │
 │    - Loads plugins via PluginLoader.loadExternal (same code opencode  │
 │      uses at packages/opencode/src/plugin/loader.ts)                  │
 │    - Creates PluginInput.client → createOpencodeClient({              │
-│        baseUrl: FORGE_URL, headers: Basic Auth                        │
+│        baseUrl: OPCODE_URL, headers: Basic Auth                        │
 │      })    (calls back into the Go daemon over HTTP — neat reuse)     │
 │    - Exposes JSON-RPC methods: plugin.trigger, plugin.list            │
 │    - Handles: tool.execute (async, returns ToolResult)               │
@@ -181,7 +181,7 @@ Go must await the hook result before continuing in all cases marked **blocking**
 **Hooks not bridged (structural incompatibility):**
 
 - `auth.methods[].authorize(...)` — OAuth flows require a browser/callback server that
-  Forge's daemon arch handles differently. Deferred; partial-compat fallback: log a warning
+  Opcode42's daemon arch handles differently. Deferred; partial-compat fallback: log a warning
   and skip the auth method.
 - `experimental_workspace.register` — workspace adapters are a deep opencode-specific
   concept tied to Bun-hosted lifecycle. Deferred.
@@ -196,7 +196,7 @@ Go must await the hook result before continuing in all cases marked **blocking**
 Each hook call in Go follows this pattern:
 
 ```go
-// Pseudocode — packages/forge/pluginbridge/bridge.go
+// Pseudocode — packages/opcode42/pluginbridge/bridge.go
 func (b *Bridge) Trigger(ctx context.Context, name string, input, output any) (any, error) {
     if !b.enabled || b.proc == nil {
         return output, nil   // flag off or host not running: no-op
@@ -247,7 +247,7 @@ Go agent → RPC call: { method: "tool.execute", params: { id, args, context } }
           ← RPC response: { result: { title, output, metadata, attachments? } }
 ```
 
-The PluginInput.client that plugins receive is a `createOpencodeClient` pointed at Forge's
+The PluginInput.client that plugins receive is a `createOpencodeClient` pointed at Opcode42's
 own HTTP server (same Basic Auth credentials). This means plugin code like
 `input.client.session.list()` works out of the box — zero extra Go code needed.
 
@@ -255,9 +255,9 @@ own HTTP server (same Basic Auth credentials). This means plugin code like
 
 ## Plugin Host Implementation
 
-### Process: `packages/forge-plugin-host/src/index.ts`
+### Process: `packages/opcode42-plugin-host/src/index.ts`
 
-The plugin host is a standalone Bun/Node script, shipped as part of Forge (embedded in the
+The plugin host is a standalone Bun/Node script, shipped as part of Opcode42 (embedded in the
 binary via `bun build --compile`, or invoked from a pre-installed location):
 
 ```typescript
@@ -266,13 +266,13 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { PluginLoader } from "@opencode-ai/opencode/plugin/loader"  // reused directly
 import net from "net"
 
-const socketPath = process.env.FORGE_PLUGIN_SOCKET!
-const forgeUrl   = process.env.FORGE_URL!
-const authHeader = process.env.FORGE_AUTH_HEADER!  // "Basic <b64>"
-const directory  = process.env.FORGE_DIRECTORY!
+const socketPath = process.env.OPCODE_PLUGIN_SOCKET!
+const opcode42Url   = process.env.OPCODE_URL!
+const authHeader = process.env.OPCODE_AUTH_HEADER!  // "Basic <b64>"
+const directory  = process.env.OPCODE_DIRECTORY!
 
-const client = createOpencodeClient({ baseUrl: forgeUrl, headers: { authorization: authHeader }, directory })
-const input: PluginInput = { client, project: ..., directory, worktree, serverUrl: new URL(forgeUrl), $: Bun.$ }
+const client = createOpencodeClient({ baseUrl: opcode42Url, headers: { authorization: authHeader }, directory })
+const input: PluginInput = { client, project: ..., directory, worktree, serverUrl: new URL(opcode42Url), $: Bun.$ }
 
 // Load plugins (same path as opencode)
 const hooks = await loadPlugins(input, pluginSpecs)  // PluginLoader.loadExternal
@@ -284,7 +284,7 @@ server.listen(socketPath)
 
 The host **does not import Effect** or any opencode daemon internals. It reuses only:
 - `@opencode-ai/plugin` (hook types, ToolDefinition)
-- `@opencode-ai/sdk` (createOpencodeClient — talks back to Forge over HTTP)
+- `@opencode-ai/sdk` (createOpencodeClient — talks back to Opcode42 over HTTP)
 - `@opencode-ai/opencode/config/plugin` (Glob scan for local plugin files)
 - `@opencode-ai/opencode/plugin/loader` (PluginLoader — resolve/install/load)
 
@@ -297,7 +297,7 @@ running in Bun maximizes compatibility. Fallback: Node.js (without `Bun.$`; plug
 BunShell get a stub that throws `Error("BunShell not available in Node mode")`).
 
 Auto-detect: if `bun` is on `$PATH`, use it. Otherwise fall back to `node`. Configurable via
-`FORGE_PLUGIN_RUNTIME=bun|node`.
+`OPCODE_PLUGIN_RUNTIME=bun|node`.
 
 ---
 
@@ -305,28 +305,28 @@ Auto-detect: if `bun` is on `$PATH`, use it. Otherwise fall back to `node`. Conf
 
 ### Startup
 
-1. Forge daemon starts with `--plugin-host` flag.
-2. Forge writes a temp socket path (`/tmp/forge-ph-<instanceID>.sock`).
-3. Forge spawns `bun run /path/to/plugin-host.ts` with env vars:
-   `FORGE_PLUGIN_SOCKET`, `FORGE_URL`, `FORGE_AUTH_HEADER`, `FORGE_DIRECTORY`,
-   `FORGE_PLUGIN_SPECS` (JSON array of plugin specs from config).
+1. Opcode42 daemon starts with `--plugin-host` flag.
+2. Opcode42 writes a temp socket path (`/tmp/opcode42-ph-<instanceID>.sock`).
+3. Opcode42 spawns `bun run /path/to/plugin-host.ts` with env vars:
+   `OPCODE_PLUGIN_SOCKET`, `OPCODE_URL`, `OPCODE_AUTH_HEADER`, `OPCODE_DIRECTORY`,
+   `OPCODE_PLUGIN_SPECS` (JSON array of plugin specs from config).
 4. Plugin host connects to socket, sends `{"jsonrpc":"2.0","method":"host.ready","params":{}}`.
-5. Forge sets `bridgeReady = true`; subsequent hook calls are forwarded.
-6. **Timeout:** if `host.ready` is not received within 30s, Forge logs a warning,
+5. Opcode42 sets `bridgeReady = true`; subsequent hook calls are forwarded.
+6. **Timeout:** if `host.ready` is not received within 30s, Opcode42 logs a warning,
    sets `bridgeReady = false`, and continues without plugins.
 
 ### Shutdown
 
-1. Forge sends `{"jsonrpc":"2.0","method":"host.shutdown","params":{}}` notification.
+1. Opcode42 sends `{"jsonrpc":"2.0","method":"host.shutdown","params":{}}` notification.
 2. Host calls `hook.dispose?.()` for all hooks, then exits with code 0.
-3. Forge waits up to 5s for the process to exit, then sends SIGKILL.
+3. Opcode42 waits up to 5s for the process to exit, then sends SIGKILL.
 
 ### Crash isolation
 
-- If the plugin host process exits unexpectedly, Forge's `Bridge` detects the closed socket,
+- If the plugin host process exits unexpectedly, Opcode42's `Bridge` detects the closed socket,
   logs `plugin host crashed`, sets `bridgeReady = false`, and continues without plugins.
-- Forge does **not** auto-restart the plugin host (a crashed plugin likely crashes again).
-  An admin can restart Forge to retry.
+- Opcode42 does **not** auto-restart the plugin host (a crashed plugin likely crashes again).
+  An admin can restart Opcode42 to retry.
 - Per-hook RPC timeouts (5–30s depending on hook) prevent a misbehaving plugin from stalling
   the agent loop. On timeout, the original unmodified output is used.
 
@@ -342,14 +342,14 @@ Auto-detect: if `bun` is on `$PATH`, use it. Otherwise fall back to `node`. Conf
 
 | Milestone | Deliverable | Phase |
 |-----------|-------------|-------|
-| M1 | `FORGE_PLUGIN_HOST=0` path — no-op bridge, all hooks return unmodified output | Phase A (now) |
+| M1 | `OPCODE_PLUGIN_HOST=0` path — no-op bridge, all hooks return unmodified output | Phase A (now) |
 | M2 | Plugin host scaffold: unix socket JSON-RPC server, `host.ready` / `host.shutdown`, Bun/Node detection | Phase D |
 | M3 | Plugin loading: reuse `PluginLoader.loadExternal`, `config/plugin.ts` Glob scan, send `plugin.tools` to Go | Phase D |
 | M4 | Go bridge: `Trigger` for all blocking hooks, non-blocking `event` forwarding | Phase D |
 | M5 | Tool execution bridge: `tool.execute` RPC, stub registration in Go tool registry | Phase D |
 | M6 | Auth hook partial bridge: `auth.loader` (data transform only); skip OAuth method | Phase D |
 | M7 | Provider hook bridge: `provider.models` | Phase D |
-| M8 | End-to-end: run a real opencode plugin (e.g. `opencode-poe-auth`) against Forge | Phase D |
+| M8 | End-to-end: run a real opencode plugin (e.g. `opencode-poe-auth`) against Opcode42 | Phase D |
 
 ---
 
@@ -357,7 +357,7 @@ Auto-detect: if `bun` is on `$PATH`, use it. Otherwise fall back to `node`. Conf
 
 ### Functional
 
-- **Null bridge test:** with `FORGE_PLUGIN_HOST=0`, all hooks return unmodified output;
+- **Null bridge test:** with `OPCODE_PLUGIN_HOST=0`, all hooks return unmodified output;
   no subprocess spawned.
 - **Hook round-trip tests (unit):** mock Go bridge ↔ host over a socketpair; verify each
   hook method serializes and deserializes correctly, including large payloads
@@ -370,12 +370,12 @@ Auto-detect: if `bun` is on `$PATH`, use it. Otherwise fall back to `node`. Conf
 ### Compatibility
 
 - **Real plugin smoke test:** run `opencode-poe-auth` and/or a local fixture plugin
-  (uses `client`, `tool`, `chat.params`) against Forge. Verify:
-  - Plugin tools appear in Forge's tool list.
+  (uses `client`, `tool`, `chat.params`) against Opcode42. Verify:
+  - Plugin tools appear in Opcode42's tool list.
   - `chat.params` hook mutates model params (verify via LLM request log).
   - `tool.execute.before` / `after` hooks fire (verify via test plugin that logs).
 - **Conformance:** add a plugin-host scenario to plan 12's conformance harness —
-  run the same plugin against opencode and Forge, compare SSE event streams.
+  run the same plugin against opencode and Opcode42, compare SSE event streams.
 
 ### Performance
 
@@ -392,7 +392,7 @@ A milestone is "done" when:
 
 1. `go test ./pluginbridge/...` passes all unit tests including timeout and crash scenarios.
 2. The real-plugin smoke test (M8) passes: a published opencode plugin loads and its hooks
-   fire correctly against a Forge daemon.
+   fire correctly against a Opcode42 daemon.
 3. Conformance harness (plan 12) shows no regressions on SSE event streams when plugin host
    is enabled vs disabled.
 4. Memory: plugin host process stays under 200 MB RSS for a typical plugin set (3–5 plugins).
@@ -405,23 +405,23 @@ This is the highest-risk plan in the suite. Honest assessment:
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| Plugins that use `Bun.$` for side-effects won't work correctly if the shell env differs from the daemon's env | High | Medium | Forward `FORGE_DIRECTORY` and all daemon env vars to the host process. Accept partial compat. |
+| Plugins that use `Bun.$` for side-effects won't work correctly if the shell env differs from the daemon's env | High | Medium | Forward `OPCODE_DIRECTORY` and all daemon env vars to the host process. Accept partial compat. |
 | `auth.methods` OAuth flows (browser redirect, callback server) are structurally incompatible with the RPC bridge | High | Medium | Skip OAuth method bridge; log warning. Users must configure API keys manually for such providers. |
 | `experimental_workspace.register` adapter — workspace adapters have async lifecycle bound to Bun | High | Medium | Defer entirely. Log warning if plugin calls it. |
 | Large `messages.transform` payloads cause latency spikes | Medium | Medium | Apply 30s timeout; compress payload with msgpack if > 64 KB. |
 | Plugin host crashes on first bad plugin, taking all plugins down | Medium | Medium | Add per-plugin error boundary in host; isolate crashes to individual hooks. |
-| Plugin expects `PluginInput.serverUrl` to be the opencode server and calls non-standard endpoints | Low | Low | Forge implements the same endpoints; wire-compat is the invariant. |
-| npm plugin install in plugin host (Bun's `bun add` in a temp dir) race conditions at startup | Medium | Low | Serialize installs; pre-warm on first run and cache in `~/.forge/plugin-cache`. |
+| Plugin expects `PluginInput.serverUrl` to be the opencode server and calls non-standard endpoints | Low | Low | Opcode42 implements the same endpoints; wire-compat is the invariant. |
+| npm plugin install in plugin host (Bun's `bun add` in a temp dir) race conditions at startup | Medium | Low | Serialize installs; pre-warm on first run and cache in `~/.opcode42/plugin-cache`. |
 | BunShell (`$`) used inside plugin `execute` function for tool implementation | High | Low | BunShell runs inside the plugin host (Bun process), so it works. Side effects go through the filesystem, not the Go daemon. Acceptable. |
 
 **Partial-compat fallback strategy:** if a plugin fails to load or a hook RPC fails,
-Forge logs the error, skips that plugin/hook, and continues. The user sees a `session.error`
+Opcode42 logs the error, skips that plugin/hook, and continues. The user sees a `session.error`
 SSE event. This matches opencode's behavior (lines 224–236 in `packages/opencode/src/plugin/index.ts`).
 
 **Deferral story:** if plugin support is not worth the engineering cost in Phase D,
 the Go daemon ships as a zero-plugin daemon indefinitely. The flag-gate means no code
-paths change; the only impact is that opencode-format plugins don't work with Forge.
-This is acceptable given Forge's primary target (mobile + remote) rarely uses custom plugins.
+paths change; the only impact is that opencode-format plugins don't work with Opcode42.
+This is acceptable given Opcode42's primary target (mobile + remote) rarely uses custom plugins.
 
 ---
 
@@ -437,7 +437,7 @@ true (nothing calls the bridge). Before M2 can be a drop-in, M1 must place the (
 Enumerate them against opencode's authoritative hook set
 (`opencode/packages/plugin/src/index.ts`) and pin where each fires:
 
-| Hook | Forge insertion point |
+| Hook | Opcode42 insertion point |
 |---|---|
 | `chat.params`, `chat.headers` | request build, before `provider.Stream` (`loop.go:61-68`) |
 | `chat.message` | user-message create (`engine.go` `Prompt`) |
@@ -458,5 +458,5 @@ output** contracts — preserve that exact shape (input read-only, output mutate
 - [00 — Masterplan](00-masterplan.md) — sequencing, phase D
 - [01 — Daemon Core](01-daemon-core.md) — auth, routing, instance lifecycle
 - [02 — Agent Engine](02-agent-engine.md) — hook call sites in the agent loop
-- [06 — SDK Generation](06-sdk-generation.md) — the SDK client the plugin host uses to call back into Forge
+- [06 — SDK Generation](06-sdk-generation.md) — the SDK client the plugin host uses to call back into Opcode42
 - [12 — Conformance](12-test-compatibility.md) — conformance harness for plugin hook parity

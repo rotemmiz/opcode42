@@ -1,4 +1,4 @@
-# Forge Plan 01 — Daemon Core
+# Opcode42 Plan 01 — Daemon Core
 
 > Transport, state management, auth, routing, and event bus. Does NOT cover the
 > agent engine (plan 02) or ecosystem loaders (plan 04). Everything here must
@@ -13,7 +13,7 @@ functionality until HTTP+SSE+WS is live and sessions can be stored. Critically,
 having a wire-compatible skeleton — even one that returns stubs for agent
 endpoints — lets the mobile client (plan 07) and the TUI (plan 08) be built and
 tested against the **real opencode daemon first** and then seamlessly repointed
-at Forge the moment a given endpoint is implemented. This also makes the
+at Opcode42 the moment a given endpoint is implemented. This also makes the
 conformance harness (plan 12) runnable from day one.
 
 Milestones in this plan gate:
@@ -244,7 +244,7 @@ CGo-free port maintained by the same SQLite team members.
 for lightweight struct scanning. Avoid GORM — too opinionated. Raw `database/sql`
 with sqlx is idiomatic Go and keeps SQL visible.
 
-**Schema** (Forge's own; only API contract must match opencode):
+**Schema** (Opcode42's own; only API contract must match opencode):
 
 ```sql
 PRAGMA journal_mode = WAL;
@@ -364,7 +364,7 @@ unauthenticated; log a warning on startup per `serve.ts:15`).
 
 **PTY connect endpoint** has a separate auth path: it accepts a short-lived
 one-time ticket via `?pty_connect_ticket=` query param (see
-`server/shared/pty-ticket.ts`) in addition to regular auth. Forge implements
+`server/shared/pty-ticket.ts`) in addition to regular auth. Opcode42 implements
 this as a `map[string]time.Time` with 60-second TTL.
 
 ### 7. Per-directory instance routing and cache
@@ -480,7 +480,7 @@ For drift detection, emit the running daemon's spec at `/openapi.json` (using
 
 ## Data model
 
-Primary tables (canonical Forge schema; JSON blob fields match opencode's wire
+Primary tables (canonical Opcode42 schema; JSON blob fields match opencode's wire
 format to preserve client compat):
 
 ```
@@ -513,7 +513,7 @@ Cursor pagination: `base64url(json({"id": "...", "time": <ms>}))` per
 Each milestone is independently runnable and testable. Ship in order.
 
 ### M1 — Skeleton: health + static config (≈ 2 days)
-- `cmd/forge/main.go` with `serve` subcommand.
+- `cmd/opcode42/main.go` with `serve` subcommand.
 - HTTP server on port 4096 (fallback to 0).
 - `GET /global/health` → `{ "healthy": true, "version": "0.0.1" }`.
 - `GET /config` → return parsed global config as JSON.
@@ -603,9 +603,9 @@ This plan proves the following claims; deep test harness spec lives in plan 12.
 - Instance cache hot path (cached directory): p99 < 1ms overhead.
 
 **Compatibility (formal conformance in plan 12):**
-- opencode's unmodified JS SDK (`createOpencodeClient`) connects to Forge and
+- opencode's unmodified JS SDK (`createOpencodeClient`) connects to Opcode42 and
   can list sessions and subscribe to events without errors.
-- opencode TUI (`opencode attach <forge-url>`) connects and renders.
+- opencode TUI (`opencode attach <opcode42-url>`) connects and renders.
 - `diff /openapi.json reference/openapi.json` produces no unexpected deltas.
 
 ---
@@ -616,15 +616,15 @@ Concrete commands to prove this plan works, in order:
 
 ```bash
 # 1. Build
-go build -o forge ./cmd/forge
+go build -o opcode42 ./cmd/opcode42
 
 # 2. Health check (no auth)
-./forge serve &
+./opcode42 serve &
 curl -s http://localhost:4096/global/health | jq .
 # → { "healthy": true, "version": "..." }
 
 # 3. Auth check
-OPENCODE_SERVER_PASSWORD=secret ./forge serve &
+OPENCODE_SERVER_PASSWORD=secret ./opcode42 serve &
 curl -s -u opencode:secret http://localhost:4096/global/health | jq .
 curl -s "http://localhost:4096/global/health?auth_token=$(echo -n 'opencode:secret' | base64)" | jq .
 curl -s http://localhost:4096/global/health  # → 401
@@ -648,14 +648,14 @@ SESSION_ID=$(curl -sX POST http://localhost:4096/pty \
 websocat "ws://localhost:4096/pty/$SESSION_ID/connect?cursor=0"
 # → control frame then shell prompt
 
-# 7. Point opencode SDK at Forge (interop proof)
+# 7. Point opencode SDK at Opcode42 (interop proof)
 node -e "
 const { createOpencodeClient } = require('@opencode-ai/sdk');
 const c = createOpencodeClient({ baseUrl: 'http://localhost:4096', directory: '/tmp/test-project' });
 c.session.list().then(r => console.log('sessions:', r)).catch(console.error);
 "
 
-# 8. Point opencode TUI at Forge (interop proof)
+# 8. Point opencode TUI at Opcode42 (interop proof)
 opencode attach http://localhost:4096
 
 # 9. mDNS discovery (macOS)
@@ -679,11 +679,11 @@ diff <(curl -s http://localhost:4096/openapi.json | jq -S .) \
 | 4 | mDNS on Linux: `grandcat/zeroconf` requires root or CAP_NET_BIND_SERVICE for port 5353 | Medium | Document; fall back to dnsmasq or avahi-publish wrapper |
 | 5 | SQLite write contention with concurrent agent writes (plan 02) | Low for M1-M7 | WAL + mutex-serialized writes; revisit in plan 11 |
 | 6 | `oapi-codegen` schema coverage: complex `anyOf`/`oneOf` in openapi.json may not code-gen cleanly | Medium | Inspect generated output; use `allOf` workarounds; fall back to `interface{}` where needed |
-| 7 | Global event SSE wrapper: `GlobalBus.emit` wraps payload in `{ directory, project, workspace, payload }` but SSE sends only `event.payload`; Forge must NOT send the wrapper | Low | Validated against source; add regression test |
-| 8 | Port 4096 conflict on mobile (Android) | Low | Mobile connects to a remote Forge; default port only matters on the server host |
+| 7 | Global event SSE wrapper: `GlobalBus.emit` wraps payload in `{ directory, project, workspace, payload }` but SSE sends only `event.payload`; Opcode42 must NOT send the wrapper | Low | Validated against source; add regression test |
+| 8 | Port 4096 conflict on mobile (Android) | Low | Mobile connects to a remote Opcode42; default port only matters on the server host |
 
 **Open questions:**
-- Should Forge implement the `/sync/*` and `/experimental/*` endpoints? Default:
+- Should Opcode42 implement the `/sync/*` and `/experimental/*` endpoints? Default:
   return `501` for now; revisit in plan 09.
 - Should the instance cache have a TTL (evict idle instances)? opencode keeps
   them for server lifetime. Decision: match opencode (no TTL) for now; add
@@ -713,7 +713,7 @@ since settled them; record the resolution so they stop being treated as undecide
 - **Instance-cache TTL** (open question 2): still "match opencode = no TTL." Real for remote/
   multi-tenant; keep owned by plan 13, but add a conformance note that idle instances are never
   evicted so memory growth is expected, not a leak.
-- **Risk #7 (global-event wrapper)** says Forge must send only `event.payload`, not the
+- **Risk #7 (global-event wrapper)** says Opcode42 must send only `event.payload`, not the
   `{directory,project,workspace,payload}` wrapper. Confirm a regression test exists for
   `/global/event` payload shape; if not, that is the one missing validation in this plan.
 - **`gofmt`/drift gate.** M7's "diff /openapi.json" test should be hardened to the repo workflow's

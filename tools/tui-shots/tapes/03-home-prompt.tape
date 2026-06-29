@@ -1,5 +1,5 @@
 # 03-home-prompt.tape — entry + prompt surfaces.
-# Launches forge-tui against the opencode daemon (seeded fixture session).
+# Launches opcode-tui against the opencode daemon (seeded fixture session).
 # The theme is pinned via --theme flag so capture is deterministic.
 # Scene numbering matches opencode's reference harness.
 #
@@ -15,7 +15,7 @@ Set Height 1000
 Set Padding 8
 
 Hide
-Type "source ./env.sh && ./bin/forge-tui --url http://127.0.0.1:4199 --dir ./fixture --theme $FORGE_THEME"
+Type "source ./env.sh && ./bin/opcode-tui --url http://127.0.0.1:4199 --dir ./fixture --theme $OPCODE_THEME"
 Enter
 Sleep 5s
 Show
