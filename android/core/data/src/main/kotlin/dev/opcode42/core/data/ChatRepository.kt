@@ -17,8 +17,11 @@ import dev.opcode42.core.sdk.Opcode42Client
 import dev.opcode42.core.store.AppStore
 import dev.opcode42.core.store.ConnectionState
 import dev.opcode42.core.store.OptimisticMessage
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -111,10 +114,16 @@ class DefaultChatRepository @Inject constructor(
         agent: String?,
     ): Result<Unit> {
         val optimisticId = if (text.isNotBlank()) store.addOptimistic(sessionId, text) else null
-        return resultOf {
+        return try {
             client.sendPrompt(sessionId, text, directory, attachments, model = model, agent = agent)
-        }.onFailure {
-            optimisticId?.let { store.removeOptimistic(sessionId, it) }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            // Roll the optimistic bubble back on any failure — including cancellation (VM cleared
+            // mid-send). NonCancellable lets the suspending removeOptimistic complete even as the
+            // coroutine unwinds; CancellationException is then re-thrown to honor cancellation.
+            optimisticId?.let { withContext(NonCancellable) { store.removeOptimistic(sessionId, it) } }
+            if (e is CancellationException) throw e
+            Result.failure(e)
         }
     }
 
@@ -128,12 +137,19 @@ class DefaultChatRepository @Inject constructor(
             }
         }
         if (!shouldLoad) return Result.success(Unit)
-        return resultOf { client.getSessionDiff(sessionId, messageId, directory) }
-            .onSuccess { store.dispatch(AppEvent.SessionDiffLoaded(messageId, it)) }
-            // Store an empty list on failure so the auto-loader doesn't retry this message forever.
-            .onFailure { store.dispatch(AppEvent.SessionDiffLoaded(messageId, emptyList())) }
-            .also { synchronized(diffInFlight) { diffInFlight.remove(messageId) } }
-            .map { }
+        return try {
+            resultOf { client.getSessionDiff(sessionId, messageId, directory) }
+                .onSuccess { store.dispatch(AppEvent.SessionDiffLoaded(messageId, it)) }
+                // Store an empty list on failure so the auto-loader doesn't retry this message forever.
+                .onFailure { store.dispatch(AppEvent.SessionDiffLoaded(messageId, emptyList())) }
+                .map { }
+        } finally {
+            // Always release the in-flight guard — even on cancellation, where resultOf re-throws
+            // before the chain above runs. Since diffInFlight lives on this @Singleton, a leaked
+            // entry would poison the messageId for the whole process (the original per-VM set was
+            // discarded with the ViewModel, so this is stricter than main on purpose).
+            synchronized(diffInFlight) { diffInFlight.remove(messageId) }
+        }
     }
 
     override suspend fun searchFiles(query: String, directory: String?): Result<List<String>> =

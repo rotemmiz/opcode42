@@ -259,8 +259,11 @@ class SessionListViewModel @Inject constructor(
     fun createSession(directory: String? = null, onCreated: (Session) -> Unit) {
         viewModelScope.launch {
             _isCreating.value = true
-            sessionRepo.create(directory).onSuccess { onCreated(it) }
-            _isCreating.value = false
+            try {
+                sessionRepo.create(directory).onSuccess { onCreated(it) }
+            } finally {
+                _isCreating.value = false
+            }
         }
     }
 }

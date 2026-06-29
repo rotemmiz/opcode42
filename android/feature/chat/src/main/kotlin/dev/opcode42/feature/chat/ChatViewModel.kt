@@ -181,7 +181,9 @@ class ChatViewModel @Inject constructor(
 
     /** @-mention picker — fuzzy file search in the session directory. */
     suspend fun searchFiles(query: String): List<String> =
-        chatRepo.searchFiles(query, directory).getOrDefault(emptyList())
+        chatRepo.searchFiles(query, directory)
+            .onFailure { android.util.Log.w("ChatVM", "findFiles failed", it) }
+            .getOrDefault(emptyList())
 
     /** Slash palette — run a command by name with the trailing arguments. */
     fun runCommand(name: String, arguments: String) {
