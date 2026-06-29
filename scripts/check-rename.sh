@@ -9,21 +9,18 @@ fail=0
 # (0) Meta-files that necessarily name both the old and new brand: the rename
 #     plan (before -> after tables) and this gate script itself.
 META=(':!plans/14-rename-opcode42.md' ':!scripts/check-rename.sh')
-# (2) decision-3 SEAM: the GitHub repo is intentionally NOT renamed yet, so the
-#     clone URL / container registry / goreleaser release name stay "forge" until
-#     `gh repo rename` (plans/14 §3). These are the ONLY allowed "forge" lines.
-# (3) English word "forget" / "fire-and-forget" contains the substring "forge".
-# The github.com term is anchored to NOT match a trailing "/path", so a genuinely
-# broken module import (github.com/rotemmiz/forge/internal/...) is NOT masked by
-# the clone-URL seam and still trips the gate.
-SEAM='github\.com/rotemmiz/forge([^/]|$)|ghcr\.io/rotemmiz/forge|^[^:]*:[0-9]+:[[:space:]]*name: forge|forget'
+# (1) English word "forget" / "fire-and-forget" contains the substring "forge".
+#     The decision-3 repo seam (clone URL / ghcr image / goreleaser release name)
+#     is now CLOSED: the GitHub repo was renamed to opcode42 (plans/14 §3), so
+#     those lines must read "opcode42" — any "forge" there is once again a real miss.
+SEAM='forget'
 
-# --- (1) NEGATIVE: no stray "forge" outside meta-files / seam / "forget" -----
+# --- (1) NEGATIVE: no stray "forge" outside meta-files / "forget" -----------
 stray="$(git grep -in -e forge -- . "${META[@]}" | grep -viE "$SEAM" || true)"
 if [[ -n "$stray" ]]; then
   echo "X stray 'forge' remains:"; echo "$stray" | sed 's/^/    /'
-  echo "  -> rename it, or (if a new repo-seam line) extend SEAM in this script."; fail=1
-else echo "OK no stray 'forge' (only plan doc + repo seam + English 'forget')"; fi
+  echo "  -> rename it to opcode42."; fail=1
+else echo "OK no stray 'forge' (only plan doc + English 'forget')"; fi
 
 # --- (1b) PATH: no tracked file path contains "forge" ------------------------
 if git ls-files | grep -qi forge; then

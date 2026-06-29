@@ -8,7 +8,7 @@
 # Usage (opcoded takes flags directly — there is no `serve` subcommand):
 #   docker run -d -p 4096:4096 \
 #     -e OPENCODE_SERVER_PASSWORD=secret \
-#     ghcr.io/rotemmiz/forge:latest --host 0.0.0.0 --port 4096
+#     ghcr.io/rotemmiz/opcode42:latest --host 0.0.0.0 --port 4096
 FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY opcoded /opcoded

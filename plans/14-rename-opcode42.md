@@ -108,7 +108,7 @@ After each phase, re-run `git grep -in '\bforge'` and eyeball that only intentio
 
 ### Phase 4 — Build / release / packaging / ops
 - `Makefile`: `DAEMON := bin/opcoded`, `./cmd/opcoded`, target help text.
-- `.goreleaser.yaml`: `project_name: opcode42`; build `id`/`binary` `forged`→`opcoded`; `main: ./cmd/opcoded`; archive `id`/`name_template`. **Seam (decision: module-path-only):** `release.github.{owner,name}` and `ghcr.io/rotemmiz/forge:*` reference the **GitHub repo**, which is **not** renamed yet — leave them as `forge` for now, or they will break publishing. Flip them in lockstep with the eventual `gh repo rename` (§3).
+- `.goreleaser.yaml`: `project_name: opcode42`; build `id`/`binary` `forged`→`opcoded`; `main: ./cmd/opcoded`; archive `id`/`name_template`. **Seam (decision: module-path-only):** `release.github.{owner,name}` and `ghcr.io/rotemmiz/forge:*` reference the **GitHub repo**. These were initially left as `forge` and have since been flipped to `opcode42` in lockstep with `gh repo rename` (✓ done — see §3).
 - `packaging/systemd/forge.service` → `git mv` to `opcoded.service`; update `ExecStart`/`Description`.
 - `packaging/launchd/dev.forge.daemon.plist` → `git mv` to `dev.opcode42.daemon.plist`; update `Label` + program path.
 - `Dockerfile`: build/copy `forged`→`opcoded`.
@@ -193,16 +193,18 @@ Notes:
 
 ---
 
-## 3. Explicitly deferred (decision: "module path only")
+## 3. Explicitly deferred (decision: "module path only") — NOW LARGELY DONE
 
-The Go module is renamed to `github.com/rotemmiz/opcode42`, but the **GitHub repo** and **local dir**
-are not. Until you do the steps below, `github.com/rotemmiz/opcode42` resolves **locally only**
-(fine for `go build`; remote `go install`/CI publish would 404). Do later, then flip the §Phase-4 seam:
+The Go module was renamed to `github.com/rotemmiz/opcode42` in the rename PR. The follow-up
+repo/registry steps below were completed in a later **seam-flip PR**; only the cosmetic **local dir**
+move remains.
 
-1. `gh repo rename opcode42` (or via web).
-2. `git remote set-url origin git@github.com:rotemmiz/opcode42.git`.
-3. `mv ~/git/forge ~/git/opcode42`.
-4. Flip `.goreleaser.yaml` `release.github.name`/`owner` + `ghcr.io/rotemmiz/forge` → `opcode42`, and any workflow/badge URLs.
+1. ✓ `gh repo rename opcode42` — done (repo is now `rotemmiz/opcode42`; GitHub keeps old-URL redirects).
+2. ✓ `git remote set-url origin git@github.com:rotemmiz/opcode42.git` — done.
+3. ☐ `mv ~/git/forge ~/git/opcode42` — pending (purely cosmetic; not required for build or publish).
+4. ✓ Flipped `.goreleaser.yaml` `release.github.name` + every `ghcr.io/rotemmiz/forge` → `opcode42`
+   (also the README clone URL, `Dockerfile`, `tasks/verify.md`); the `check-rename.sh` seam allowance
+   was removed so those lines are tripwires again.
 
 ---
 

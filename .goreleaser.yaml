@@ -68,7 +68,7 @@ changelog:
 # snapshot CI dry-run, so CI needs no registry credentials.
 dockers:
   - image_templates:
-      - "ghcr.io/rotemmiz/forge:{{ .Version }}-amd64"
+      - "ghcr.io/rotemmiz/opcode42:{{ .Version }}-amd64"
     use: buildx
     dockerfile: Dockerfile
     goos: linux
@@ -79,7 +79,7 @@ dockers:
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
   - image_templates:
-      - "ghcr.io/rotemmiz/forge:{{ .Version }}-arm64"
+      - "ghcr.io/rotemmiz/opcode42:{{ .Version }}-arm64"
     use: buildx
     dockerfile: Dockerfile
     goos: linux
@@ -91,18 +91,18 @@ dockers:
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
 
 docker_manifests:
-  - name_template: "ghcr.io/rotemmiz/forge:{{ .Version }}"
+  - name_template: "ghcr.io/rotemmiz/opcode42:{{ .Version }}"
     image_templates:
-      - "ghcr.io/rotemmiz/forge:{{ .Version }}-amd64"
-      - "ghcr.io/rotemmiz/forge:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/rotemmiz/forge:latest"
+      - "ghcr.io/rotemmiz/opcode42:{{ .Version }}-amd64"
+      - "ghcr.io/rotemmiz/opcode42:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/rotemmiz/opcode42:latest"
     image_templates:
-      - "ghcr.io/rotemmiz/forge:{{ .Version }}-amd64"
-      - "ghcr.io/rotemmiz/forge:{{ .Version }}-arm64"
+      - "ghcr.io/rotemmiz/opcode42:{{ .Version }}-amd64"
+      - "ghcr.io/rotemmiz/opcode42:{{ .Version }}-arm64"
 
 release:
   github:
     owner: rotemmiz
-    name: forge
+    name: opcode42
   draft: true
   prerelease: auto

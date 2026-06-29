@@ -25,7 +25,7 @@ func main() {
 	password := flag.String("password", "", "Basic auth password")
 	provider := flag.String("provider", "", "prompt model provider id (else resolved from /config)")
 	modelID := flag.String("model", "", "prompt model id")
-	themeFlag := flag.String("theme", "", "theme name override (e.g. opcode42-dark, opcode42-light, opcode42-mono); empty = auto-pick or KV-pinned")
+	themeFlag := flag.String("theme", "", "theme name override (e.g. opcode42-dark, opcode42-light, monochrome); empty = auto-pick or KV-pinned")
 	flag.Parse()
 
 	model := tui.New(tui.Config{

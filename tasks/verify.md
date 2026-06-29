@@ -495,9 +495,9 @@ multiple machines and are left for you.
       on macOS) — confirm both records appear with TXT `auth=required`/`version=1` on the Opcode42 one.
 - [ ] EYEBALL (release): push a `vX.Y.Z` tag (or run `make release-snapshot`) — confirm goreleaser
       produces linux/darwin amd64+arm64 archives + checksums, and (on a real tag) multi-arch
-      `ghcr.io/rotemmiz/forge` images. Binary stays < 40MB (CI asserts this).
+      `ghcr.io/rotemmiz/opcode42` images. Binary stays < 40MB (CI asserts this).
 - [ ] EYEBALL (container): `docker run --rm -e OPENCODE_SERVER_PASSWORD=x -p 4096:4096
-      ghcr.io/rotemmiz/forge:latest --host 0.0.0.0` then `curl -u opencode:x localhost:4096/global/health`
+      ghcr.io/rotemmiz/opcode42:latest --host 0.0.0.0` then `curl -u opencode:x localhost:4096/global/health`
       returns 200.
 - [ ] EYEBALL (service units): install `packaging/systemd/opcode42.service` (Linux) or
       `packaging/launchd/dev.opcode42.daemon.plist` (macOS); confirm the daemon starts and restarts.

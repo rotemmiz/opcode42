@@ -27,7 +27,7 @@ All clients — mobile, Go TUI, and unmodified opencode web/desktop — speak th
 **Prerequisites:** Go 1.22+
 
 ```sh
-git clone https://github.com/rotemmiz/forge
+git clone https://github.com/rotemmiz/opcode42
 cd opcode42
 make build          # outputs bin/opcoded
 ./bin/opcoded        # flags: --host, --port, --mdns, --version, ...
@@ -44,7 +44,7 @@ Releases ship a single static, CGO-free binary per platform plus multi-arch cont
 ```sh
 # Container (binds 0.0.0.0, so a password is required):
 docker run -d -p 4096:4096 -e OPENCODE_SERVER_PASSWORD=secret \
-  ghcr.io/rotemmiz/forge:latest --host 0.0.0.0 --port 4096
+  ghcr.io/rotemmiz/opcode42:latest --host 0.0.0.0 --port 4096
 ```
 
 Service unit templates live under [`packaging/`](packaging/): a hardened systemd unit (`packaging/systemd/opcode42.service`) and a macOS launchd agent (`packaging/launchd/dev.opcode42.daemon.plist`). For remote access, prefer Tailscale, an SSH tunnel, or a TLS-terminating reverse proxy (SSE needs unbuffered proxying) over an open port — see [`plans/13-remote-ops.md`](plans/13-remote-ops.md).
