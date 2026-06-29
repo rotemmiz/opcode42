@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/engine/catalog"
-	"github.com/rotemmiz/forge/internal/engine/permission"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/engine/permission"
 )
 
 // writeFile creates a file (and parents) under root.

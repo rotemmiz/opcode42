@@ -143,7 +143,7 @@ func TestServerSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	write(t, filepath.Join(cfgDir, "opencode.json"),
-		`{"server":{"port":4321,"hostname":"0.0.0.0","mdns":true,"mdnsDomain":"forge.local"}}`)
+		`{"server":{"port":4321,"hostname":"0.0.0.0","mdns":true,"mdnsDomain":"opcode42.local"}}`)
 
 	cfg, err := Load(t.TempDir())
 	if err != nil {
@@ -159,8 +159,8 @@ func TestServerSettings(t *testing.T) {
 	if s.MDNS == nil || !*s.MDNS {
 		t.Errorf("mdns = %v, want true", s.MDNS)
 	}
-	if s.MDNSDomain == nil || *s.MDNSDomain != "forge.local" {
-		t.Errorf("mdnsDomain = %v, want forge.local", s.MDNSDomain)
+	if s.MDNSDomain == nil || *s.MDNSDomain != "opcode42.local" {
+		t.Errorf("mdnsDomain = %v, want opcode42.local", s.MDNSDomain)
 	}
 }
 

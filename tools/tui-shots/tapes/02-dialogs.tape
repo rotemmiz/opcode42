@@ -1,6 +1,6 @@
 # 02-dialogs.tape — overlay/dialog surfaces.
 # Leader is Ctrl+X. Opens each dialog, screenshots, Escape.
-# forge-tui keybindings (handleLeaderKey in model.go):
+# opcode-tui keybindings (handleLeaderKey in model.go):
 #   ctrl+x l  → sessions     (scene 19)
 #   ctrl+x m  → models       (scene 17)
 #   ctrl+x a  → agents       (scene 20)
@@ -16,7 +16,7 @@ Set Height 1000
 Set Padding 8
 
 Hide
-Type "source ./env.sh && ./bin/forge-tui --url http://127.0.0.1:4199 --dir ./fixture --session ses_00000000000000000000000000 --theme $FORGE_THEME"
+Type "source ./env.sh && ./bin/opcode-tui --url http://127.0.0.1:4199 --dir ./fixture --session ses_00000000000000000000000000 --theme $OPCODE_THEME"
 Enter
 Sleep 7s
 Show

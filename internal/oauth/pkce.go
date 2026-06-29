@@ -1,4 +1,4 @@
-// Package oauth implements end-to-end provider OAuth for Forge: the
+// Package oauth implements end-to-end provider OAuth for Opcode42: the
 // authorize → loopback/callback → token-exchange → persisted-auth flow that lets
 // a provider requiring OAuth (vs a pasted API key) be authenticated.
 //
@@ -6,7 +6,7 @@
 // (packages/opencode/src/provider/auth.ts) plus the per-provider loopback OAuth
 // implementations opencode ships as plugins
 // (e.g. packages/opencode/src/plugin/xai.ts). opencode discovers OAuth methods
-// from plugin `auth` hooks; Forge has no plugin host for auth yet, so the same
+// from plugin `auth` hooks; Opcode42 has no plugin host for auth yet, so the same
 // methods are provided by a built-in registry (registry.go). The persisted
 // result is written to the SAME ~/.local/share/opencode/auth.json store opencode
 // uses (internal/credstore), in the exact Auth union shape

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/oauth"
+	"github.com/rotemmiz/opcode42/internal/oauth"
 )
 
 // stubAccessor is a deterministic Accessor: it returns the configured token/err

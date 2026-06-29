@@ -126,7 +126,7 @@ func TestEmittedOperationsToleratesNonMethodFields(t *testing.T) {
 }
 
 // TestEmitTagsAdditions asserts an operation not in the reference is emitted as a
-// tagged Forge addition (so the diff gate classifies it as additive).
+// tagged Opcode42 addition (so the diff gate classifies it as additive).
 func TestEmitTagsAdditions(t *testing.T) {
 	extra := Operation{Method: "GET", Path: "/openapi.json"} // a real known-addition
 	doc, err := Emit([]Operation{extra})
@@ -140,7 +140,7 @@ func TestEmitTagsAdditions(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	op := parsed.Paths["/openapi.json"]["get"]
-	if string(op["x-forge-addition"]) != "true" {
-		t.Errorf("addition not tagged: got x-forge-addition=%s", op["x-forge-addition"])
+	if string(op["x-opcode42-addition"]) != "true" {
+		t.Errorf("addition not tagged: got x-opcode42-addition=%s", op["x-opcode42-addition"])
 	}
 }

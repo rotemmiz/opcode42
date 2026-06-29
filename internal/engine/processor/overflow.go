@@ -1,8 +1,8 @@
 package processor
 
 import (
-	"github.com/rotemmiz/forge/internal/engine/catalog"
-	"github.com/rotemmiz/forge/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
 )
 
 // isOverflow reports whether a usage block has filled the model's usable context

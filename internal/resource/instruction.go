@@ -8,7 +8,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 
-	"github.com/rotemmiz/forge/internal/worktree"
+	"github.com/rotemmiz/opcode42/internal/worktree"
 )
 
 // instructionFilenames is opencode's priority list of project rules files

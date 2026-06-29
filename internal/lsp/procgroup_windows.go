@@ -15,7 +15,7 @@ func processGroupID(_ *exec.Cmd) int { return 0 }
 
 // terminateProcessGroup kills the spawned process on Windows. Unlike the POSIX
 // path it cannot signal a whole tree (no process groups); LSP servers spawned by
-// Forge are single processes, so a direct Kill is sufficient.
+// Opcode42 are single processes, so a direct Kill is sufficient.
 func terminateProcessGroup(h *handle) {
 	_ = h.cmd.Process.Kill()
 }

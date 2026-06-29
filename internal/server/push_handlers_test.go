@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/auth"
-	"github.com/rotemmiz/forge/internal/push"
-	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/auth"
+	"github.com/rotemmiz/opcode42/internal/push"
+	"github.com/rotemmiz/opcode42/internal/storage"
 )
 
 func pushServer(t *testing.T) http.Handler {
 	t.Helper()
-	db, err := storage.Open(filepath.Join(t.TempDir(), "forge.db"))
+	db, err := storage.Open(filepath.Join(t.TempDir(), "opcode42.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -88,10 +88,10 @@ func TestPushRegisterValidation(t *testing.T) {
 
 // TestPushDisabledFallsThroughTo501 confirms that without a Push store the
 // endpoints are not wired as real handlers (they fall through to the 501 stub
-// or, for a path absent from the reference, 404). /push/register is a Forge
+// or, for a path absent from the reference, 404). /push/register is a Opcode42
 // known-addition not in the frozen contract, so absent it is 404.
 func TestPushDisabledNotWired(t *testing.T) {
-	db, err := storage.Open(filepath.Join(t.TempDir(), "forge.db"))
+	db, err := storage.Open(filepath.Join(t.TempDir(), "opcode42.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

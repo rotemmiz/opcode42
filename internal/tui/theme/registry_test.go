@@ -7,8 +7,8 @@ func TestPalettes_OrderedWithDarkFirst(t *testing.T) {
 	if len(ps) < 3 {
 		t.Fatalf("expected at least 3 themes, got %d", len(ps))
 	}
-	if ps[0].Name != "forge-dark" {
-		t.Fatalf("first theme should be the default forge-dark, got %q", ps[0].Name)
+	if ps[0].Name != "opcode42-dark" {
+		t.Fatalf("first theme should be the default opcode42-dark, got %q", ps[0].Name)
 	}
 	// Names are distinct and palettes differ (so switching is observable).
 	seen := map[string]bool{}

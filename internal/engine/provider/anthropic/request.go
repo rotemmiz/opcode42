@@ -3,7 +3,7 @@ package anthropic
 import (
 	"strings"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
 )
 
 // messagesRequest is the Anthropic /v1/messages request body.

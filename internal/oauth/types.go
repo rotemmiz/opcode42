@@ -1,7 +1,7 @@
 package oauth
 
 // Prompt is a single auth-method input prompt. opencode supports "text" and
-// "select" prompts (provider/auth.ts:16-38); Forge mirrors the wire shape so
+// "select" prompts (provider/auth.ts:16-38); Opcode42 mirrors the wire shape so
 // existing opencode clients can render the picker. Only the fields opencode
 // emits are present; unused ones stay zero/omitted.
 type Prompt struct {
@@ -28,7 +28,7 @@ type When struct {
 }
 
 // Method is one authentication method for a provider (provider/auth.ts:40-44).
-// Forge only surfaces OAuth methods through this package; API-key entry stays on
+// Opcode42 only surfaces OAuth methods through this package; API-key entry stays on
 // the PUT /auth/{providerID} path (auth_handlers.go).
 type Method struct {
 	Type    string   `json:"type"` // "oauth" | "api"
@@ -40,7 +40,7 @@ type Method struct {
 // callback completes (provider/auth.ts:49-53; ProviderAuthAuthorization).
 //   - method "code": the provider redirects with a code the user pastes back via
 //     POST .../oauth/callback {code}.
-//   - method "auto": Forge's loopback server (or device-code poll) captures the
+//   - method "auto": Opcode42's loopback server (or device-code poll) captures the
 //     result; the client polls POST .../oauth/callback with no code.
 type Authorization struct {
 	URL          string `json:"url"`
@@ -62,7 +62,7 @@ type pendingKind int
 
 const (
 	// pendingLoopback waits for the OAuth provider to redirect the browser to
-	// Forge's loopback callback server (xai.ts startOAuthServer).
+	// Opcode42's loopback callback server (xai.ts startOAuthServer).
 	pendingLoopback pendingKind = iota
 	// pendingCode waits for the user to paste an authorization code back via
 	// POST .../oauth/callback {code}.

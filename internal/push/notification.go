@@ -3,7 +3,7 @@ package push
 import (
 	"strings"
 
-	"github.com/rotemmiz/forge/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/bus"
 )
 
 // Notification is the platform-neutral push payload the dispatcher renders into

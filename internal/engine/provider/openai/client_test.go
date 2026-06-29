@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
 )
 
 // sseServer returns a server that replays the given SSE body for one request,

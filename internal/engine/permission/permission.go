@@ -1,4 +1,4 @@
-// Package permission implements Forge's tool-permission model: a pure rule
+// Package permission implements Opcode42's tool-permission model: a pure rule
 // evaluator and a blocking ask/reply manager, mirroring opencode's Permission
 // service (packages/opencode/src/permission/index.ts).
 //

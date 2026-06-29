@@ -1,4 +1,4 @@
-// Package bench holds the Forge performance baseline harness (plan 11, W0).
+// Package bench holds the Opcode42 performance baseline harness (plan 11, W0).
 //
 // The measurement code lives in files guarded by the `bench` build tag so it is
 // excluded from the default `go build ./...` / `go test ./...` and from CI: a
@@ -8,7 +8,7 @@
 //	go test -tags bench -run TestBaseline -v ./bench/
 //
 // or, more usefully, through bench/run_baseline.sh which stands up both the real
-// opencode daemon and forged on the same machine, runs the harness against each,
+// opencode daemon and opcoded on the same machine, runs the harness against each,
 // and records dated results under bench/results/.
 //
 // W0 non-negotiable: every number in bench/results/ is an ACTUAL measurement on

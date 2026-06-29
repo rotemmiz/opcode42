@@ -4,15 +4,15 @@ import (
 	"context"
 	"sync"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/config"
-	"github.com/rotemmiz/forge/internal/engine/permission"
-	"github.com/rotemmiz/forge/internal/engine/question"
-	"github.com/rotemmiz/forge/internal/engine/runstate"
-	"github.com/rotemmiz/forge/internal/lsp"
-	"github.com/rotemmiz/forge/internal/mcp"
-	"github.com/rotemmiz/forge/internal/pluginbridge"
-	"github.com/rotemmiz/forge/internal/pty"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/config"
+	"github.com/rotemmiz/opcode42/internal/engine/permission"
+	"github.com/rotemmiz/opcode42/internal/engine/question"
+	"github.com/rotemmiz/opcode42/internal/engine/runstate"
+	"github.com/rotemmiz/opcode42/internal/lsp"
+	"github.com/rotemmiz/opcode42/internal/mcp"
+	"github.com/rotemmiz/opcode42/internal/pluginbridge"
+	"github.com/rotemmiz/opcode42/internal/pty"
 )
 
 // Context is the per-directory in-memory state for one project instance. It

@@ -1,4 +1,4 @@
-package forgeclient
+package opcode42client
 
 import (
 	"bufio"
@@ -53,17 +53,17 @@ func (s *EventStream) Close() {
 // Events subscribes to the instance event stream (GET /event) for the client's
 // directory. Reconnect/backoff is the caller's responsibility (e.g. plan 08's
 // TUI owns the reconnect loop).
-func (c *ForgeClient) Events(ctx context.Context) (*EventStream, error) {
+func (c *Opcode42Client) Events(ctx context.Context) (*EventStream, error) {
 	return c.stream(ctx, "/event", false)
 }
 
 // GlobalEvents subscribes to the process-global stream (GET /global/event),
 // unwrapping the global envelope ({ payload, directory }) into SSEEvents.
-func (c *ForgeClient) GlobalEvents(ctx context.Context) (*EventStream, error) {
+func (c *Opcode42Client) GlobalEvents(ctx context.Context) (*EventStream, error) {
 	return c.stream(ctx, "/global/event", true)
 }
 
-func (c *ForgeClient) stream(ctx context.Context, path string, wrapped bool) (*EventStream, error) {
+func (c *Opcode42Client) stream(ctx context.Context, path string, wrapped bool) (*EventStream, error) {
 	streamCtx, cancel := context.WithCancel(ctx)
 	req, err := http.NewRequestWithContext(streamCtx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {

@@ -71,7 +71,7 @@ var orderInsensitiveFields = map[string]bool{"permission": true}
 
 // verFields hold the daemon's wire-version string (e.g. session "version":
 // "1.15.11"). It is environment/build-specific — opencode stamps its own release
-// and Forge stamps its opencode-compat target — so it is normalized to keep the
+// and Opcode42 stamps its opencode-compat target — so it is normalized to keep the
 // dual diff build-independent (plan: "compat constant + normalize"). The value
 // is only collapsed when it is semver-shaped (see isVersion), so an unrelated
 // "version" field carrying arbitrary data is still compared, not masked.
@@ -111,13 +111,13 @@ var (
 	// build suffix), so only genuine daemon versions are collapsed.
 	semverRe = regexp.MustCompile(`^\d+\.\d+\.\d+`)
 	// confDirRe matches the conformance harness's per-scenario temp working dir
-	// (runner.go: os.MkdirTemp("", "forge-conf-")), in any form: absolute,
+	// (runner.go: os.MkdirTemp("", "opcode42-conf-")), in any form: absolute,
 	// symlink-resolved, or the leading-slash-stripped relative form opencode puts
 	// in a session "path". GET /session returns a GLOBAL list spanning every
 	// scenario's dir, so a per-client path registration can't cover the sibling
 	// scenarios' dirs — this pattern scrubs them all. The prefix is harness-owned,
 	// so it never appears in real API payloads.
-	confDirRe = regexp.MustCompile(`[/\w.-]*forge-conf-\d+`)
+	confDirRe = regexp.MustCompile(`[/\w.-]*opcode42-conf-\d+`)
 	// confHomeRe matches the per-run temp HOME the harness gives each opencode
 	// process (run-conformance.sh: HOME="$(mktemp -d)"). opencode bakes this
 	// absolute HOME into agent permission patterns (e.g.
@@ -143,7 +143,7 @@ type Normalizer struct {
 // leading-slash-trimmed form of every path is also registered, because some
 // fields carry the working directory as a relative path — opencode's session
 // "path" is the cwd with its leading "/" stripped (e.g. an absolute cwd of
-// /tmp/forge-conf-123 surfaces as "tmp/forge-conf-123") — which the absolute
+// /tmp/opcode42-conf-123 surfaces as "tmp/opcode42-conf-123") — which the absolute
 // prefix would otherwise never match.
 func New(paths ...string) *Normalizer {
 	return &Normalizer{PathReplacements: pathReplacements(paths)}
@@ -239,7 +239,7 @@ func (n *Normalizer) NormalizeJSON(data []byte) ([]byte, error) {
 //     to the SAME placeholder object, so only the element COUNT varies run-to-run;
 //     the set dedup removes that harness artifact.
 //   - GET /command — opencode returns the command list in non-deterministic
-//     (map/glob) ORDER while Forge sorts by name (masterplan decision #6). The
+//     (map/glob) ORDER while Opcode42 sorts by name (masterplan decision #6). The
 //     canonical sort makes the order irrelevant; entries stay distinct so the dedup
 //     is a no-op and the command SET is compared exactly.
 func (n *Normalizer) NormalizeSetJSON(data []byte) ([]byte, error) {

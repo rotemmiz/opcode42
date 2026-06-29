@@ -11,8 +11,8 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
 
-	"github.com/rotemmiz/forge/internal/api/gen"
-	"github.com/rotemmiz/forge/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/api/gen"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
 )
 
 // TestResponsesConformToSpec validates that live handler responses for a curated

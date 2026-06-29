@@ -1,7 +1,7 @@
-# Forge performance baseline harness (plan 11, W0)
+# Opcode42 performance baseline harness (plan 11, W0)
 
 This directory implements **W0 of [plan 11](../plans/11-test-performance.md)**: measure the **real
-opencode daemon** head-to-head against `forged` on the same machine, and record the actual numbers.
+opencode daemon** head-to-head against `opcoded` on the same machine, and record the actual numbers.
 
 > **No fabricated numbers.** Every figure under [`results/`](results/) is an *actual measurement* on
 > the machine named in that file. Plan 11's SLO table is a set of *unmeasured targets*; this harness
@@ -18,9 +18,9 @@ opencode daemon** head-to-head against `forged` on the same machine, and record 
 | **SSE connection fan-out** | Open N concurrent `GET /event` subscribers; per-subscriber dial → `server.connected` latency (p50/p99), plus RSS while all N are live. |
 | **Request throughput** | `GET /global/health` (pure router) and `GET /session` (SQLite read) req/s under a fixed worker pool. |
 
-The harness is **daemon-agnostic**: forged and opencode expose the same wire-compatible surface
+The harness is **daemon-agnostic**: opcoded and opencode expose the same wire-compatible surface
 (`/global/health`, `/event` SSE emitting `server.connected`, Basic auth, `x-opencode-directory`
-routing — see `cmd/forged/main.go` and opencode `packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts`),
+routing — see `cmd/opcoded/main.go` and opencode `packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts`),
 so the identical client code drives both for a fair comparison.
 
 ## Running it
@@ -29,7 +29,7 @@ so the identical client code drives both for a fair comparison.
 bench/run_baseline.sh
 ```
 
-The runner builds `forged` from `./cmd/forged`, locates `opencode` on `PATH`, gives opencode an
+The runner builds `opcoded` from `./cmd/opcoded`, locates `opencode` on `PATH`, gives opencode an
 isolated `$HOME` (so its SQLite DB does not bleed across runs), pre-warms each daemon once (untimed,
 to absorb opencode's one-time DB migration), then runs the harness against both and writes a dated
 `results/YYYY-MM-DD-HHMM-baseline.{json,md}`.
@@ -41,7 +41,7 @@ BENCH_COLDSTART_ITERS=10   cold-start iterations per daemon
 BENCH_SUBS=50              concurrent SSE subscribers for fan-out + RSS
 BENCH_TP_CONCURRENCY=16    throughput load workers
 BENCH_TP_SECONDS=5         throughput window per endpoint
-FORGE_PORT=4097 / OPENCODE_PORT=4096
+OPCODE_PORT=4097 / OPENCODE_PORT=4096
 ```
 
 The live harness is behind the **`bench` build tag**, so it is excluded from `go build ./...`,
@@ -77,7 +77,7 @@ go test -tags bench -run TestBaseline -count=1 -v ./bench/   # needs the BENCH_*
   `server.connected` within the deadline, the result carries `sub_connected` (and a `notes` entry)
   with the real count; the RSS-with-subs and connect-latency figures describe exactly that many live
   connections, never a relabeled full-N fan-out.
-- **Pure-Go SQLite is fixed.** Per the masterplan non-negotiables and plan 11's review pass, Forge
+- **Pure-Go SQLite is fixed.** Per the masterplan non-negotiables and plan 11's review pass, Opcode42
   uses `modernc.org/sqlite`; a CGO comparison is out of scope. All SQLite numbers are within that
   constraint.
 
@@ -88,7 +88,7 @@ These are real gaps, called out so no one mistakes silence for a measured result
 - **Per-event SSE publish→receive fan-out latency.** Plan 11 Suite 3 wants one publisher fanning an
   event to N subscribers and measuring publish→receive deltas. A *fair* cross-daemon version needs a
   symmetric event both daemons emit on demand. opencode publishes `session.updated` on `POST /session`
-  (`packages/opencode/src/session/session.ts:562`); Forge's create path does not yet publish to the
+  (`packages/opencode/src/session/session.ts:562`); Opcode42's create path does not yet publish to the
   instance bus (`internal/server/session_handlers.go`). Until that is symmetric, this harness measures
   **connection** fan-out (dial → `server.connected`), which is fully symmetric, instead of per-event
   fan-out. Add per-event fan-out once both daemons publish the same trigger.

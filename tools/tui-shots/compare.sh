@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # compare.sh [mode]
-# Side-by-side visual comparison of forge vs opencode reference screenshots.
+# Side-by-side visual comparison of opcode42 vs opencode reference screenshots.
 #
-# For each scene that exists in both out/forge-<mode>/ and the opencode reference
+# For each scene that exists in both out/opcode42-<mode>/ and the opencode reference
 # (../../screenshots-harness/out/opencode-<mode>/), creates a montage image in
 # out/compare-<mode>/ showing them side by side.
 #
@@ -16,12 +16,12 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 MODE="${1:-dark}"
-FORGE_DIR="out/forge-${MODE}"
+OPCODE_DIR="out/opcode42-${MODE}"
 OC_DIR="../../screenshots-harness/out/opencode-${MODE}"
 DEST="out/compare-${MODE}"
 
-if [ ! -d "$FORGE_DIR" ]; then
-  echo "No forge captures at $FORGE_DIR — run ./capture.sh $MODE first." >&2
+if [ ! -d "$OPCODE_DIR" ]; then
+  echo "No opcode42 captures at $OPCODE_DIR — run ./capture.sh $MODE first." >&2
   exit 1
 fi
 if [ ! -d "$OC_DIR" ]; then
@@ -33,43 +33,43 @@ mkdir -p "$DEST"
 
 # Find matching scenes.
 matched=0
-unmatched_forge=()
-for forge_png in "$FORGE_DIR"/*.png; do
-  scene=$(basename "$forge_png")
+unmatched_opcode42=()
+for opcode42_png in "$OPCODE_DIR"/*.png; do
+  scene=$(basename "$opcode42_png")
   oc_png="$OC_DIR/$scene"
   if [ -f "$oc_png" ]; then
     matched=$((matched + 1))
     if command -v montage >/dev/null 2>&1; then
-      montage -title "forge vs opencode: $scene" \
-        -label "forge-$MODE" "$forge_png" \
+      montage -title "opcode42 vs opencode: $scene" \
+        -label "opcode42-$MODE" "$opcode42_png" \
         -label "opencode-$MODE" "$oc_png" \
         -geometry +4+4 -tile 2x1 \
         "$DEST/$scene" 2>/dev/null && echo "  ✓ $scene"
     elif command -v ffmpeg >/dev/null 2>&1; then
       # ffmpeg hstack for side-by-side
       ffmpeg -y -loglevel quiet \
-        -i "$forge_png" -i "$oc_png" \
+        -i "$opcode42_png" -i "$oc_png" \
         -filter_complex "[0:v]scale=800:-1[l];[1:v]scale=800:-1[r];[l][r]hstack=inputs=2" \
         "$DEST/$scene" 2>/dev/null && echo "  ✓ $scene (ffmpeg)"
     else
-      echo "  pair: $forge_png  vs  $oc_png"
+      echo "  pair: $opcode42_png  vs  $oc_png"
     fi
   else
-    unmatched_forge+=("$scene")
+    unmatched_opcode42+=("$scene")
   fi
 done
 
 echo ""
 echo "Matched $matched scenes."
-if [ ${#unmatched_forge[@]} -gt 0 ]; then
-  echo "Forge-only (no opencode reference): ${unmatched_forge[*]}"
+if [ ${#unmatched_opcode42[@]} -gt 0 ]; then
+  echo "Opcode42-only (no opencode reference): ${unmatched_opcode42[*]}"
 fi
 
-# List opencode scenes not yet in forge.
+# List opencode scenes not yet in opcode42.
 for oc_png in "$OC_DIR"/*.png; do
   scene=$(basename "$oc_png")
-  if [ ! -f "$FORGE_DIR/$scene" ]; then
-    echo "Opencode-only (not yet captured for forge): $scene"
+  if [ ! -f "$OPCODE_DIR/$scene" ]; then
+    echo "Opencode-only (not yet captured for opcode42): $scene"
   fi
 done
 

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"sort"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // The TUI mirrors the daemon's state from the SSE stream into a small, sorted
@@ -126,7 +126,7 @@ func newStore() store {
 // Reduce applies one SSE event to the store, returning the updated store. Pure
 // w.r.t. the slices it reassigns; the maps are mutated in place (single-threaded
 // in the Bubble Tea loop).
-func (s store) Reduce(ev forgeclient.SSEEvent) store {
+func (s store) Reduce(ev opcode42client.SSEEvent) store {
 	switch ev.Type {
 	case "session.updated":
 		var p struct {

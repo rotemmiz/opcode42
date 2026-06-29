@@ -7,13 +7,13 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
-func questionEvent(t *testing.T, id string, qs []QuestionInfo) forgeclient.SSEEvent {
+func questionEvent(t *testing.T, id string, qs []QuestionInfo) opcode42client.SSEEvent {
 	t.Helper()
 	props, _ := json.Marshal(map[string]any{"id": id, "sessionID": "ses_1", "questions": qs})
-	return forgeclient.SSEEvent{Type: "question.asked", Properties: props}
+	return opcode42client.SSEEvent{Type: "question.asked", Properties: props}
 }
 
 func opt(label string) QuestionOption { return QuestionOption{Label: label} }
@@ -25,7 +25,7 @@ func TestQuestion_AskedThenRepliedReduces(t *testing.T) {
 		t.Fatalf("question.asked should add a pending question: %+v", s.questions)
 	}
 	props, _ := json.Marshal(map[string]any{"requestID": "qst_1"})
-	s = s.Reduce(forgeclient.SSEEvent{Type: "question.rejected", Properties: props})
+	s = s.Reduce(opcode42client.SSEEvent{Type: "question.rejected", Properties: props})
 	if len(s.questions) != 0 {
 		t.Fatalf("question.rejected should clear it, got %+v", s.questions)
 	}
@@ -178,7 +178,7 @@ func TestQuestion_SSEClearResetsState(t *testing.T) {
 	m, _ = step(t, m, key("enter")) // advance to Q2 (qIdx=1, qAnswers has 1)
 	// the request is cleared out-of-band (replied elsewhere)
 	props, _ := json.Marshal(map[string]any{"requestID": "qst_1"})
-	m, _ = step(t, m, sseEventMsg{ev: forgeclient.SSEEvent{Type: "question.replied", Properties: props}})
+	m, _ = step(t, m, sseEventMsg{ev: opcode42client.SSEEvent{Type: "question.replied", Properties: props}})
 	if m.pendingQuestion() != nil {
 		t.Fatal("SSE replied should clear the pending question")
 	}

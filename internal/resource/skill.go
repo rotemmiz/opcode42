@@ -8,7 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/rotemmiz/forge/internal/worktree"
+	"github.com/rotemmiz/opcode42/internal/worktree"
 )
 
 // Skill is the wire shape served by GET /skill (openapi). Name, Location, and

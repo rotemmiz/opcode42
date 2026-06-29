@@ -11,7 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // Diff viewer (plan 08b §1). A full-screen reviewer over GET /session/{id}/diff:
@@ -50,7 +50,7 @@ type diffLoadedMsg struct {
 
 // loadDiffCmd fetches the session's accumulated diff (no messageID anchor in v1
 // — a message cursor would let "diff this turn"; that's a follow-up).
-func loadDiffCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID string) tea.Cmd {
+func loadDiffCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID string) tea.Cmd {
 	return func() tea.Msg {
 		var files []SnapshotFileDiff
 		err := c.GetJSON(ctx, "/session/"+sessionID+"/diff", &files)

@@ -10,7 +10,7 @@ import (
 
 	"go.lsp.dev/uri"
 
-	"github.com/rotemmiz/forge/internal/worktree"
+	"github.com/rotemmiz/opcode42/internal/worktree"
 )
 
 // fileMentionRegex matches `@mentions` in prompt text. It is a direct port of

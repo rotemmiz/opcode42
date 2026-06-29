@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 func key(s string) tea.KeyMsg {
@@ -154,10 +154,10 @@ func TestModalView_BorderedAndTitled(t *testing.T) {
 // TestModalView_SelectionRowAndBackgroundFill verifies the M8 dialog fill rule:
 // when a row is selected, the selection bar (Selection style) must appear, and
 // every rendered row of the modal must be consistently filled (no empty lines).
-// Tested for both forge-dark and forge-light to catch bleed-through on either
+// Tested for both opcode42-dark and opcode42-light to catch bleed-through on either
 // terminal background.
 func TestModalView_SelectionRowAndBackgroundFill(t *testing.T) {
-	for _, tn := range []string{"forge-dark", "forge-light"} {
+	for _, tn := range []string{"opcode42-dark", "opcode42-light"} {
 		t.Run(tn, func(t *testing.T) {
 			m := New(Config{URL: "http://x"})
 			m.width, m.height = 120, 40

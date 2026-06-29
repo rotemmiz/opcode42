@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Opcode42 daemon launchd agent (plan 13 §"launchd plist (macOS)").
+
+  Install (per-user LaunchAgent):
+    cp packaging/launchd/dev.opcode42.daemon.plist ~/Library/LaunchAgents/
+    # Set a password if you bind beyond loopback (otherwise the daemon refuses):
+    # launchctl setenv OPENCODE_SERVER_PASSWORD "$(openssl rand -base64 24)"
+    launchctl load ~/Library/LaunchAgents/dev.opcode42.daemon.plist
+
+  Replace /usr/local/bin/opcoded with your install path if different.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.opcode42.daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/opcoded</string>
+        <string>--host</string>
+        <string>127.0.0.1</string>
+        <string>--port</string>
+        <string>4096</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/opcode42.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/opcode42.err.log</string>
+</dict>
+</plist>

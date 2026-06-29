@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.forge.core.sdk"
+    namespace = "dev.opcode42.core.sdk"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {

@@ -1,4 +1,4 @@
-package forgeclient
+package opcode42client
 
 import (
 	"context"

@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // @-mention file picker: a trailing "@token" in the composer opens a popup of
@@ -46,7 +46,7 @@ type filesFoundMsg struct {
 
 // findFilesCmd fuzzy-searches files (GET /find/file?query=). An empty query is
 // not searched (the daemon requires one) — the popup just shows nothing.
-func findFilesCmd(ctx context.Context, c *forgeclient.ForgeClient, query string) tea.Cmd {
+func findFilesCmd(ctx context.Context, c *opcode42client.Opcode42Client, query string) tea.Cmd {
 	return func() tea.Msg {
 		if strings.TrimSpace(query) == "" {
 			return filesFoundMsg{query: query}

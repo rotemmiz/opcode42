@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
 )
 
 // streamChunk is one OpenAI chat-completions SSE chunk.

@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // agentItem is one selectable agent in the agent switcher (GET /agent).
@@ -24,7 +24,7 @@ type agentsLoadedMsg struct {
 
 // loadAgentsCmd fetches GET /agent, dropping hidden/internal agents (compaction,
 // summary, title) so only the user-selectable ones remain.
-func loadAgentsCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
+func loadAgentsCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
 	return func() tea.Msg {
 		var raw []struct {
 			Name        string `json:"name"`

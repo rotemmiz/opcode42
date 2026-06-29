@@ -1,5 +1,5 @@
 // Command diff compares two conformance result files (the "expected" target,
-// normally opencode, and the "actual" target, normally forge) and reports
+// normally opencode, and the "actual" target, normally opcode42) and reports
 // structural differences in the plan 12 §d format. It exits non-zero on any
 // difference not covered by the known-divergence registry.
 //
@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/rotemmiz/forge/conformance/result"
+	"github.com/rotemmiz/opcode42/conformance/result"
 )
 
 func main() {

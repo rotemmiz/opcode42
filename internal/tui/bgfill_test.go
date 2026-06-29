@@ -6,7 +6,7 @@ package tui
 // terminal area: every rendered line must be exactly m.width visible characters
 // wide (lipgloss.Width strips ANSI escapes before measuring). A line shorter
 // than width means transparent cells, which was the white-background bug:
-// forge-dark's light-gray foregrounds (#d6dade) bled through on white terminals.
+// opcode42-dark's light-gray foregrounds (#d6dade) bled through on white terminals.
 //
 // We also test the pickDefaultTheme pure helper directly (darkBg bool) so the
 // light/dark auto-pick logic is covered without needing a real terminal.
@@ -18,7 +18,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // TestPickDefaultTheme verifies the terminal-background auto-pick helper.
@@ -29,8 +29,8 @@ func TestPickDefaultTheme(t *testing.T) {
 		darkBg    bool
 		wantTheme string
 	}{
-		{true, "forge-dark"},
-		{false, "forge-light"},
+		{true, "opcode42-dark"},
+		{false, "opcode42-light"},
 	}
 	for _, tc := range cases {
 		got := pickDefaultTheme(tc.darkBg)
@@ -54,7 +54,7 @@ func TestPickDefaultTheme(t *testing.T) {
 func TestView_BackgroundFill(t *testing.T) {
 	const w, h = 80, 24
 
-	themes := []string{"forge-dark", "forge-light", "monochrome"}
+	themes := []string{"opcode42-dark", "opcode42-light", "monochrome"}
 
 	type scene struct {
 		name  string
@@ -113,7 +113,7 @@ func TestView_BackgroundFill(t *testing.T) {
 // TestView_NoDimensionsNoPanic verifies that View() does not panic and returns
 // something (possibly empty) when width/height are zero — the guard branch.
 func TestView_NoDimensionsNoPanic(_ *testing.T) {
-	for _, tn := range []string{"forge-dark", "forge-light"} {
+	for _, tn := range []string{"opcode42-dark", "opcode42-light"} {
 		m := New(Config{URL: "http://x"})
 		m = m.applyThemeByName(tn)
 		// width==0, height==0 — should not panic, should return body unpainted.

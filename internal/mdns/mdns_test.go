@@ -17,7 +17,7 @@ func freePort(t *testing.T) int {
 }
 
 // TestPublishDualRecords asserts Publish registers both the opencode-compatible
-// _http._tcp record and Forge's _opencode._tcp record (plan 13 §Discovery), and
+// _http._tcp record and Opcode42's _opencode._tcp record (plan 13 §Discovery), and
 // that Shutdown withdraws both and is idempotent / nil-safe.
 func TestPublishDualRecords(t *testing.T) {
 	svc, err := Publish(freePort(t), "", true)

@@ -3,8 +3,8 @@ package server
 import (
 	"net/http"
 
-	"github.com/rotemmiz/forge/internal/instance"
-	"github.com/rotemmiz/forge/internal/lsp"
+	"github.com/rotemmiz/opcode42/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/lsp"
 )
 
 // registerLSPRoutes wires GET /lsp (server status). The route returns the status

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/bus"
 )
 
 func TestEvaluate_DefaultAsk(t *testing.T) {

@@ -1,11 +1,11 @@
 name: conformance
 
 # Phase-A conformance gate (plan 12). Two required checks:
-#   spec-drift  — forged's GET /doc must match the frozen reference
+#   spec-drift  — opcoded's GET /doc must match the frozen reference
 #   self-diff   — opencode-vs-opencode must diff clean (proves the harness/normalizer)
 #
-# The opencode-vs-forge dual-run (scripts/run-conformance.sh dual) is added in
-# Phase B once the agent engine lands; in Phase A forge 501s the endpoints.
+# The opencode-vs-opcode42 dual-run (scripts/run-conformance.sh dual) is added in
+# Phase B once the agent engine lands; in Phase A opcode42 501s the endpoints.
 #
 # The LIVE dual-run (scripts/run-conformance.sh live / live-self) drives a real
 # model and so is NOT a CI gate: it is opt-in and skip-gated on a provider key
@@ -36,11 +36,11 @@ jobs:
         with:
           go-version: "1.26"
           cache: true
-      - name: Build forged
+      - name: Build opcoded
         run: make build
-      - name: Start forged
+      - name: Start opcoded
         run: |
-          ./bin/forged --port 4096 &
+          ./bin/opcoded --port 4096 &
           for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:4096/global/health && break; sleep 1; done
       - name: Spec-drift gate
         run: bash scripts/check-spec-drift.sh http://127.0.0.1:4096

@@ -4,7 +4,7 @@ import "context"
 
 // Provider is a built-in OAuth-capable provider. It mirrors the per-provider
 // `auth` plugin hook opencode loads (plugin/index.ts:88-163), reduced to the
-// loopback authorization-code (PKCE) shape Forge supports today. A provider that
+// loopback authorization-code (PKCE) shape Opcode42 supports today. A provider that
 // also offers an API-key method advertises it via Methods (Type "api"), but the
 // key entry itself flows through PUT /auth/{providerID}; only OAuth methods are
 // driven by this package.

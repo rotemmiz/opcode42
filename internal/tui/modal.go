@@ -8,8 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // modalKind is the active command overlay (none = the normal screen).
@@ -107,7 +107,7 @@ type (
 )
 
 // newSessionCmd creates a session and opens it (no prompt).
-func newSessionCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
+func newSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
 	return func() tea.Msg {
 		var ss Session
 		err := c.PostJSON(ctx, "/session", map[string]any{}, &ss)
@@ -116,7 +116,7 @@ func newSessionCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
 }
 
 // deleteSessionCmd deletes a session by id.
-func deleteSessionCmd(ctx context.Context, c *forgeclient.ForgeClient, id string) tea.Cmd {
+func deleteSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id string) tea.Cmd {
 	return func() tea.Msg {
 		return sessionDeletedMsg{id: id, err: c.Delete(ctx, "/session/"+id)}
 	}

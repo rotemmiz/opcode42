@@ -3,9 +3,9 @@ package server
 import (
 	"net/http"
 
-	"github.com/rotemmiz/forge/internal/config"
-	"github.com/rotemmiz/forge/internal/engine/catalog"
-	"github.com/rotemmiz/forge/internal/resource"
+	"github.com/rotemmiz/opcode42/internal/config"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/resource"
 )
 
 // registerResourceRoutes wires the resource-listing endpoints the TUI reads:

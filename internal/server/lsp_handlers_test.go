@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/auth"
+	"github.com/rotemmiz/opcode42/internal/auth"
 )
 
 // TestLSPStatus_Empty asserts GET /lsp returns an empty JSON array before any

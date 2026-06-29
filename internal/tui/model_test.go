@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 func step(t *testing.T, m Model, msg tea.Msg) (Model, tea.Cmd) {
@@ -47,7 +47,7 @@ func TestUpdate_ConnectionLifecycle(t *testing.T) {
 	}
 
 	// stream open ok → connected, listening, backoff reset
-	m, cmd = step(t, m, streamOpenedMsg{stream: &forgeclient.EventStream{}})
+	m, cmd = step(t, m, streamOpenedMsg{stream: &opcode42client.EventStream{}})
 	if m.conn != Connected || m.stream == nil || cmd == nil {
 		t.Fatalf("after open ok: conn=%v stream=%v", m.conn, m.stream != nil)
 	}
@@ -56,7 +56,7 @@ func TestUpdate_ConnectionLifecycle(t *testing.T) {
 	}
 
 	// an event increments the counter and keeps listening
-	m, cmd = step(t, m, sseEventMsg{ev: forgeclient.SSEEvent{Type: "message.updated"}})
+	m, cmd = step(t, m, sseEventMsg{ev: opcode42client.SSEEvent{Type: "message.updated"}})
 	if m.eventCount != 1 || !strings.Contains(m.status, "1 events") || cmd == nil {
 		t.Fatalf("after event: count=%d status=%q", m.eventCount, m.status)
 	}
@@ -89,7 +89,7 @@ func TestUpdate_WindowSizeAndQuit(t *testing.T) {
 
 func TestViewSplash_RendersWordmark(t *testing.T) {
 	m := New(Config{URL: "http://127.0.0.1:4096"})
-	if !strings.Contains(m.View(), "forge") {
+	if !strings.Contains(m.View(), "opcode42") {
 		t.Fatalf("splash missing wordmark: %q", m.View())
 	}
 }

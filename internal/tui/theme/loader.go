@@ -3,7 +3,7 @@
 // JSON theme loader: parses opencode's opencode.ai/theme.json schema into a
 // Palette for a given mode (dark|light), embeds all 33 bundled theme files,
 // and extends the registry (Palettes / ByName) with the embedded set so that
-// a Forge user can pick gruvbox, tokyonight, catppuccin, etc., exactly as in
+// a Opcode42 user can pick gruvbox, tokyonight, catppuccin, etc., exactly as in
 // opencode (plan 08c §1b).
 //
 // Resolution semantics match opencode's context/theme.tsx resolveColor():
@@ -95,7 +95,7 @@ func loadEmbeddedThemesForMode(dark bool) []Named {
 	return out
 }
 
-// ParseThemeJSON parses the opencode.ai/theme.json bytes into a Forge Palette.
+// ParseThemeJSON parses the opencode.ai/theme.json bytes into a Opcode42 Palette.
 // dark=true resolves the "dark" variant of each token; dark=false resolves
 // "light".  Any token absent from the JSON falls back to Default()/Light().
 func ParseThemeJSON(data []byte, dark bool) (Palette, error) {
@@ -196,7 +196,7 @@ func ParseThemeJSON(data []byte, dark bool) (Palette, error) {
 
 	// getDiffBg resolves a diff background token, substituting the bgPanel
 	// surface for "transparent".  Transparent diff backgrounds mean the theme
-	// relies on terminal transparency; since Forge always paints we use the
+	// relies on terminal transparency; since Opcode42 always paints we use the
 	// nearest panel surface so no cell is left empty.
 	getDiffBg := func(token, bgPanel, fallback string) string {
 		s, ok := resolveToken(token)
@@ -328,7 +328,7 @@ func normalizeHex(h string) string {
 }
 
 // PalettesForMode returns the full ordered theme registry resolved for the
-// requested mode: the 3 native Forge themes first, then the 33 embedded
+// requested mode: the 3 native Opcode42 themes first, then the 33 embedded
 // opencode themes in file-system (alphabetical) order — 36 total.
 //
 // Call this from paths that know the terminal mode (e.g., model.go after
@@ -337,13 +337,13 @@ func PalettesForMode(dark bool) []Named {
 	return append(nativeThemes(), loadEmbeddedThemesForMode(dark)...)
 }
 
-// nativeThemes returns the 3 hand-coded Forge palettes.
+// nativeThemes returns the 3 hand-coded Opcode42 palettes.
 // The native set is mode-independent — Default is always the dark variant,
 // Light always the light variant, Mono always neutral.
 func nativeThemes() []Named {
 	return []Named{
-		{"forge-dark", Default()},
-		{"forge-light", Light()},
+		{"opcode42-dark", Default()},
+		{"opcode42-light", Light()},
 		{"monochrome", Mono()},
 	}
 }

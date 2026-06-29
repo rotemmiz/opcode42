@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/rotemmiz/forge/conformance/result"
+	"github.com/rotemmiz/opcode42/conformance/result"
 )
 
 // Run executes every scenario against the target daemon and returns a result
@@ -23,7 +23,7 @@ func Run(target, user, pass string) (*result.File, error) {
 }
 
 func runScenario(target, user, pass string, sc Scenario) result.Scenario {
-	dir, err := os.MkdirTemp("", "forge-conf-")
+	dir, err := os.MkdirTemp("", "opcode42-conf-")
 	if err != nil {
 		return result.Scenario{Name: sc.Name, Steps: []result.Step{errStep("mkdtemp", err)}}
 	}

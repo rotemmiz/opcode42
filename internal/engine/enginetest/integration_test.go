@@ -7,15 +7,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/engine"
-	"github.com/rotemmiz/forge/internal/engine/catalog"
-	"github.com/rotemmiz/forge/internal/engine/llm"
-	"github.com/rotemmiz/forge/internal/engine/message"
-	"github.com/rotemmiz/forge/internal/engine/permission"
-	"github.com/rotemmiz/forge/internal/engine/registry"
-	"github.com/rotemmiz/forge/internal/engine/tool"
-	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/engine"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/permission"
+	"github.com/rotemmiz/opcode42/internal/engine/registry"
+	"github.com/rotemmiz/opcode42/internal/engine/tool"
+	"github.com/rotemmiz/opcode42/internal/storage"
 )
 
 // rig is a full engine wired over an in-memory store + bus + mock provider, the

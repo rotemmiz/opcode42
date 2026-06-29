@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/engine/llm"
-	"github.com/rotemmiz/forge/internal/engine/message"
-	"github.com/rotemmiz/forge/internal/engine/processor"
-	"github.com/rotemmiz/forge/internal/id"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/processor"
+	"github.com/rotemmiz/opcode42/internal/id"
 )
 
 // Compaction tuning (compaction.ts:35-39). The summary preserves the last

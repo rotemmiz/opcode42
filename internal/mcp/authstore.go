@@ -12,7 +12,7 @@ import (
 )
 
 // authEntry is one MCP server's persisted OAuth state. It is the exact wire shape
-// of opencode's McpAuth.Entry (mcp/auth.ts:23-30), so a token Forge stores in
+// of opencode's McpAuth.Entry (mcp/auth.ts:23-30), so a token Opcode42 stores in
 // mcp-auth.json is read by opencode and vice-versa. Fields are mutable across the
 // flow: clientInfo is filled by dynamic client registration, codeVerifier/
 // oauthState during the authorize step, tokens after the exchange.

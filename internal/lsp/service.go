@@ -12,7 +12,7 @@ import (
 
 	"go.lsp.dev/protocol"
 
-	"github.com/rotemmiz/forge/internal/config"
+	"github.com/rotemmiz/opcode42/internal/config"
 )
 
 // Service is one instance's LSP lifecycle manager. It owns lazy server spawning
@@ -344,7 +344,7 @@ func (s *Service) HasClients(file string) bool {
 
 // StatusItem is one running server's wire status, matching opencode's LSPStatus
 // (lsp.ts:53-59 / openapi LSPStatus): id, name, root (relative to the instance
-// directory), and a connected/error status. Forge only retains connected
+// directory), and a connected/error status. Opcode42 only retains connected
 // clients (a failed handshake lands the server in the broken set, not here), so
 // Status is always "connected" today.
 type StatusItem struct {

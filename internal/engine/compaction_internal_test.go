@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/engine/message"
-	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/storage"
 )
 
 func user(id string) message.WithParts {

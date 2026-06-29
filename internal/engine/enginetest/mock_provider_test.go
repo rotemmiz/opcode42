@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
 )
 
 func drain(t *testing.T, ch <-chan llm.Event) []llm.Event {

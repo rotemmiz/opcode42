@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/credstore"
+	"github.com/rotemmiz/opcode42/internal/credstore"
 )
 
 // ErrNoOAuthToken — the provider has no stored "oauth" record (never signed in,

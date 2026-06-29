@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"testing"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
-func ev(typ string, props any) forgeclient.SSEEvent {
+func ev(typ string, props any) opcode42client.SSEEvent {
 	raw, _ := json.Marshal(props)
-	return forgeclient.SSEEvent{Type: typ, Properties: raw}
+	return opcode42client.SSEEvent{Type: typ, Properties: raw}
 }
 
 func TestReduce_SessionsSortedUpsertDelete(t *testing.T) {
@@ -58,8 +58,8 @@ func TestReduce_PartDeltaAppendsText(t *testing.T) {
 
 func TestReduce_IgnoresMalformedAndUnknown(t *testing.T) {
 	s := newStore()
-	s = s.Reduce(forgeclient.SSEEvent{Type: "message.updated", Properties: json.RawMessage(`not json`)})
-	s = s.Reduce(forgeclient.SSEEvent{Type: "totally.unknown", Properties: json.RawMessage(`{}`)})
+	s = s.Reduce(opcode42client.SSEEvent{Type: "message.updated", Properties: json.RawMessage(`not json`)})
+	s = s.Reduce(opcode42client.SSEEvent{Type: "totally.unknown", Properties: json.RawMessage(`{}`)})
 	if len(s.sessions) != 0 || len(s.messages) != 0 {
 		t.Fatalf("malformed/unknown events should be no-ops")
 	}

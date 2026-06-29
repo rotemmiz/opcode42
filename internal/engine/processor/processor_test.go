@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/engine/catalog"
-	"github.com/rotemmiz/forge/internal/engine/llm"
-	"github.com/rotemmiz/forge/internal/engine/message"
-	"github.com/rotemmiz/forge/internal/id"
-	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/id"
+	"github.com/rotemmiz/opcode42/internal/storage"
 )
 
 func decodeJSON(raw json.RawMessage, dst any) error { return json.Unmarshal(raw, dst) }

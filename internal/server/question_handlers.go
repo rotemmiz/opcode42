@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/rotemmiz/forge/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/instance"
 )
 
 // registerQuestionRoutes wires the question reply/reject endpoints onto the

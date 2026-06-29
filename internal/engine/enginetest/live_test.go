@@ -6,16 +6,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/engine"
-	"github.com/rotemmiz/forge/internal/engine/catalog"
-	"github.com/rotemmiz/forge/internal/engine/llm"
-	"github.com/rotemmiz/forge/internal/engine/message"
-	"github.com/rotemmiz/forge/internal/engine/permission"
-	"github.com/rotemmiz/forge/internal/engine/provider/openai"
-	"github.com/rotemmiz/forge/internal/engine/registry"
-	"github.com/rotemmiz/forge/internal/engine/tool"
-	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/engine"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/permission"
+	"github.com/rotemmiz/opcode42/internal/engine/provider/openai"
+	"github.com/rotemmiz/opcode42/internal/engine/registry"
+	"github.com/rotemmiz/opcode42/internal/engine/tool"
+	"github.com/rotemmiz/opcode42/internal/storage"
 )
 
 // TestLive_RealTextPrompt drives the engine through the real OpenAI-compatible
@@ -23,22 +23,22 @@ import (
 // check and is SKIPPED unless the endpoint is configured, so deterministic CI
 // never touches the network:
 //
-//	FORGE_TEST_BASE_URL  e.g. https://api.groq.com/openai/v1
-//	FORGE_TEST_MODEL     e.g. llama-3.3-70b-versatile
-//	FORGE_TEST_API_KEY   provider key (omit for keyless local endpoints, e.g. Ollama)
+//	OPCODE_TEST_BASE_URL  e.g. https://api.groq.com/openai/v1
+//	OPCODE_TEST_MODEL     e.g. llama-3.3-70b-versatile
+//	OPCODE_TEST_API_KEY   provider key (omit for keyless local endpoints, e.g. Ollama)
 //
 // Example:
 //
-//	FORGE_TEST_BASE_URL=https://api.groq.com/openai/v1 \
-//	FORGE_TEST_MODEL=llama-3.3-70b-versatile FORGE_TEST_API_KEY=$GROQ_API_KEY \
+//	OPCODE_TEST_BASE_URL=https://api.groq.com/openai/v1 \
+//	OPCODE_TEST_MODEL=llama-3.3-70b-versatile OPCODE_TEST_API_KEY=$GROQ_API_KEY \
 //	go test ./internal/engine/enginetest -run TestLive -v
 func TestLive_RealTextPrompt(t *testing.T) {
-	baseURL := os.Getenv("FORGE_TEST_BASE_URL")
-	model := os.Getenv("FORGE_TEST_MODEL")
+	baseURL := os.Getenv("OPCODE_TEST_BASE_URL")
+	model := os.Getenv("OPCODE_TEST_MODEL")
 	if baseURL == "" || model == "" {
-		t.Skip("set FORGE_TEST_BASE_URL and FORGE_TEST_MODEL to run the live provider test")
+		t.Skip("set OPCODE_TEST_BASE_URL and OPCODE_TEST_MODEL to run the live provider test")
 	}
-	apiKey := os.Getenv("FORGE_TEST_API_KEY")
+	apiKey := os.Getenv("OPCODE_TEST_API_KEY")
 
 	db, err := storage.Open(":memory:")
 	if err != nil {

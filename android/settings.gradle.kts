@@ -19,7 +19,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "forge-android"
+rootProject.name = "opcode42-android"
 
 include(":app")
 include(":core:model")

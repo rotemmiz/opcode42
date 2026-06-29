@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/engine"
-	"github.com/rotemmiz/forge/internal/engine/llm"
-	"github.com/rotemmiz/forge/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
 )
 
 // seedTurn inserts a completed user+assistant turn directly into the store so a

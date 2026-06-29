@@ -21,7 +21,7 @@ type editorDoneMsg struct {
 // suspends the TUI for the duration. The file is read back on editorDoneMsg.
 func openEditorCmd(buffer string) tea.Cmd {
 	editor := firstNonEmpty(os.Getenv("EDITOR"), os.Getenv("VISUAL"))
-	f, err := os.CreateTemp("", "forge-compose-*.md")
+	f, err := os.CreateTemp("", "opcode42-compose-*.md")
 	if err != nil {
 		return func() tea.Msg { return editorDoneMsg{err: err} }
 	}

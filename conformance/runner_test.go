@@ -4,14 +4,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/server"
+	"github.com/rotemmiz/opcode42/internal/server"
 )
 
-// TestRunnerAgainstForgedSkeleton exercises the whole runner against the
-// in-process forged skeleton (no opencode needed). The skeleton 501s the
+// TestRunnerAgainstOpcodedSkeleton exercises the whole runner against the
+// in-process opcoded skeleton (no opencode needed). The skeleton 501s the
 // documented endpoints, so this proves the framework runs end-to-end and
 // produces a well-formed result file; it is not a conformance assertion.
-func TestRunnerAgainstForgedSkeleton(t *testing.T) {
+func TestRunnerAgainstOpcodedSkeleton(t *testing.T) {
 	h, err := server.New(server.Options{Version: "test"})
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestRunnerAgainstForgedSkeleton(t *testing.T) {
 		t.Fatal("missing session-create-list steps")
 	}
 	if sc.Steps[0].Status != 501 {
-		t.Errorf("forged skeleton should 501 POST /session, got %d", sc.Steps[0].Status)
+		t.Errorf("opcoded skeleton should 501 POST /session, got %d", sc.Steps[0].Status)
 	}
 	if sc.Steps[0].Path != "/session" {
 		t.Errorf("path: want /session, got %q", sc.Steps[0].Path)

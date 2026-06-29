@@ -1,10 +1,10 @@
 # Plan 10 — Functional Test Strategy
 
-> Scope: unit, integration, and component tests across all Forge subsystems.
+> Scope: unit, integration, and component tests across all Opcode42 subsystems.
 > Covers Go unit tests, daemon integration tests, mock-LLM agent-loop tests,
 > MCP/LSP ecosystem tests, mobile UI tests, and TUI smoke tests.
 > The conformance harness (plan 12) is the complementary correctness gate for
-> wire-level interop; this plan owns correctness of the Forge implementation itself.
+> wire-level interop; this plan owns correctness of the Opcode42 implementation itself.
 
 ---
 
@@ -16,7 +16,7 @@ opencode's test suite (`packages/opencode/test/`) provides a useful reference:
 - Fake boundary layers in `test/fake/*` (`ProviderTest.fake`, `SkillTest.empty`).
 - Assertions against the event bus, not the UI.
 
-Forge's analog uses Go's standard `testing` package with a three-tier structure that
+Opcode42's analog uses Go's standard `testing` package with a three-tier structure that
 mirrors this. The key design principle is the same: **test against the event bus and
 stored state, not the transport layer**. HTTP/SSE tests exercise the transport but
 assert against the same underlying state.
@@ -26,12 +26,12 @@ Reference: `packages/opencode/src/session/prompt.ts`, `processor.ts`,
 
 ---
 
-## Test Pyramid for Forge
+## Test Pyramid for Opcode42
 
 ```
            ┌────────────────────────┐
            │  Live / E2E (gated)    │  real LLM API, real MCP servers
-           │  ~10 tests             │  skipped unless FORGE_LIVE_TESTS=1
+           │  ~10 tests             │  skipped unless OPCODE_LIVE_TESTS=1
            ├────────────────────────┤
            │  Daemon integration    │  spin daemon, hit HTTP/SSE, assert
            │  ~100 tests            │  mock LLM, mock MCP echo server
@@ -120,7 +120,7 @@ processes. Table-driven where there are more than three cases. Target: < 1ms per
 
 ## Daemon Integration Tests
 
-These tests spin a real `forged` process (or use the `daemon.TestDaemon` helper that
+These tests spin a real `opcoded` process (or use the `daemon.TestDaemon` helper that
 starts it in-process) and exercise actual HTTP/SSE endpoints.
 
 Location: `tests/integration/daemon/`
@@ -128,7 +128,7 @@ Location: `tests/integration/daemon/`
 ### Harness
 
 ```go
-// TestDaemon starts forged in-process with an isolated tmpdir and SQLite.
+// TestDaemon starts opcoded in-process with an isolated tmpdir and SQLite.
 // It returns a client pointed at the test server.
 type TestDaemon struct {
     Client  *sdk.Client   // generated Go client (plan 06)
@@ -324,7 +324,7 @@ Location: `tests/integration/tui/`
 The Bubble Tea TUI is tested by driving it via `os/exec` and asserting on its
 terminal output using the `vhs` tool or a custom VT100 parser.
 
-- `TestTUIStartup`: launch `forged tui`; assert initial session list renders
+- `TestTUIStartup`: launch `opcoded tui`; assert initial session list renders
   within 2s.
 - `TestTUIPromptSubmit`: type a prompt; mock LLM returns text; assert text
   appears in message pane.
@@ -332,7 +332,7 @@ terminal output using the `vhs` tool or a custom VT100 parser.
   spinner then checkmark.
 - `TestTUIPermissionPrompt`: mock LLM triggers permission ask; assert modal dialog;
   send Enter to approve; assert tool completes.
-- `TestTUIAttach`: start daemon separately; run `forged tui --attach <url>`;
+- `TestTUIAttach`: start daemon separately; run `opcoded tui --attach <url>`;
   assert connects and session list populates.
 
 ---
@@ -412,7 +412,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
     env:
-      FORGE_LIVE_TESTS: "1"
+      OPCODE_LIVE_TESTS: "1"
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - go test ./tests/live/... -count=1 -timeout 10m
@@ -457,14 +457,14 @@ pass, all golden SSE files match, and the plan 12 conformance suite is green.
 
 ## Review pass (2026-06-03) — single source of truth + shape drift
 
-The three-tier pyramid and the plan-12 division of labor ("this plan owns Forge-internal
+The three-tier pyramid and the plan-12 division of labor ("this plan owns Opcode42-internal
 correctness; plan 12 owns wire interop") are right. Fixes:
 
 **The one structural risk: golden SSE files must derive from opencode, not be authored.**
 The `sse_golden/` examples here are hand-written. For a wire-compat project that creates a **second,
 competing source of truth** for SSE shapes alongside plan 12's recorded opencode cassettes. Make
 plan 10's golden files **generated from plan 12's recordings** (same normalizer), so a shape change
-in opencode updates both. Otherwise plan 10 validates Forge against Forge's own assumptions.
+in opencode updates both. Otherwise plan 10 validates Opcode42 against Opcode42's own assumptions.
 
 **Shape/endpoint drift to correct (matches reality + the other plans):**
 - **Config is JSONC, not TOML.** `TestConfigLoad: parse valid TOML` + `testdata/config/valid.toml`

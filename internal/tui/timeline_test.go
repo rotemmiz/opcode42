@@ -44,7 +44,7 @@ func TestTimelineModal_SelectReverts(t *testing.T) {
 func TestStatusLines_ContainsDiagnostics(t *testing.T) {
 	m := New(Config{URL: "http://h:1", Provider: "google", Model: "gemini", SessionID: "ses_1"})
 	lines := strings.Join(m.statusLines(), "\n")
-	for _, want := range []string{"daemon", "h:1", "state", "model", "gemini", "agent", "build", "theme", "forge-dark", "session", "ses_1"} {
+	for _, want := range []string{"daemon", "h:1", "state", "model", "gemini", "agent", "build", "theme", "opcode42-dark", "session", "ses_1"} {
 		if !strings.Contains(lines, want) {
 			t.Fatalf("status lines missing %q:\n%s", want, lines)
 		}

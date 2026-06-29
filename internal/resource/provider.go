@@ -4,8 +4,8 @@ import (
 	"os"
 	"sort"
 
-	"github.com/rotemmiz/forge/internal/credstore"
-	"github.com/rotemmiz/forge/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/credstore"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
 )
 
 // Provider is the wire shape served in GET /provider's `all` array (openapi

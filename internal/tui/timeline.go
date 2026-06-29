@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // Timeline + Status are the last two of the seven command modals (design
@@ -44,7 +44,7 @@ type revertedMsg struct{ err error }
 // revertCmd reverts the session to before the given user turn — that turn and
 // every message after it are dropped (opencode's checkpoint mechanism); it is
 // reversible via POST /session/:id/unrevert.
-func revertCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID, messageID string) tea.Cmd {
+func revertCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID, messageID string) tea.Cmd {
 	return func() tea.Msg {
 		err := c.PostJSON(ctx, "/session/"+sessionID+"/revert", map[string]string{"messageID": messageID}, nil)
 		return revertedMsg{err: err}

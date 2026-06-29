@@ -22,7 +22,7 @@ kotlin {
 }
 
 android {
-    namespace = "dev.forge.core.model"
+    namespace = "dev.opcode42.core.model"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {

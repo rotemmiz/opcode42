@@ -11,7 +11,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/rotemmiz/forge/internal/auth"
+	"github.com/rotemmiz/opcode42/internal/auth"
 )
 
 func TestPtyShells(t *testing.T) {

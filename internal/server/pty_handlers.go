@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/rotemmiz/forge/internal/instance"
-	"github.com/rotemmiz/forge/internal/pty"
+	"github.com/rotemmiz/opcode42/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/pty"
 )
 
 // ptyConnectTokenHeader / Value gate the connect-token endpoint; a browser must

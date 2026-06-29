@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/auth"
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/instance"
-	"github.com/rotemmiz/forge/internal/session"
-	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/auth"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/session"
+	"github.com/rotemmiz/opcode42/internal/storage"
 )
 
 // newBackedServer builds a server with a real SQLite store and an empty config
@@ -27,7 +27,7 @@ func newBackedServer(t *testing.T, authCfg auth.Config) http.Handler {
 	} {
 		t.Setenv(k, "")
 	}
-	db, err := storage.Open(filepath.Join(t.TempDir(), "forge.db"))
+	db, err := storage.Open(filepath.Join(t.TempDir(), "opcode42.db"))
 	if err != nil {
 		t.Fatalf("storage.Open: %v", err)
 	}

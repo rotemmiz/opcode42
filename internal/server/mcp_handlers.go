@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/rotemmiz/forge/internal/instance"
-	"github.com/rotemmiz/forge/internal/mcp"
+	"github.com/rotemmiz/opcode42/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/mcp"
 )
 
 // registerMCPRoutes wires the /mcp endpoints, matching opencode's groups/mcp.ts:
@@ -195,7 +195,7 @@ func mcpAuthCallbackHandler(instances *instance.Manager) http.HandlerFunc {
 
 // mcpAuthAuthenticateHandler starts an OAuth flow that the caller completes via
 // the callback (handlers/mcp.ts authAuthenticate → Status). opencode opens a
-// browser on the daemon host and blocks for the loopback callback; Forge's daemon
+// browser on the daemon host and blocks for the loopback callback; Opcode42's daemon
 // has no interactive browser, so it starts the flow and returns needs_auth — the
 // caller opens the authorization URL (from POST /mcp/{name}/auth) and posts the
 // code back to /auth/callback. See the known-divergence note.

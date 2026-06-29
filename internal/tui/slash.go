@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // Slash commands: typing "/" in the composer opens an autocomplete popup of
@@ -81,7 +81,7 @@ type commandsLoadedMsg struct {
 }
 
 // loadCommandsCmd fetches the daemon's commands and tags them as slashDaemon.
-func loadCommandsCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
+func loadCommandsCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
 	return func() tea.Msg {
 		var raw []struct {
 			Name        string `json:"name"`
@@ -109,7 +109,7 @@ type commandBody struct {
 }
 
 // runCommandCmd runs a daemon command in an existing session.
-func runCommandCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID, command, arguments string) tea.Cmd {
+func runCommandCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID, command, arguments string) tea.Cmd {
 	return func() tea.Msg {
 		err := c.PostJSON(ctx, "/session/"+sessionID+"/command", commandBody{Command: command, Arguments: arguments}, nil)
 		return promptSentMsg{err: err}
@@ -117,7 +117,7 @@ func runCommandCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID, c
 }
 
 // createSessionForCommandCmd creates a session, carrying a command to run next.
-func createSessionForCommandCmd(ctx context.Context, c *forgeclient.ForgeClient, command, arguments string) tea.Cmd {
+func createSessionForCommandCmd(ctx context.Context, c *opcode42client.Opcode42Client, command, arguments string) tea.Cmd {
 	return func() tea.Msg {
 		var ss Session
 		err := c.PostJSON(ctx, "/session", map[string]any{}, &ss)

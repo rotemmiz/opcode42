@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/bus"
 )
 
 // fakeSender records every Send and can be told to report a token unregistered.

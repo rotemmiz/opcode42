@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
-	"github.com/rotemmiz/forge/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
 )
 
 // wantsStructuredOutput reports whether the user turn requested a json_schema

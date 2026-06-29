@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // wireWithParts is the GET /session/:id/message item shape ({info, parts}).
@@ -28,7 +28,7 @@ type (
 )
 
 // loadSessionsCmd fetches the session list (newest-first).
-func loadSessionsCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
+func loadSessionsCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
 	return func() tea.Msg {
 		var sessions []Session
 		err := c.GetJSON(ctx, "/session", &sessions)
@@ -37,7 +37,7 @@ func loadSessionsCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
 }
 
 // loadMessagesCmd fetches a session's message history with parts.
-func loadMessagesCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID string) tea.Cmd {
+func loadMessagesCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID string) tea.Cmd {
 	return func() tea.Msg {
 		var items []wireWithParts
 		err := c.GetJSON(ctx, "/session/"+sessionID+"/message", &items)

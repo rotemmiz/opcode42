@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // Session-operation commands (plan 08a §A). Each is a thin wrapper over the SDK;
@@ -31,7 +31,7 @@ type (
 )
 
 // renameSessionCmd sets a session's title (PATCH /session/{id}).
-func renameSessionCmd(ctx context.Context, c *forgeclient.ForgeClient, id, title string) tea.Cmd {
+func renameSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id, title string) tea.Cmd {
 	return func() tea.Msg {
 		var ss Session
 		err := c.PatchJSON(ctx, "/session/"+id, map[string]any{"title": title}, &ss)
@@ -40,7 +40,7 @@ func renameSessionCmd(ctx context.Context, c *forgeclient.ForgeClient, id, title
 }
 
 // shareSessionCmd publishes a share link (POST /session/{id}/share → Session).
-func shareSessionCmd(ctx context.Context, c *forgeclient.ForgeClient, id string) tea.Cmd {
+func shareSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id string) tea.Cmd {
 	return func() tea.Msg {
 		var ss Session
 		err := c.PostJSON(ctx, "/session/"+id+"/share", map[string]any{}, &ss)
@@ -49,7 +49,7 @@ func shareSessionCmd(ctx context.Context, c *forgeclient.ForgeClient, id string)
 }
 
 // unshareSessionCmd revokes the share link (DELETE /session/{id}/share → Session).
-func unshareSessionCmd(ctx context.Context, c *forgeclient.ForgeClient, id string) tea.Cmd {
+func unshareSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id string) tea.Cmd {
 	return func() tea.Msg {
 		var ss Session
 		err := c.DeleteJSON(ctx, "/session/"+id+"/share", &ss)
@@ -59,7 +59,7 @@ func unshareSessionCmd(ctx context.Context, c *forgeclient.ForgeClient, id strin
 
 // summarizeSessionCmd compacts the context (POST /session/{id}/summarize). The
 // endpoint requires a model; pass the effective prompt model.
-func summarizeSessionCmd(ctx context.Context, c *forgeclient.ForgeClient, id string, pm promptModel) tea.Cmd {
+func summarizeSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id string, pm promptModel) tea.Cmd {
 	return func() tea.Msg {
 		body := map[string]any{"providerID": pm.Provider, "modelID": pm.Model}
 		return summarizedMsg{err: c.PostJSON(ctx, "/session/"+id+"/summarize", body, nil)}
@@ -67,14 +67,14 @@ func summarizeSessionCmd(ctx context.Context, c *forgeclient.ForgeClient, id str
 }
 
 // abortSessionCmd interrupts a running turn (POST /session/{id}/abort).
-func abortSessionCmd(ctx context.Context, c *forgeclient.ForgeClient, id string) tea.Cmd {
+func abortSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id string) tea.Cmd {
 	return func() tea.Msg {
 		return abortedMsg{err: c.PostJSON(ctx, "/session/"+id+"/abort", map[string]any{}, nil)}
 	}
 }
 
 // forkSessionCmd branches a session (POST /session/{id}/fork → new Session).
-func forkSessionCmd(ctx context.Context, c *forgeclient.ForgeClient, id string) tea.Cmd {
+func forkSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id string) tea.Cmd {
 	return func() tea.Msg {
 		var ss Session
 		err := c.PostJSON(ctx, "/session/"+id+"/fork", map[string]any{}, &ss)

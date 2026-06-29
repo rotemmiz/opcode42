@@ -3,7 +3,7 @@ package resource
 import (
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
 )
 
 // TestBuildProviderListModelWireShape asserts BuildProviderList transforms raw

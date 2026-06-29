@@ -5,8 +5,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/id"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/id"
 )
 
 // DeniedError is returned by Ask when a pattern is denied or a Request is rejected.

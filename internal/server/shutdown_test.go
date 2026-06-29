@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/instance"
-	"github.com/rotemmiz/forge/internal/session"
-	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/session"
+	"github.com/rotemmiz/opcode42/internal/storage"
 )
 
 // TestSSEStreamClosesOnBaseCancel proves graceful shutdown unblocks a live SSE
@@ -21,7 +21,7 @@ import (
 // drain (plan 01 §9).
 func TestSSEStreamClosesOnBaseCancel(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), ".config"))
-	db, err := storage.Open(filepath.Join(t.TempDir(), "forge.db"))
+	db, err := storage.Open(filepath.Join(t.TempDir(), "opcode42.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

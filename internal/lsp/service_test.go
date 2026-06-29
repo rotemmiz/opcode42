@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/config"
+	"github.com/rotemmiz/opcode42/internal/config"
 )
 
 // fakeResolver returns canned binary paths so tests don't depend on real LSP

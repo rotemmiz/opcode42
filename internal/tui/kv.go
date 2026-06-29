@@ -27,7 +27,7 @@ func kvPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "forge", "tui-kv.json")
+	return filepath.Join(dir, "opcode42", "tui-kv.json")
 }
 
 func loadKV() kvData {

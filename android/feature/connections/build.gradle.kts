@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.forge.feature.connections"
+    namespace = "dev.opcode42.feature.connections"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {

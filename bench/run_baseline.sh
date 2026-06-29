@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Forge performance baseline runner (plan 11, W0).
+# Opcode42 performance baseline runner (plan 11, W0).
 #
-# Stands up the real opencode daemon and forged on THIS machine and measures the
+# Stands up the real opencode daemon and opcoded on THIS machine and measures the
 # four W0 baseline metrics head-to-head (cold start, idle RSS, SSE connection
 # fan-out, request throughput), writing a dated JSON + Markdown report under
 # bench/results/.
 #
 # Prerequisites:
 #   - `opencode` on PATH (the compatibility reference daemon).
-#   - A Go toolchain (the harness builds forged from ./cmd/forged).
+#   - A Go toolchain (the harness builds opcoded from ./cmd/opcoded).
 #
 # Usage:
 #   bench/run_baseline.sh
@@ -18,14 +18,14 @@
 #   BENCH_SUBS=50              concurrent SSE subscribers for fan-out + RSS
 #   BENCH_TP_CONCURRENCY=16    throughput load workers
 #   BENCH_TP_SECONDS=5         throughput window per endpoint
-#   FORGE_PORT=4097 / OPENCODE_PORT=4096
+#   OPCODE_PORT=4097 / OPENCODE_PORT=4096
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RESULTS="$REPO_ROOT/bench/results"
 mkdir -p "$RESULTS"
 
-FORGE_PORT="${FORGE_PORT:-4097}"
+OPCODE_PORT="${OPCODE_PORT:-4097}"
 OPENCODE_PORT="${OPENCODE_PORT:-4096}"
 BENCH_USER="${BENCH_USER:-opencode}"
 BENCH_PASS="${BENCH_PASS:-bench-baseline}"
@@ -35,9 +35,9 @@ if ! command -v opencode >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> building forged"
-FORGED_BIN="$(mktemp -d)/forged"
-(cd "$REPO_ROOT" && go build -o "$FORGED_BIN" ./cmd/forged)
+echo "==> building opcoded"
+OPCODED_BIN="$(mktemp -d)/opcoded"
+(cd "$REPO_ROOT" && go build -o "$OPCODED_BIN" ./cmd/opcoded)
 
 # Isolate opencode's HOME so its SQLite DB does not bleed across runs and the
 # bench directory is used as the routed project directory for both daemons.
@@ -47,8 +47,8 @@ BENCH_LOG_DIR="$(mktemp -d)"
 
 echo "==> running baseline (this forks daemons; takes ~1-2 min)"
 cd "$REPO_ROOT"
-BENCH_FORGE_BIN="$FORGED_BIN" \
-BENCH_FORGE_PORT="$FORGE_PORT" \
+BENCH_OPCODE_BIN="$OPCODED_BIN" \
+BENCH_OPCODE_PORT="$OPCODE_PORT" \
 BENCH_OPENCODE_BIN="$(command -v opencode)" \
 BENCH_OPENCODE_PORT="$OPENCODE_PORT" \
 BENCH_USER="$BENCH_USER" \

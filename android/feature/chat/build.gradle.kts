@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.forge.feature.chat"
+    namespace = "dev.opcode42.feature.chat"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {

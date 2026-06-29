@@ -1,4 +1,4 @@
-# Contributing to Forge
+# Contributing to Opcode42
 
 ## Prerequisites
 
@@ -8,15 +8,15 @@
 ## Building and Running
 
 ```sh
-make build        # compiles bin/forged
-./bin/forged serve
+make build        # compiles bin/opcoded
+./bin/opcoded serve
 ```
 
 Or without Make:
 
 ```sh
-go build -o bin/forged ./cmd/forged
-./bin/forged serve
+go build -o bin/opcoded ./cmd/opcoded
+./bin/opcoded serve
 ```
 
 ## Running Tests

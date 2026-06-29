@@ -9,11 +9,11 @@ import (
 
 	"github.com/tailscale/hujson"
 
-	"github.com/rotemmiz/forge/internal/worktree"
+	"github.com/rotemmiz/opcode42/internal/worktree"
 )
 
 // schemaURL is opencode's config $schema, seeded as a default so editor
-// completion works (config.ts:447-453). Forge injects it on read rather than
+// completion works (config.ts:447-453). Opcode42 injects it on read rather than
 // writing files.
 const schemaURL = "https://opencode.ai/config.json"
 

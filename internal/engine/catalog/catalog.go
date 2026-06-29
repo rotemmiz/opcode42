@@ -1,4 +1,4 @@
-// Package catalog provides the model catalog and pricing Forge reads from
+// Package catalog provides the model catalog and pricing Opcode42 reads from
 // models.dev. It mirrors the models.dev api.json shape
 // (opencode packages/core/src/models-dev.ts:44-107) and exposes capability and
 // cost lookups for token/cost accounting (M4) and tool routing (M8).
@@ -8,7 +8,7 @@
 // fixture so they never touch the network.
 package catalog
 
-import "github.com/rotemmiz/forge/internal/engine/message"
+import "github.com/rotemmiz/opcode42/internal/engine/message"
 
 // Catalog is the top-level models.dev map: providerID -> Provider.
 type Catalog map[string]Provider

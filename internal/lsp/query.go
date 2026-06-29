@@ -9,7 +9,7 @@ import (
 
 // queryRequestTimeout bounds a single LSP query request. opencode relies on the
 // vscode-jsonrpc default (no explicit per-request timeout on query calls,
-// lsp/lsp.ts:381-482); Forge bounds each call so a wedged server cannot hang the
+// lsp/lsp.ts:381-482); Opcode42 bounds each call so a wedged server cannot hang the
 // agent loop. It reuses the diagnostics request budget (3s).
 const queryRequestTimeout = diagnosticsRequestWait
 
@@ -40,7 +40,7 @@ func (c *Client) textDocumentRequest(ctx context.Context, method, file string, p
 // call issues a raw JSON-RPC request and returns the result as raw JSON, or nil
 // on error. The result is captured into a json.RawMessage so the exact LSP wire
 // shape flows through unchanged (opencode passes the raw responses to
-// JSON.stringify; Forge does the same).
+// JSON.stringify; Opcode42 does the same).
 func (c *Client) call(ctx context.Context, method string, params any) json.RawMessage {
 	rctx, cancel := context.WithTimeout(ctx, queryRequestTimeout)
 	defer cancel()

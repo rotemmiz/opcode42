@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/engine/tool"
+	"github.com/rotemmiz/opcode42/internal/engine/tool"
 )
 
 func TestSkillEndpoint(t *testing.T) {

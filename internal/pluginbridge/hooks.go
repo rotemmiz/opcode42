@@ -4,7 +4,7 @@ import "time"
 
 // Hook names mirror opencode's authoritative hook set
 // (opencode/packages/plugin/src/index.ts:222-334, the `Hooks` interface).
-// Forge routes each call site through Bridge.Trigger using these constants so
+// Opcode42 routes each call site through Bridge.Trigger using these constants so
 // the wire method name matches what the Node/Bun host dispatches to plugins.
 const (
 	HookConfig                 = "config"

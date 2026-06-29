@@ -1,4 +1,4 @@
-# goreleaser config for the Forge daemon (plan 13 §Packaging & Ops).
+# goreleaser config for the Opcode42 daemon (plan 13 §Packaging & Ops).
 #
 # Produces a single static, CGO-free binary per platform (modernc.org/sqlite is
 # pure Go, so CGO_ENABLED=0 keeps the binary self-contained and small — plan 13
@@ -7,16 +7,16 @@
 #   goreleaser release --snapshot --clean
 version: 2
 
-project_name: forge
+project_name: opcode42
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: forged
-    main: ./cmd/forged
-    binary: forged
+  - id: opcoded
+    main: ./cmd/opcoded
+    binary: opcoded
     env:
       - CGO_ENABLED=0
     flags:
@@ -37,10 +37,10 @@ builds:
       - arm64
 
 archives:
-  - id: forge
+  - id: opcode42
     ids:
-      - forged
-    # forge_linux_amd64.tar.gz, etc. (plan 13 artifact naming).
+      - opcoded
+    # opcode42_linux_amd64.tar.gz, etc. (plan 13 artifact naming).
     name_template: >-
       {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}
     formats:

@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/api/spec"
+	"github.com/rotemmiz/opcode42/internal/api/spec"
 )
 
 // TestEmittedSpecDiffsCleanAgainstFrozenContract is the offline drift gate (plan
-// 06 Phase 2 / M10). It builds a fully-wired daemon, fetches the spec Forge
+// 06 Phase 2 / M10). It builds a fully-wired daemon, fetches the spec Opcode42
 // self-emits at GET /openapi.json (derived from the daemon's actual route table),
 // and classifies it against the frozen reference:
 //

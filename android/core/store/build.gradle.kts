@@ -27,7 +27,7 @@ kotlin {
 }
 
 android {
-    namespace = "dev.forge.core.store"
+    namespace = "dev.opcode42.core.store"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {

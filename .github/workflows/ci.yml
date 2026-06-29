@@ -9,6 +9,17 @@ permissions:
   contents: read
 
 jobs:
+  rename-gate:
+    # Acceptance gate for the Opcode42 rename (plans/14 §2.7): asserts the rename
+    # is complete (no stray legacy name, no legacy-named paths), the opencode wire
+    # identifiers are untouched, and the new Opcode42 names are present. Pure
+    # git-grep; no toolchain needed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rename acceptance gate
+        run: bash scripts/check-rename.sh
+
   build-test-lint:
     runs-on: ubuntu-latest
     steps:
@@ -34,7 +45,7 @@ jobs:
         run: go test ./...
 
   codegen-fresh:
-    # The generated API surface (internal/api/gen/forge.gen.go) is committed and
+    # The generated API surface (internal/api/gen/opcode42.gen.go) is committed and
     # used by every build; this job asserts it is reproducible from the vendored
     # spec so a stale or hand-edited commit fails CI. Regenerate with `make gen`.
     runs-on: ubuntu-latest
@@ -47,7 +58,7 @@ jobs:
       - name: Regenerate
         run: make gen
       - name: Assert committed codegen is up to date
-        run: git diff --exit-code internal/api/gen/ || (echo "::error::forge.gen.go is stale — run 'make gen' and commit"; exit 1)
+        run: git diff --exit-code internal/api/gen/ || (echo "::error::opcode42.gen.go is stale — run 'make gen' and commit"; exit 1)
 
   sdk-fresh:
     # The Kotlin + Swift client SDKs (sdk/{kotlin,swift}/gen) are generated from
@@ -118,20 +129,20 @@ jobs:
         with:
           version: "~> v2"
           args: release --snapshot --clean --skip=docker
-      - name: Assert forged binary under 40MB
+      - name: Assert opcoded binary under 40MB
         run: |
-          bin=$(find dist -type f -name forged | head -n1)
+          bin=$(find dist -type f -name opcoded | head -n1)
           echo "binary: $bin"
           size=$(stat -c%s "$bin")
           echo "size bytes: $size"
           if [ "$size" -gt 41943040 ]; then
-            echo "::error::forged binary $size bytes exceeds 40MB target"; exit 1
+            echo "::error::opcoded binary $size bytes exceeds 40MB target"; exit 1
           fi
 
   android:
     # Builds the Android client (primary deliverable, plan 07) and runs its
     # deterministic JVM unit tests — including the SSE wire-parsing tests that
-    # pin the Forge/opencode {id,type,properties} + payload-envelope contract.
+    # pin the Opcode42/opencode {id,type,properties} + payload-envelope contract.
     # Live-daemon / LLM flows are manual-verify (tasks/verify.md), not gated here.
     runs-on: ubuntu-latest
     defaults:

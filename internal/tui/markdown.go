@@ -8,8 +8,8 @@ package tui
 // a hand-rolled ANSI renderer would duplicate glamour's goldmark integration.
 //
 // WHY a custom StyleConfig: glamour's built-in dark/light styles use hard-
-// coded colors that bear no relation to the active Forge palette. opencode
-// drives all markdown colors from theme tokens (markdownHeading etc.); Forge
+// coded colors that bear no relation to the active Opcode42 palette. opencode
+// drives all markdown colors from theme tokens (markdownHeading etc.); Opcode42
 // must do the same so that a theme switch re-colors prose immediately.
 //
 // WHY a cache: glamour constructs a new goldmark parser + renderer and runs a
@@ -41,7 +41,7 @@ import (
 	gansi "github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // mdCacheKey is the composite cache key for a rendered markdown block.

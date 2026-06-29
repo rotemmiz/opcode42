@@ -1,10 +1,10 @@
-# Forge Plan 02 — Agent Engine
+# Opcode42 Plan 02 — Agent Engine
 
 ## Context
 
-Plan 02 defines Forge's **agent engine**: the LLM streaming loop, message/part model, tool
+Plan 02 defines Opcode42's **agent engine**: the LLM streaming loop, message/part model, tool
 registry, built-in tools, permission system, compaction, and run-state locking. It is the hardest
-and most value-producing component of the Go daemon; without it Forge is a proxy, with it Forge is
+and most value-producing component of the Go daemon; without it Opcode42 is a proxy, with it Opcode42 is
 a real daemon.
 
 **Dependency chain:**
@@ -876,7 +876,7 @@ This is the reordering that makes the summary appear at the right position in th
 - Summary template embedding.
 
 ### M11 — End-to-end SSE conformance pass (3 days)
-- Run plan 12 conformance harness against Forge daemon.
+- Run plan 12 conformance harness against Opcode42 daemon.
 - Fix any SSE event ordering / field shape divergences.
 - Establish green baseline.
 
@@ -910,7 +910,7 @@ Each subsystem has isolated unit tests:
 
 4. **Abort mid-stream:** cancel context during streaming; assert `AbortedError` on assistant message, all pending tool parts marked `error+interrupted:true`, `message.part.updated` emitted for each.
 
-5. **opencode client compatibility:** point an unmodified opencode web client at the Forge daemon; manually verify the chat UI renders messages correctly.
+5. **opencode client compatibility:** point an unmodified opencode web client at the Opcode42 daemon; manually verify the chat UI renders messages correctly.
 
 ### Performance
 
@@ -921,7 +921,7 @@ Each subsystem has isolated unit tests:
 
 ### Compatibility (plan 12 conformance)
 
-The conformance harness replays a scripted prompt against both opencode and Forge, capturing:
+The conformance harness replays a scripted prompt against both opencode and Opcode42, capturing:
 - Full SSE event stream (event `type` + `properties` JSON).
 - SQLite rows in `messages` and `parts` tables after completion.
 
@@ -941,7 +941,7 @@ The conformance harness replays a scripted prompt against both opencode and Forg
 
 2. **`make test-conformance`** (plan 12 harness): replay 5 scripted prompts (text-only, tool-call, multi-turn, abort, compaction) against both daemons; diff report shows 0 field-shape failures and ≤ 5 ordering warnings.
 
-3. **opencode TUI `attach`:** `opencode attach http://localhost:3001` successfully renders a live streaming response from the Forge daemon with no JavaScript errors in the web client.
+3. **opencode TUI `attach`:** `opencode attach http://localhost:3001` successfully renders a live streaming response from the Opcode42 daemon with no JavaScript errors in the web client.
 
 4. **Anthropic streaming:** `curl -N http://localhost:3001/session/$ID/prompt` (POST with prompt body) produces SSE events including `message.part.delta` for each token chunk.
 
@@ -1044,7 +1044,7 @@ is "built, not conformance-verified."
   `title` agent/model is chosen (opencode resolves an explicit `title` agent, `prompt.ts:264`).
   Pin the resolution source before building title gen.
 - **Structured-output error surface.** opencode raises `StructuredOutputError` on a non-conforming
-  final turn (`prompt.ts:1466-1467`); decide the wire shape Forge emits and add it to the SSE
+  final turn (`prompt.ts:1466-1467`); decide the wire shape Opcode42 emits and add it to the SSE
   catalog + plan 12.
 - **Verification make-targets.** `make test-unit` / `make test-conformance` are referenced but may
   not exist; align this section with the real gates in the repo `CLAUDE.md` git workflow

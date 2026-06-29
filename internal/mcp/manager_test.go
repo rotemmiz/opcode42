@@ -9,8 +9,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/rotemmiz/forge/internal/engine/processor"
-	"github.com/rotemmiz/forge/internal/engine/registry"
+	"github.com/rotemmiz/opcode42/internal/engine/processor"
+	"github.com/rotemmiz/opcode42/internal/engine/registry"
 )
 
 // inProcessServer builds an in-process MCP server exposing one tool.

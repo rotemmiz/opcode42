@@ -8,15 +8,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/engine"
-	"github.com/rotemmiz/forge/internal/engine/message"
-	"github.com/rotemmiz/forge/internal/engine/permission"
-	"github.com/rotemmiz/forge/internal/engine/runstate"
-	"github.com/rotemmiz/forge/internal/engine/tool"
-	"github.com/rotemmiz/forge/internal/instance"
-	"github.com/rotemmiz/forge/internal/resource"
-	"github.com/rotemmiz/forge/internal/session"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/engine"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/permission"
+	"github.com/rotemmiz/opcode42/internal/engine/runstate"
+	"github.com/rotemmiz/opcode42/internal/engine/tool"
+	"github.com/rotemmiz/opcode42/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/resource"
+	"github.com/rotemmiz/opcode42/internal/session"
 )
 
 // allowAllRulesets is the fallback permission policy when no agent resolves

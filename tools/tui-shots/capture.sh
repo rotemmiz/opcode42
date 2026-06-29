@@ -3,8 +3,8 @@
 #   mode: one or more of "dark" "light" (default: both)
 #
 # For each mode: pins theme, ensures opencode daemon + fixture session are up,
-# builds forge-tui, runs every tape in tapes/, and collects PNGs into
-# out/forge-<mode>/. The forge-tui attaches to a local opencode daemon seeded
+# builds opcode-tui, runs every tape in tapes/, and collects PNGs into
+# out/opcode42-<mode>/. The opcode-tui attaches to a local opencode daemon seeded
 # with the same fixture-session.json that opencode's reference harness uses,
 # enabling honest 1:1 visual comparison (same content, two front-ends).
 #
@@ -26,11 +26,11 @@ DAEMON_URL="http://127.0.0.1:$DAEMON_PORT"
 SESSION_ID="ses_00000000000000000000000000"
 REPO_ROOT="$(cd ../.. && pwd)"
 
-# ── 1. Build forge-tui ───────────────────────────────────────────────────────
-echo "▶ building forge-tui …"
+# ── 1. Build opcode-tui ───────────────────────────────────────────────────────
+echo "▶ building opcode-tui …"
 mkdir -p bin
-go build -o bin/forge-tui "$REPO_ROOT/cmd/forge-tui"
-echo "  ✓ bin/forge-tui built"
+go build -o bin/opcode-tui "$REPO_ROOT/cmd/opcode-tui"
+echo "  ✓ bin/opcode-tui built"
 
 # ── 2. Ensure opencode daemon + fixture session ──────────────────────────────
 # Import the fixture session into the isolated opencode state (idempotent).
@@ -83,10 +83,10 @@ for MODE in "${MODES[@]}"; do
   echo "▶ capturing mode=$MODE"
   bash seed-state.sh "$MODE" >/dev/null
 
-  # Export FORGE_THEME so VHS-spawned bash sessions can use $FORGE_THEME in Type commands.
+  # Export OPCODE_THEME so VHS-spawned bash sessions can use $OPCODE_THEME in Type commands.
   case "$MODE" in
-    dark)  export FORGE_THEME="forge-dark" ;;
-    light) export FORGE_THEME="forge-light" ;;
+    dark)  export OPCODE_THEME="opcode42-dark" ;;
+    light) export OPCODE_THEME="opcode42-light" ;;
   esac
 
   rm -f out/*.png out/_*.gif
@@ -96,7 +96,7 @@ for MODE in "${MODES[@]}"; do
     vhs "$tape" >/dev/null 2>&1 || echo "    ! $(basename "$tape") failed (non-fatal)"
   done
 
-  DEST="out/forge-${MODE}"
+  DEST="out/opcode42-${MODE}"
   mkdir -p "$DEST"
   rm -f "$DEST"/*.png
   mv out/*.png "$DEST"/ 2>/dev/null || true

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/config"
+	"github.com/rotemmiz/opcode42/internal/config"
 )
 
 // recorderBus records published event types so the live test can assert

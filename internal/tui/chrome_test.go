@@ -13,7 +13,7 @@ import (
 func TestAlwaysPaintsBackground(t *testing.T) {
 	// With dimensions set, every theme should produce output that includes the
 	// background color escape (lipgloss embeds it when Background is set).
-	for _, name := range []string{"forge-dark", "forge-light", "monochrome"} {
+	for _, name := range []string{"opcode42-dark", "opcode42-light", "monochrome"} {
 		m := New(Config{URL: "http://x"})
 		m.width, m.height = 80, 24
 		m = m.applyThemeByName(name)
@@ -91,7 +91,7 @@ func TestSidebar_ShowsTokensAndCost(t *testing.T) {
 	// and a "total" row — matches opencode scene 06 which breaks down token
 	// counts by direction. "tokens" (the old single-row label) is replaced by
 	// "total". All other previously-tested strings remain present.
-	for _, want := range []string{"My Session", "1,234", "total", "$0.0123", "Forge"} {
+	for _, want := range []string{"My Session", "1,234", "total", "$0.0123", "Opcode42"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("sidebar missing %q in:\n%s", want, out)
 		}
@@ -164,13 +164,13 @@ func TestRenderSession_SidebarLayoutFitsWidth(t *testing.T) {
 	if w := lipgloss.Width(out); w > 120 {
 		t.Fatalf("session layout renders %d cols, exceeds width 120", w)
 	}
-	if !strings.Contains(out, "Forge") {
-		t.Fatal("the sidebar (Forge tag) should be present at this width")
+	if !strings.Contains(out, "Opcode42") {
+		t.Fatal("the sidebar (Opcode42 tag) should be present at this width")
 	}
 
-	// Hidden sidebar → no Forge tag, full-width stream.
+	// Hidden sidebar → no Opcode42 tag, full-width stream.
 	m.sidebarHidden = true
-	if strings.Contains(m.renderSession(), "Forge") {
+	if strings.Contains(m.renderSession(), "Opcode42") {
 		t.Fatal("hidden sidebar should not render")
 	}
 }
@@ -226,7 +226,7 @@ func TestStatusBar_ModeChipAndProviderChips(t *testing.T) {
 // must render as exactly `width` visible characters wide for all tested widths
 // so the Bg surface covers trailing cells (no bleed-through on light terminals).
 func TestStatusBar_BackgroundFill(t *testing.T) {
-	for _, themeName := range []string{"forge-dark", "forge-light"} {
+	for _, themeName := range []string{"opcode42-dark", "opcode42-light"} {
 		for _, w := range []int{60, 80, 120} {
 			m := New(Config{URL: "http://x", Provider: "anthropic", Model: "claude-sonnet-4"})
 			m = m.applyThemeByName(themeName)

@@ -60,7 +60,7 @@ func TestNewStateIsUnique(t *testing.T) {
 }
 
 func TestValidateProxyURL(t *testing.T) {
-	for _, ok := range []string{"", "http://localhost:9000", "https://forge.example.com", "https://x.com/cb/"} {
+	for _, ok := range []string{"", "http://localhost:9000", "https://opcode42.example.com", "https://x.com/cb/"} {
 		if err := validateProxyURL(ok); err != nil {
 			t.Errorf("validateProxyURL(%q) = %v, want nil", ok, err)
 		}
@@ -77,8 +77,8 @@ func TestRedirectURI(t *testing.T) {
 	if got := loop.redirectURI(56000); got != "http://127.0.0.1:56000/callback" {
 		t.Errorf("loopback redirectURI = %q", got)
 	}
-	proxied := newCallbackServer("/callback", "https://forge.example.com/")
-	if got := proxied.redirectURI(56000); got != "https://forge.example.com/callback" {
+	proxied := newCallbackServer("/callback", "https://opcode42.example.com/")
+	if got := proxied.redirectURI(56000); got != "https://opcode42.example.com/callback" {
 		t.Errorf("proxied redirectURI = %q", got)
 	}
 }

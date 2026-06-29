@@ -1,6 +1,6 @@
 package enginetest
 
-import "github.com/rotemmiz/forge/internal/engine/llm"
+import "github.com/rotemmiz/opcode42/internal/engine/llm"
 
 // Script builds a scripted provider stream fluently. It is the deterministic
 // stand-in for a real provider's event sequence in integration tests.

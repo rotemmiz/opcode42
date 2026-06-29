@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
 )
 
 // streamEvent is one Anthropic SSE payload (dispatched on its "type" field).

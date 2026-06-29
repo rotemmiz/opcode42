@@ -1,10 +1,10 @@
-// Package pluginbridge is the Go side of Forge's plugin host (plan 05). It
+// Package pluginbridge is the Go side of Opcode42's plugin host (plan 05). It
 // spawns a Node/Bun sidecar that loads opencode-format TypeScript/JavaScript
 // plugins and bridges their hooks to the daemon over JSON-RPC 2.0 on a local
 // unix socket.
 //
 // The bridge is FLAG-GATED: it does nothing unless explicitly enabled
-// (--plugin-host / FORGE_PLUGIN_HOST=1). When disabled — the default — every
+// (--plugin-host / OPCODE_PLUGIN_HOST=1). When disabled — the default — every
 // method is a cheap no-op that returns the caller's unmodified output, so the
 // default daemon path and CI never spawn a subprocess. This realises plan 05's
 // "deferral story": the flag-gate means no code paths change when plugins are
@@ -60,7 +60,7 @@ type Config struct {
 	// (no-op) Bridge so callers need no nil checks.
 	Enabled bool
 	// Directory is the instance working directory; forwarded to the host as
-	// FORGE_DIRECTORY and used to discover {plugin,plugins}/*.{ts,js}.
+	// OPCODE_DIRECTORY and used to discover {plugin,plugins}/*.{ts,js}.
 	Directory string
 	// ServerURL is the daemon's own base URL; the host's plugins receive an SDK
 	// client pointed here (plan 05 §"Plugin Host Implementation").
@@ -72,7 +72,7 @@ type Config struct {
 	// Runtime overrides runtime auto-detection ("bun" | "node"); empty = auto.
 	Runtime string
 	// HostScript overrides the path to the plugin-host entry script. Empty uses
-	// the default resolution (FORGE_PLUGIN_HOST_SCRIPT or the bundled package).
+	// the default resolution (OPCODE_PLUGIN_HOST_SCRIPT or the bundled package).
 	HostScript string
 	// Logger; defaults to slog.Default().
 	Logger *slog.Logger

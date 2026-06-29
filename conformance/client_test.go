@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/rotemmiz/forge/conformance/normalize"
+	"github.com/rotemmiz/opcode42/conformance/normalize"
 )
 
 func TestOrderInsensitiveListPath(t *testing.T) {
@@ -30,7 +30,7 @@ func TestOrderInsensitiveListPath(t *testing.T) {
 
 // TestCommandListOrderInsensitive asserts the harness normalizes GET /command
 // order-insensitively, so opencode's non-deterministic (map/glob) order and
-// Forge's name-sorted order produce the same captured body (masterplan decision
+// Opcode42's name-sorted order produce the same captured body (masterplan decision
 // #6). A reordering of the same command set must compare equal; a genuinely
 // different set must not.
 func TestCommandListOrderInsensitive(t *testing.T) {

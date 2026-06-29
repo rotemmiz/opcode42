@@ -1,6 +1,6 @@
-# Forge Swift SDK (future iOS client)
+# Opcode42 Swift SDK (future iOS client)
 
-Typed Swift client for the Forge / opencode wire contract, generated from the
+Typed Swift client for the Opcode42 / opencode wire contract, generated from the
 frozen contract `conformance/openapi-reference.json` with
 [openapi-generator](https://openapi-generator.tech) (`swift6`, async/await),
 pinned for deterministic output. Deferred to plan 07's iOS scope (plan 06 M9 /
@@ -36,7 +36,7 @@ reference design.
 
 ## Layout
 
-- `gen/` — generated models + APIs (`Sources/ForgeClient/{Models,APIs,Infrastructure}/…`)
+- `gen/` — generated models + APIs (`Sources/Opcode42Client/{Models,APIs,Infrastructure}/…`)
   and the SwiftPM manifest (`Package.swift`). **Never edit by hand** — regenerate.
 
 ## Building / regenerating

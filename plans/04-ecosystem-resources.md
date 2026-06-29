@@ -1,12 +1,12 @@
-# Forge Plan 04 — Ecosystem: Agents, Commands, Rules, Skills, Providers
+# Opcode42 Plan 04 — Ecosystem: Agents, Commands, Rules, Skills, Providers
 
 ---
 
 ## Context
 
-Forge must load and serve the exact same community resources that opencode loads, from the same
+Opcode42 must load and serve the exact same community resources that opencode loads, from the same
 file paths, with the same precedence rules, so that any `.opencode/` directory that works with
-opencode works identically with Forge.  This plan covers the five resource families:
+opencode works identically with Opcode42.  This plan covers the five resource families:
 
 | Resource   | Loaded from                                 | Consumed by                     |
 |------------|---------------------------------------------|---------------------------------|
@@ -596,7 +596,7 @@ Built-in agent prompts live in the opencode repo at
 `packages/opencode/src/agent/prompt/{explore,scout,compaction,summary,title}.txt` and
 `packages/opencode/src/agent/generate.txt`.
 
-In Forge they are embedded with Go's `//go:embed` directive:
+In Opcode42 they are embedded with Go's `//go:embed` directive:
 
 ```go
 // internal/resource/agent/builtins/embed.go
@@ -688,7 +688,7 @@ the model list and metadata, and emits a `catalog_gen.go` file. This file is reg
 on each opencode release.
 
 A `//go:generate` comment in `internal/provider/catalog/catalog.go` triggers regeneration.
-The generated file is committed to the repo so Forge builds without the generator at runtime.
+The generated file is committed to the repo so Opcode42 builds without the generator at runtime.
 
 ### Config-layer provider overlay
 
@@ -714,7 +714,7 @@ func (r *Registry) ApplyConfig(cfg map[string]*ProviderConfigInfo) {
 ### Auth store
 
 Stored at `~/.local/share/opencode/auth.json` (matches
-`packages/opencode/src/auth/index.ts:9`). Forge reads/writes with `os.OpenFile(..., 0600)`.
+`packages/opencode/src/auth/index.ts:9`). Opcode42 reads/writes with `os.OpenFile(..., 0600)`.
 
 ```go
 // internal/auth/store.go
@@ -847,11 +847,11 @@ Key cases:
 
 ### Compatibility tests (plan 12 hook)
 
-- Point Forge at the real opencode repo's `.opencode/` dir and `~/.config/opencode/` on the
-  test machine; call Forge's `/agent`, `/command`, `/skill`, `/provider` endpoints and opencode's
-  same endpoints; assert identical response bodies (modulo `native` flag which Forge may omit
+- Point Opcode42 at the real opencode repo's `.opencode/` dir and `~/.config/opencode/` on the
+  test machine; call Opcode42's `/agent`, `/command`, `/skill`, `/provider` endpoints and opencode's
+  same endpoints; assert identical response bodies (modulo `native` flag which Opcode42 may omit
   for user-defined agents).
-- Run opencode's own TUI client against Forge's `/agent` endpoint; assert no client-side errors.
+- Run opencode's own TUI client against Opcode42's `/agent` endpoint; assert no client-side errors.
 
 ---
 
@@ -895,10 +895,10 @@ conformance harness.
 | 4 | **Precedence stack: wellknown remote config** — opencode fetches `{url}/.well-known/opencode` for each `wellknown` auth entry; the shape is `{config?, remote_config?}`. Implementing the double-fetch (index + remote pointer) may have subtle ordering effects. | Medium | Implement but gate behind feature flag; cover with integration test using a mock server. |
 | 5 | **Mode vs agent key collision** — `loadMode` forces `mode: "primary"` regardless of frontmatter, but a `mode/*.md` and an `agent/*.md` with the same name would collide in the merged map. | Low | Last-write wins (agent dir processed after mode dir per config.ts:658-659). Document and test. |
 | 6 | **`tools` permission translation** — opencode maps `write`/`edit`/`patch` to `permission.edit`; other tool names are passed through as-is. Ensure Go port handles the same set. | Low | Direct copy of the key list from `agent.ts:86-91`; unit test all three deprecated aliases. |
-| 7 | **Skill URL caching** — opencode caches remote skills under `~/.cache/opencode/skills/`; Forge must use the same path to share a cache with opencode in mixed-use environments. | Low | Hardcode same path; add a cache invalidation flag for testing. |
+| 7 | **Skill URL caching** — opencode caches remote skills under `~/.cache/opencode/skills/`; Opcode42 must use the same path to share a cache with opencode in mixed-use environments. | Low | Hardcode same path; add a cache invalidation flag for testing. |
 | 8 | **Provider catalog drift** — opencode adds/removes models frequently; the generated `catalog_gen.go` must be regenerated on each opencode release. | High | Add a CI check that diffs the generated file against a fresh generation; fail on drift. |
 | 9 | **`OPENCODE_DISABLE_PROJECT_CONFIG` flag** — used in both config loading and instruction loading. Must be read from env in the same way. | Low | Check env var once at startup; store in a `RuntimeFlags` struct passed to all loaders. |
-| 10 | **macOS MDM managed preferences** — highest-priority config layer in opencode. Scope: macOS only; Forge should implement as a no-op stub on other platforms with a `//go:build darwin` file. | Low | Stub on non-darwin; implement darwin read in a separate `managed_darwin.go` file. |
+| 10 | **macOS MDM managed preferences** — highest-priority config layer in opencode. Scope: macOS only; Opcode42 should implement as a no-op stub on other platforms with a `//go:build darwin` file. | Low | Stub on non-darwin; implement darwin read in a separate `managed_darwin.go` file. |
 
 ---
 

@@ -181,14 +181,14 @@ func TestSyntaxPaletteDefaultValues(t *testing.T) {
 }
 
 // TestBorderActiveIsSet ensures BorderActive is distinct from Border for the
-// 3 native Forge palettes where the design mandates a brighter active border.
+// 3 native Opcode42 palettes where the design mandates a brighter active border.
 // Embedded opencode themes are excluded because some (e.g. ayu) legitimately
 // share the same color for border and borderActive.
 func TestBorderActiveIsSet(t *testing.T) {
 	nativeNames := map[string]bool{
-		"forge-dark":  true,
-		"forge-light": true,
-		"monochrome":  true,
+		"opcode42-dark":  true,
+		"opcode42-light": true,
+		"monochrome":     true,
 	}
 	for _, named := range Palettes() {
 		if !nativeNames[named.Name] {

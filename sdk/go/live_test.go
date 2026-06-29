@@ -1,4 +1,4 @@
-package forgeclient
+package opcode42client
 
 import (
 	"context"
@@ -6,31 +6,31 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rotemmiz/forge/sdk/go/gen"
+	"github.com/rotemmiz/opcode42/sdk/go/gen"
 )
 
 // TestLive_Smoke exercises the generated REST client + SSE consumer against a
-// real running daemon (opencode or Forge). SKIPPED unless FORGE_SDK_TEST_URL is
+// real running daemon (opencode or Opcode42). SKIPPED unless OPCODE_SDK_TEST_URL is
 // set, so deterministic CI never needs a daemon:
 //
-//	FORGE_SDK_TEST_URL  e.g. http://localhost:4096
-//	FORGE_SDK_TEST_USER / FORGE_SDK_TEST_PASS  (optional Basic auth)
-//	FORGE_SDK_TEST_DIR  (optional x-opencode-directory; defaults to cwd)
+//	OPCODE_SDK_TEST_URL  e.g. http://localhost:4096
+//	OPCODE_SDK_TEST_USER / OPCODE_SDK_TEST_PASS  (optional Basic auth)
+//	OPCODE_SDK_TEST_DIR  (optional x-opencode-directory; defaults to cwd)
 //
-//	FORGE_SDK_TEST_URL=http://localhost:4096 go test ./sdk/go -run TestLive -v
+//	OPCODE_SDK_TEST_URL=http://localhost:4096 go test ./sdk/go -run TestLive -v
 func TestLive_Smoke(t *testing.T) {
-	url := os.Getenv("FORGE_SDK_TEST_URL")
+	url := os.Getenv("OPCODE_SDK_TEST_URL")
 	if url == "" {
-		t.Skip("set FORGE_SDK_TEST_URL to run the live SDK smoke test")
+		t.Skip("set OPCODE_SDK_TEST_URL to run the live SDK smoke test")
 	}
-	dir := os.Getenv("FORGE_SDK_TEST_DIR")
+	dir := os.Getenv("OPCODE_SDK_TEST_DIR")
 	if dir == "" {
 		dir, _ = os.Getwd()
 	}
 	c, err := New(url, Options{
 		Directory: dir,
-		Username:  os.Getenv("FORGE_SDK_TEST_USER"),
-		Password:  os.Getenv("FORGE_SDK_TEST_PASS"),
+		Username:  os.Getenv("OPCODE_SDK_TEST_USER"),
+		Password:  os.Getenv("OPCODE_SDK_TEST_PASS"),
 	})
 	if err != nil {
 		t.Fatalf("new client: %v", err)

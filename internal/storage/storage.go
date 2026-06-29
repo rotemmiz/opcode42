@@ -67,10 +67,10 @@ func Open(path string) (*DB, error) {
 	return db, nil
 }
 
-// DefaultPath returns the daemon's database path: $FORGE_DB if set, else
-// $XDG_DATA_HOME/forge/forge.db (falling back to ~/.local/share/forge).
+// DefaultPath returns the daemon's database path: $OPCODE_DB if set, else
+// $XDG_DATA_HOME/opcode42/opcode42.db (falling back to ~/.local/share/opcode42).
 func DefaultPath() string {
-	if p := os.Getenv("FORGE_DB"); p != "" {
+	if p := os.Getenv("OPCODE_DB"); p != "" {
 		return p
 	}
 	dataHome := os.Getenv("XDG_DATA_HOME")
@@ -79,7 +79,7 @@ func DefaultPath() string {
 			dataHome = filepath.Join(home, ".local", "share")
 		}
 	}
-	return filepath.Join(dataHome, "forge", "forge.db")
+	return filepath.Join(dataHome, "opcode42", "opcode42.db")
 }
 
 func buildDSN(path string) string {

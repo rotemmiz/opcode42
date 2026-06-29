@@ -1,4 +1,4 @@
--- Forge canonical schema (plan 01 §5). Idempotent DDL: re-run safely on every
+-- Opcode42 canonical schema (plan 01 §5). Idempotent DDL: re-run safely on every
 -- startup. The JSON blob columns (message.data / part.data) carry opencode's
 -- MessageV2 wire shapes verbatim so responses marshal without transformation.
 

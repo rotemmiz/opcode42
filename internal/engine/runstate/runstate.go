@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/rotemmiz/forge/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
 )
 
 // BusyError reports that a session already has an active run (HTTP 409).

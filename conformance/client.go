@@ -1,5 +1,5 @@
 // Package conformance is the dual-run harness: it drives a set of scenarios
-// against a target daemon (opencode or forge) and writes a normalized result
+// against a target daemon (opencode or opcode42) and writes a normalized result
 // file that the diff tool (conformance/cmd/diff) compares against another run.
 package conformance
 
@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rotemmiz/forge/conformance/normalize"
-	"github.com/rotemmiz/forge/conformance/result"
+	"github.com/rotemmiz/opcode42/conformance/normalize"
+	"github.com/rotemmiz/opcode42/conformance/result"
 )
 
 // AuthMode selects how a request authenticates.
@@ -227,7 +227,7 @@ func (c *Client) SSE(stepName, path string, wait time.Duration, maxEvents int) (
 //     non-deterministic run-to-run (every entry normalizes to the same placeholder
 //     object), so the set dedup removes the count noise.
 //   - GET /command — opencode returns the command list in a non-deterministic
-//     (map/glob) ORDER, while Forge sorts by name (a recorded known-addition,
+//     (map/glob) ORDER, while Opcode42 sorts by name (a recorded known-addition,
 //     masterplan decision #6). Set-normalizing makes the order irrelevant so the
 //     two runs' identical command SET compares equal; a genuinely missing or extra
 //     command still changes the set and fails.
@@ -248,7 +248,7 @@ func (c *Client) normalizeBody(method, path string, raw []byte) string {
 // orderInsensitiveListPath reports whether path is a GET list endpoint whose
 // top-level array order is non-deterministic and so must be set-normalized:
 // /session (global accumulating list) or /command (opencode's non-deterministic
-// order vs Forge's sort). The query string (e.g. ?directory=...) is ignored.
+// order vs Opcode42's sort). The query string (e.g. ?directory=...) is ignored.
 func orderInsensitiveListPath(path string) bool {
 	if i := strings.IndexByte(path, '?'); i >= 0 {
 		path = path[:i]

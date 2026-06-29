@@ -1,4 +1,4 @@
-// Package lsp is Forge's per-instance LSP integration. It ports opencode's
+// Package lsp is Opcode42's per-instance LSP integration. It ports opencode's
 // built-in server table and lazy-spawn lifecycle. gopls is auto-installable via
 // `go install`; the remaining built-ins are resolved from PATH (the
 // download/npm/dotnet-tool auto-install paths opencode has for some servers are
@@ -357,7 +357,7 @@ var Servers = map[string]ServerDef{
 		Command: whichCommand("clojure-lsp", "listen"),
 	},
 	// nixd — lsp/server.ts:1907-1936. Root: flake.nix (else instance directory);
-	// spawns `nixd`. opencode also falls back to the git worktree root; Forge has
+	// spawns `nixd`. opencode also falls back to the git worktree root; Opcode42 has
 	// no worktree distinct from the instance dir here, so flake.nix-or-instance-dir
 	// matches its effective behavior.
 	"nixd": {

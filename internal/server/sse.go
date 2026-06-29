@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/instance"
 )
 
 // streamContext derives a context for a long-lived stream that is cancelled when

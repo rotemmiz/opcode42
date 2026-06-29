@@ -9,7 +9,7 @@ import (
 
 // JSON-RPC 2.0 message framing matches plan 05 §"RPC Transport Choice":
 // a 4-byte big-endian uint32 length header followed by the UTF-8 JSON body.
-// The Node/Bun host (packages/forge-plugin-host) uses the identical framing.
+// The Node/Bun host (packages/opcode42-plugin-host) uses the identical framing.
 
 // maxFrameBytes caps a single decoded frame so a corrupt or hostile length
 // header cannot make the bridge allocate unbounded memory. Hook payloads

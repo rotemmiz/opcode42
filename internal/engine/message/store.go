@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/storage"
 )
 
 // ErrNotFound is returned when a message or part id does not exist.

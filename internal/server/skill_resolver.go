@@ -3,7 +3,7 @@ package server
 import (
 	"fmt"
 
-	"github.com/rotemmiz/forge/internal/resource"
+	"github.com/rotemmiz/opcode42/internal/resource"
 )
 
 // skillResolver implements tool.SkillSource for the `skill` tool: it loads the

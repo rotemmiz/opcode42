@@ -1,12 +1,12 @@
 # Plan 06 — SDK Generation
 
-> Generating client SDKs from the wire contract for Forge's own clients.
+> Generating client SDKs from the wire contract for Opcode42's own clients.
 
 ---
 
 ## Context
 
-Forge needs three client SDKs:
+Opcode42 needs three client SDKs:
 
 1. **Go SDK** — for the Go TUI (plan 08) and integration tests.
 2. **Kotlin SDK** — for the Android mobile client (plan 07, primary deliverable).
@@ -36,10 +36,10 @@ All citations are from the reference source at `/Users/rotemmiz/git/opencode`.
 - **SSE codegen bug patch** (lines 43–59): `@hey-api/openapi-ts` incorrectly passes the
   endpoint's `TError` into the second generic of `ServerSentEventsResult`. The build script
   post-processes `src/v2/gen/client/types.gen.ts` to drop the second generic arg so
-  `TReturn` defaults to `void`. This is a known upstream defect that Forge must work around
+  `TReturn` defaults to `void`. This is a known upstream defect that Opcode42 must work around
   in its own codegen pipeline.
 - **v1 output** (implicit `src/gen`): legacy generated path kept for backward compat;
-  Forge pins to v2 only.
+  Opcode42 pins to v2 only.
 
 **File:** `packages/sdk/js/src/v2/client.ts`
 
@@ -57,8 +57,8 @@ All citations are from the reference source at `/Users/rotemmiz/git/opencode`.
 - **`createOpencodeServer`** (lines 22–100): spawns `opencode serve --hostname --port` as a child
   process, polls stdout for `"opencode server listening on <url>"` (lines 55–61), resolves with
   the URL. Timeout: configurable, default 5000ms (lines 29–30).
-- **Relevance to Forge:** Forge's own `createForgeServer` wrapper will mirror this pattern —
-  spawning `forge serve` and polling for the same ready line. Wire-compat means the same
+- **Relevance to Opcode42:** Opcode42's own `createOpcode42Server` wrapper will mirror this pattern —
+  spawning `opcode42 serve` and polling for the same ready line. Wire-compat means the same
   SDK server bootstrap works for both daemons.
 
 **File:** `packages/sdk/openapi.json`
@@ -89,20 +89,20 @@ All citations are from the reference source at `/Users/rotemmiz/git/opencode`.
 
 During Phases A–C, `packages/sdk/openapi.json` from the opencode repo is the **frozen
 contract**. All three SDKs are generated from this file. It is copied into
-`forge/sdk/openapi.json` and committed. Changes are made only via deliberate bumps.
+`opcode42/sdk/openapi.json` and committed. Changes are made only via deliberate bumps.
 
-### Phase 2: Forge emits its own spec (ties to Plan 12)
+### Phase 2: Opcode42 emits its own spec (ties to Plan 12)
 
-Once the Forge daemon implements `GET /openapi.json` (or `bun dev generate` equivalent —
-`forge generate` in Go using `github.com/swaggest/rest` or `kin-openapi`), a CI job diffs
+Once the Opcode42 daemon implements `GET /openapi.json` (or `bun dev generate` equivalent —
+`opcode42 generate` in Go using `github.com/swaggest/rest` or `kin-openapi`), a CI job diffs
 the emitted spec against the frozen contract:
 
 ```
-forge generate > /tmp/forge-openapi.json
-diff <(jq -S . packages/sdk/openapi.json) <(jq -S . /tmp/forge-openapi.json)
+opcode42 generate > /tmp/opcode42-openapi.json
+diff <(jq -S . packages/sdk/openapi.json) <(jq -S . /tmp/opcode42-openapi.json)
 ```
 
-Any path or schema drift is a CI failure. Forge is not allowed to add or remove operations
+Any path or schema drift is a CI failure. Opcode42 is not allowed to add or remove operations
 without updating the frozen contract and all three SDKs simultaneously.
 
 ### Scope of code generation
@@ -123,10 +123,10 @@ It does **not** cover:
 **Tool:** `oapi-codegen` (`github.com/deepmap/oapi-codegen` v2, or the maintained fork
 `github.com/oapi-codegen/oapi-codegen`).
 
-**Config file:** `forge/sdk/go/oapi-codegen.yaml`
+**Config file:** `opcode42/sdk/go/oapi-codegen.yaml`
 
 ```yaml
-package: forgeclient
+package: opcode42client
 generate:
   chi-server: false
   iris-server: false
@@ -135,23 +135,23 @@ generate:
   models: true
   client: true
   embedded-spec: false
-output: forge/sdk/go/gen/client.gen.go
+output: opcode42/sdk/go/gen/client.gen.go
 output-options:
   skip-prune: false
   nullable-type: true
 ```
 
-**Wrapper:** `forge/sdk/go/client.go` — hand-written wrapper around the generated client:
+**Wrapper:** `opcode42/sdk/go/client.go` — hand-written wrapper around the generated client:
 
 ```go
-type ForgeClient struct {
+type Opcode42Client struct {
     inner     *gen.ClientWithResponses
     baseURL   string
     directory string
     auth      string  // "Basic <b64>" or ""
 }
 
-func NewForgeClient(baseURL, directory, username, password string) *ForgeClient {
+func NewOpcode42Client(baseURL, directory, username, password string) *Opcode42Client {
     auth := ""
     if username != "" {
         auth = "Basic " + base64.StdEncoding.EncodeToString([]byte(username+":"+password))
@@ -167,13 +167,13 @@ func NewForgeClient(baseURL, directory, username, password string) *ForgeClient 
             return nil
         }),
     )
-    return &ForgeClient{inner: inner, baseURL: baseURL, directory: directory, auth: auth}
+    return &Opcode42Client{inner: inner, baseURL: baseURL, directory: directory, auth: auth}
 }
 ```
 
 The Go SDK is used by:
 - The TUI client (plan 08): REST calls for session CRUD, config, etc.
-- Integration tests (plan 10): roundtrip tests against both opencode and Forge daemons.
+- Integration tests (plan 10): roundtrip tests against both opencode and Opcode42 daemons.
 - The conformance harness (plan 12): REST calls for setup/teardown of test scenarios.
 
 ### Kotlin SDK
@@ -182,21 +182,21 @@ The Go SDK is used by:
 
 ```bash
 openapi-generator generate \
-  -i forge/sdk/openapi.json \
+  -i opcode42/sdk/openapi.json \
   -g kotlin \
-  -o forge/sdk/kotlin \
+  -o opcode42/sdk/kotlin \
   --library jvm-okhttp4 \
-  --additional-properties=packageName=dev.forge.client,dateLibrary=java8,serializationLibrary=kotlinx_serialization
+  --additional-properties=packageName=dev.opcode42.client,dateLibrary=java8,serializationLibrary=kotlinx_serialization
 ```
 
 **Why openapi-generator over hey-api for Kotlin:** hey-api is TypeScript-only. openapi-generator
 is the de facto standard for JVM/Kotlin; `jvm-okhttp4` + `kotlinx.serialization` is idiomatic
 for Android.
 
-**Wrapper:** `forge/sdk/kotlin/src/main/kotlin/ForgeClient.kt`
+**Wrapper:** `opcode42/sdk/kotlin/src/main/kotlin/Opcode42Client.kt`
 
 ```kotlin
-class ForgeClient(
+class Opcode42Client(
     private val baseUrl: String,
     private val directory: String = "",
     private val username: String = "",
@@ -218,8 +218,8 @@ class ForgeClient(
         .build()
 
     // SSE and WS-PTY clients are hand-written — see below
-    val sse: ForgeSseClient = ForgeSseClient(baseUrl, httpClient)
-    val pty: ForgePtyClient = ForgePtyClient(baseUrl, httpClient)
+    val sse: Opcode42SseClient = Opcode42SseClient(baseUrl, httpClient)
+    val pty: Opcode42PtyClient = Opcode42PtyClient(baseUrl, httpClient)
 }
 ```
 
@@ -233,14 +233,14 @@ added complexity is premature — address in plan 07 when Swift is scoped.
 
 ```bash
 openapi-generator generate \
-  -i forge/sdk/openapi.json \
+  -i opcode42/sdk/openapi.json \
   -g swift5 \
-  -o forge/sdk/swift \
-  --additional-properties=projectName=ForgeClient,responseAs=AsyncAwait
+  -o opcode42/sdk/swift \
+  --additional-properties=projectName=Opcode42Client,responseAs=AsyncAwait
 ```
 
 Swift SSE and WS-PTY layers are hand-written (same design as Kotlin, see below). Deferred
-until plan 07 scopes iOS. For now, a stub `forge/sdk/swift/README.md` placeholder suffices.
+until plan 07 scopes iOS. For now, a stub `opcode42/sdk/swift/README.md` placeholder suffices.
 
 ---
 
@@ -262,7 +262,7 @@ The SSE endpoints are:
 
 Both require the same auth headers. Both are long-lived connections.
 
-### Go SSE Client (`forge/sdk/go/sse/client.go`)
+### Go SSE Client (`opcode42/sdk/go/sse/client.go`)
 
 ```go
 type SSEClient struct {
@@ -297,13 +297,13 @@ func (c *SSEClient) Subscribe(ctx context.Context, path string, params url.Value
 **Heartbeat timeout:** opencode sends `server.heartbeat` every ~30s. If 60s pass with no
 event (including heartbeat), the client closes and reconnects. This handles silent server drops.
 
-### Kotlin SSE Client (`forge/sdk/kotlin/src/main/kotlin/ForgeSseClient.kt`)
+### Kotlin SSE Client (`opcode42/sdk/kotlin/src/main/kotlin/Opcode42SseClient.kt`)
 
 Uses OkHttp's `EventSource` API (`com.squareup.okhttp3:okhttp-sse`):
 
 ```kotlin
-class ForgeSseClient(private val baseUrl: String, private val client: OkHttpClient) {
-    fun subscribe(path: String, params: Map<String, String> = emptyMap()): Flow<ForgeEvent> = callbackFlow {
+class Opcode42SseClient(private val baseUrl: String, private val client: OkHttpClient) {
+    fun subscribe(path: String, params: Map<String, String> = emptyMap()): Flow<Opcode42Event> = callbackFlow {
         val url = HttpUrl.parse(baseUrl + path)!!.newBuilder()
             .apply { params.forEach { (k, v) -> addQueryParameter(k, v) } }
             .build()
@@ -311,7 +311,7 @@ class ForgeSseClient(private val baseUrl: String, private val client: OkHttpClie
         val listener = object : EventSourceListener() {
             override fun onEvent(es: EventSource, id: String?, type: String?, data: String) {
                 // data is the JSON body; type is the SSE event type field (or use id field)
-                val event = Json.decodeFromString<ForgeEvent>(data)
+                val event = Json.decodeFromString<Opcode42Event>(data)
                 trySend(event)
             }
             override fun onFailure(es: EventSource, t: Throwable?, response: Response?) {
@@ -326,7 +326,7 @@ class ForgeSseClient(private val baseUrl: String, private val client: OkHttpClie
 ```
 
 **Note on OkHttp SSE:** `okhttp-sse`'s `RealEventSource` handles reconnect automatically
-(following the SSE spec `retry:` field). Forge emits `retry: 3000` on connect; callers
+(following the SSE spec `retry:` field). Opcode42 emits `retry: 3000` on connect; callers
 can also wrap in a coroutine retry loop for extra resilience.
 
 ### PTY WebSocket Contract
@@ -357,7 +357,7 @@ const meta = (cursor: number) => {
 - **Input:** client sends UTF-8 keystrokes as text frames.
 - **Resize:** client sends `PUT /pty/{ptyID}` with `{ size: { rows, cols } }` (REST, not WS).
 
-### Go WS-PTY Client (`forge/sdk/go/pty/client.go`)
+### Go WS-PTY Client (`opcode42/sdk/go/pty/client.go`)
 
 ```go
 import "github.com/gorilla/websocket"
@@ -394,12 +394,12 @@ func (c *PTYClient) readLoop() {
 }
 ```
 
-### Kotlin WS-PTY Client (`forge/sdk/kotlin/src/main/kotlin/ForgePtyClient.kt`)
+### Kotlin WS-PTY Client (`opcode42/sdk/kotlin/src/main/kotlin/Opcode42PtyClient.kt`)
 
 Uses OkHttp WebSocket:
 
 ```kotlin
-class ForgePtyClient(private val baseUrl: String, private val client: OkHttpClient) {
+class Opcode42PtyClient(private val baseUrl: String, private val client: OkHttpClient) {
     fun connect(ptyID: String, authToken: String? = null): PtyConnection {
         val wsUrl = baseUrl.replace("http", "ws") + "/pty/$ptyID/connect" +
             (if (authToken != null) "?auth_token=$authToken" else "")
@@ -465,16 +465,16 @@ ticket flow (`POST /pty/{ptyID}/connect-token`) as described in
 
 | Milestone | Deliverable | Phase |
 |-----------|-------------|-------|
-| M1 | Commit `forge/sdk/openapi.json` (copy from opencode, frozen) | Phase A |
+| M1 | Commit `opcode42/sdk/openapi.json` (copy from opencode, frozen) | Phase A |
 | M2 | Go SDK: `oapi-codegen` config + generated `client.gen.go` + wrapper with auth/directory injection | Phase A |
 | M3 | Go SSE client: `subscribe`, reconnect/backoff, heartbeat timeout, event decoding | Phase A |
 | M4 | Go WS-PTY client: connect, frame decoding, `Data`/`Meta` channels | Phase A |
 | M5 | Kotlin SDK: `openapi-generator` config + generated client + wrapper | Phase A (parallel with M2) |
 | M6 | Kotlin SSE client: OkHttp EventSource + coroutine Flow | Phase A |
 | M7 | Kotlin WS-PTY client: OkHttp WebSocket + `PtyFrame` decoding | Phase A |
-| M8 | CI drift check: `forge generate` vs frozen spec (ties to plan 12) | Phase B |
+| M8 | CI drift check: `opcode42 generate` vs frozen spec (ties to plan 12) | Phase B |
 | M9 | Swift SDK scaffold (openapi-generator `swift5`, stubs only) | Phase D |
-| M10 | Forge daemon emits its own `GET /openapi.json`; drift gate goes live | Phase D |
+| M10 | Opcode42 daemon emits its own `GET /openapi.json`; drift gate goes live | Phase D |
 
 ---
 
@@ -482,15 +482,15 @@ ticket flow (`POST /pty/{ptyID}/connect-token`) as described in
 
 ### Generated Client Round-Trips
 
-Run the same test suite against both opencode and Forge daemons (conformance approach from plan 12):
+Run the same test suite against both opencode and Opcode42 daemons (conformance approach from plan 12):
 
 **Go:**
 ```go
 func TestSessionCRUD(t *testing.T) {
-    for _, daemon := range []string{"opencode", "forge"} {
+    for _, daemon := range []string{"opencode", "opcode42"} {
         t.Run(daemon, func(t *testing.T) {
-            client := forgeclient.New(daemonURL(daemon), "/tmp/test-dir", "", "")
-            sess, err := client.Session.Create(ctx, forgeclient.CreateSessionParams{})
+            client := opcode42client.New(daemonURL(daemon), "/tmp/test-dir", "", "")
+            sess, err := client.Session.Create(ctx, opcode42client.CreateSessionParams{})
             require.NoError(t, err)
             require.NotEmpty(t, sess.ID)
             err = client.Session.Delete(ctx, sess.ID)
@@ -517,7 +517,7 @@ func TestSSESubscribe(t *testing.T) {
 **Kotlin (Android instrumented or JVM unit test):**
 ```kotlin
 @Test fun `session list round-trip against opencode`() = runBlocking {
-    val client = ForgeClient(opencodeUrl, "/tmp/test-dir")
+    val client = Opcode42Client(opencodeUrl, "/tmp/test-dir")
     val sessions = client.session.list()
     assertNotNull(sessions)
 }
@@ -527,7 +527,7 @@ func TestSSESubscribe(t *testing.T) {
 ```go
 func TestPTYWebSocket(t *testing.T) {
     // Create PTY, connect WS, send "echo hello\n", expect "hello" in Data channel
-    pty, _ := client.Pty.Create(ctx, forgeclient.CreatePtyParams{Command: "bash"})
+    pty, _ := client.Pty.Create(ctx, opcode42client.CreatePtyParams{Command: "bash"})
     conn, _ := ptyClient.Connect(ctx, pty.ID, authToken)
     conn.Send([]byte("echo hello\n"))
     select {
@@ -543,9 +543,9 @@ func TestPTYWebSocket(t *testing.T) {
 
 ```bash
 # CI job (Phase B+)
-./forge generate > /tmp/forge-openapi.json
-diff <(jq -S . forge/sdk/openapi.json) <(jq -S . /tmp/forge-openapi.json) \
-  || (echo "DRIFT DETECTED — update forge/sdk/openapi.json and regenerate SDKs" && exit 1)
+./opcode42 generate > /tmp/opcode42-openapi.json
+diff <(jq -S . opcode42/sdk/openapi.json) <(jq -S . /tmp/opcode42-openapi.json) \
+  || (echo "DRIFT DETECTED — update opcode42/sdk/openapi.json and regenerate SDKs" && exit 1)
 ```
 
 ---
@@ -558,7 +558,7 @@ A milestone is "done" when:
 2. `./gradlew :sdk-kotlin:test` passes all round-trip tests against a live opencode daemon.
 3. SSE heartbeat timeout test: client reconnects within 90s of server going silent.
 4. PTY framing test: control frame (`0x00` + JSON) and data frames decoded correctly.
-5. Drift CI check passes (Phase B+): `forge generate` output matches frozen spec.
+5. Drift CI check passes (Phase B+): `opcode42 generate` output matches frozen spec.
 
 ---
 
@@ -568,7 +568,7 @@ A milestone is "done" when:
 |------|------------|--------|------------|
 | `oapi-codegen` v2 generates incorrect nullable types for some schema shapes | Medium | Low | Pin version; add unit tests for known nullable fields; file upstream issues. |
 | `openapi-generator` Kotlin codegen produces non-idiomatic types requiring heavy manual override | Medium | Medium | Use `--import-mappings` and `--type-mappings` to override problem types; fall back to pure hand-written data classes for the 10–20 most-used types. |
-| SSE spec drift between opencode and Forge causes event type mismatches | Medium | High | Conformance harness (plan 12) catches this; freeze the event type catalog. |
+| SSE spec drift between opencode and Opcode42 causes event type mismatches | Medium | High | Conformance harness (plan 12) catches this; freeze the event type catalog. |
 | PTY WS framing change in opencode (e.g. 2-byte control header) | Low | Medium | Pin opencode version; add framing conformance test. |
 | Android OkHttp EventSource does not support custom reconnect intervals | Low | Low | Implement manual reconnect loop (cancel + restart on failure); ignore `retry:` field from server. |
 | WS auth via `?auth_token=` leaks credentials in server logs | Low | Low | Use the connect-token flow (`POST /pty/{ptyID}/connect-token`) for production; auth_token is fine for dev. |
@@ -578,7 +578,7 @@ A milestone is "done" when:
 
 ## Review pass (2026-06-03) — drift gate direction + stale paths
 
-**Status:** M1–M4 (Go SDK + SSE + PTY clients) are built (`sdk/go/forgeclient.go`, `sse.go`,
+**Status:** M1–M4 (Go SDK + SSE + PTY clients) are built (`sdk/go/opcode42client.go`, `sse.go`,
 `pty.go`, `gen/`). M5–M7 (Kotlin) and M9 (Swift) not started. M8 spec-drift gate exists
 (`scripts/check-spec-drift.sh`). **M10: the response-schema conformance half is now BUILT** —
 `internal/api/gen/conformance.go` (kin-openapi loader over the 3.0 derived spec, additionalProperties
@@ -615,13 +615,13 @@ for this repo (avoid a full reverse spec-generator / swaggo):
   Complementary to — not a replacement for — plan 12's dual-run (the behavioral oracle vs live
   opencode).
 
-**Stale path references.** The plan names the frozen file `forge/sdk/openapi.json` and a
-`./forge generate` command. The repo's canonical reference is **`conformance/openapi-reference.json`**
+**Stale path references.** The plan names the frozen file `opcode42/sdk/openapi.json` and a
+`./opcode42 generate` command. The repo's canonical reference is **`conformance/openapi-reference.json`**
 (synced by `scripts/sync-openapi.sh` from opencode's `packages/sdk/openapi.json`, with a provenance
 file), regenerated via `make gen` (`go generate ./...` → `downconvert` to 3.0 → `oapi-codegen`).
 Update M1/M8 and the Drift Tests block to these real paths/commands.
 
-**Note:** opencode serves its live spec at `/doc` (not `/openapi.json`); Forge's `/openapi.json` is a
+**Note:** opencode serves its live spec at `/doc` (not `/openapi.json`); Opcode42's `/openapi.json` is a
 known-addition (`conformance/known-additions.json`). Keep that divergence recorded.
 
 ## Phase 2 update (2026-06-04) — route-table emission + offline drift gate BUILT
@@ -633,7 +633,7 @@ as `internal/api/gen/conformance.go` + `openapi_conformance_test.go` from the pr
   the operations the daemon **actually registered** (`server.New` now collects `regOps` as it wires
   each route). The frozen reference's `info`/`components`/etc. are reused verbatim (so request/response
   schemas stay identical to the contract); only `paths` is rebuilt from the route table. Operations
-  not in the reference are emitted tagged `x-forge-addition: true`. Output is deterministic.
+  not in the reference are emitted tagged `x-opcode42-addition: true`. Output is deterministic.
 - **`/openapi.json` is no longer a verbatim alias of `/doc`.** `/doc` still serves the frozen reference
   byte-for-byte (opencode parity); `/openapi.json` now serves the **route-table-derived** self-emitted
   spec. This is what gives the drift gate teeth: dropping a `reg(...)` for a real handler whose path is
@@ -646,7 +646,7 @@ as `internal/api/gen/conformance.go` + `openapi_conformance_test.go` from the pr
   missing/changed/extra (not trivially passing). Both run under `go test ./...` — no running opencode.
 - **CI gate aligned.** `scripts/check-spec-drift.sh` now fetches `/openapi.json` (not `/doc`, which
   compared the reference to itself) and FAILs on unsanctioned extras. Unimplemented operations stay
-  present (Forge registers a 501 stub for every reference op), so 501 is not a spec-absence failure —
+  present (Opcode42 registers a 501 stub for every reference op), so 501 is not a spec-absence failure —
   matching the locked v1/sync/experimental decision.
 - **Registry.** `GET /doc` and `GET /openapi.json` are recorded in `conformance/known-additions.json`
   (both are absent from opencode's own spec `paths`, so both surface as additive and are WARN'd).

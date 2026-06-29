@@ -3,7 +3,7 @@ package conformance
 import (
 	"testing"
 
-	"github.com/rotemmiz/forge/conformance/result"
+	"github.com/rotemmiz/opcode42/conformance/result"
 )
 
 func TestProviderErrorNameDetectsTransientByName(t *testing.T) {

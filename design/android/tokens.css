@@ -1,23 +1,23 @@
 /* ============================================================
-   FORGE ANDROID — design tokens
-   Charcoal palette carried from the Forge TUI, mapped onto
+   OPCODE42 ANDROID — design tokens
+   Charcoal palette carried from the Opcode42 TUI, mapped onto
    Material 3 color roles. Dark is primary; light vars included
    for the full prototype's theme toggle (directions show dark).
    ============================================================ */
 
 :root {
-  /* ---- raw Forge charcoal palette (from the TUI styles.css) ---- */
-  --forge-bg:        #15171a;
-  --forge-panel:     #1c1f23;
-  --forge-elev:      #20242a;
-  --forge-sel:       #262b31;
-  --forge-border:    #2c3137;
-  --forge-hairline:  #23272c;
+  /* ---- raw Opcode42 charcoal palette (from the TUI styles.css) ---- */
+  --opcode42-bg:        #15171a;
+  --opcode42-panel:     #1c1f23;
+  --opcode42-elev:      #20242a;
+  --opcode42-sel:       #262b31;
+  --opcode42-border:    #2c3137;
+  --opcode42-hairline:  #23272c;
 
-  --forge-fg:        #d6dade;
-  --forge-dim:       #8b929a;
-  --forge-faint:     #585f67;
-  --forge-ghost:     #3a4047;
+  --opcode42-fg:        #d6dade;
+  --opcode42-dim:       #8b929a;
+  --opcode42-faint:     #585f67;
+  --opcode42-ghost:     #3a4047;
 
   --blue:    #6fa8dc;
   --green:   #8cc265;
@@ -34,21 +34,21 @@
   --diff-del-hl: rgba(224,96,110,0.30);
   --hunk-bg:   rgba(176,140,212,0.10);
 
-  /* ---- Material 3 dark color roles (aliased onto Forge palette) ---- */
-  --surface:                  var(--forge-bg);     /* page background */
+  /* ---- Material 3 dark color roles (aliased onto Opcode42 palette) ---- */
+  --surface:                  var(--opcode42-bg);     /* page background */
   --surface-container-lowest: #101316;
   --surface-container-low:    #181b1f;
-  --surface-container:        var(--forge-panel);  /* cards, composer */
-  --surface-container-high:   var(--forge-elev);   /* sheets, menus */
+  --surface-container:        var(--opcode42-panel);  /* cards, composer */
+  --surface-container-high:   var(--opcode42-elev);   /* sheets, menus */
   --surface-container-highest:#262b31;             /* hover / drag */
   --outline:                  #3a4047;
-  --outline-variant:          var(--forge-border);
-  --hairline:                 var(--forge-hairline);
+  --outline-variant:          var(--opcode42-border);
+  --hairline:                 var(--opcode42-hairline);
 
-  --on-surface:               var(--forge-fg);
-  --on-surface-variant:       var(--forge-dim);
-  --on-surface-faint:         var(--forge-faint);
-  --on-surface-ghost:         var(--forge-ghost);
+  --on-surface:               var(--opcode42-fg);
+  --on-surface-variant:       var(--opcode42-dim);
+  --on-surface-faint:         var(--opcode42-faint);
+  --on-surface-ghost:         var(--opcode42-ghost);
 
   --primary:                  var(--blue);
   --on-primary:               #0a1722;
@@ -63,7 +63,7 @@
   --sans: "Roboto", system-ui, -apple-system, sans-serif;
   --mono: "Roboto Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* M3 corner shapes — Forge character: tighter than stock M3 */
+  /* M3 corner shapes — Opcode42 character: tighter than stock M3 */
   --r-xs: 4px;
   --r-sm: 8px;
   --r-md: 12px;

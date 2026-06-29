@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/auth"
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/engine/catalog"
-	"github.com/rotemmiz/forge/internal/instance"
-	"github.com/rotemmiz/forge/internal/session"
-	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/auth"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/session"
+	"github.com/rotemmiz/opcode42/internal/storage"
 )
 
 // resourceServer builds a server with a catalog so /provider has data.
@@ -22,7 +22,7 @@ func resourceServer(t *testing.T, cat catalog.Catalog) http.Handler {
 	t.Setenv("HOME", home) // sandbox ~/.claude, ~/.agents skill dirs
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("OPENCODE_AUTH_CONTENT", "")
-	db, err := storage.Open(filepath.Join(t.TempDir(), "forge.db"))
+	db, err := storage.Open(filepath.Join(t.TempDir(), "opcode42.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

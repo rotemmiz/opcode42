@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/bus"
 )
 
 // rateWindow is the minimum interval between pushes for the same

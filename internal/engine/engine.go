@@ -1,4 +1,4 @@
-// Package engine wires Forge's agent loop end-to-end: it turns a prompt into a
+// Package engine wires Opcode42's agent loop end-to-end: it turns a prompt into a
 // persisted user message, runs the LLM stream + tool loop under the per-session
 // run lock, and drives the processor to emit parts and SSE. It is the keystone
 // that composes message, llm, catalog, processor, registry, permission and
@@ -11,19 +11,19 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/engine/catalog"
-	"github.com/rotemmiz/forge/internal/engine/llm"
-	"github.com/rotemmiz/forge/internal/engine/message"
-	"github.com/rotemmiz/forge/internal/engine/permission"
-	"github.com/rotemmiz/forge/internal/engine/question"
-	"github.com/rotemmiz/forge/internal/engine/registry"
-	"github.com/rotemmiz/forge/internal/engine/runstate"
-	"github.com/rotemmiz/forge/internal/engine/tool"
-	"github.com/rotemmiz/forge/internal/id"
-	"github.com/rotemmiz/forge/internal/lsp"
-	"github.com/rotemmiz/forge/internal/mcp"
-	"github.com/rotemmiz/forge/internal/worktree"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/permission"
+	"github.com/rotemmiz/opcode42/internal/engine/question"
+	"github.com/rotemmiz/opcode42/internal/engine/registry"
+	"github.com/rotemmiz/opcode42/internal/engine/runstate"
+	"github.com/rotemmiz/opcode42/internal/engine/tool"
+	"github.com/rotemmiz/opcode42/internal/id"
+	"github.com/rotemmiz/opcode42/internal/lsp"
+	"github.com/rotemmiz/opcode42/internal/mcp"
+	"github.com/rotemmiz/opcode42/internal/worktree"
 )
 
 // ProviderFactory builds a streaming provider for a provider/model pair (e.g. an
@@ -43,7 +43,7 @@ type PluginHooks interface {
 
 // defaultMaxSteps caps loop iterations when the resolved agent does not set its
 // own maxSteps. opencode falls back to a finite ceiling for an unset agent.steps
-// (prompt.ts:1339-1340); Forge uses 100.
+// (prompt.ts:1339-1340); Opcode42 uses 100.
 const defaultMaxSteps = 100
 
 // Config wires an Engine. The bus/permissions/directory are per-instance; the

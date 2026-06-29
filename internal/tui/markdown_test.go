@@ -4,16 +4,16 @@ package tui
 // markdown renderer (renderMarkdown) and its cache.
 //
 // What we test:
-//  1. Golden-style: render a representative markdown doc for forge-dark and
-//     forge-light, asserting non-empty output, presence of expected text
+//  1. Golden-style: render a representative markdown doc for opcode42-dark and
+//     opcode42-light, asserting non-empty output, presence of expected text
 //     fragments, rendered width ≤ contentWidth, and full-width background fill
 //     (every line has visible width == contentWidth — the anti-bleed check).
 //
 //  2. Cache correctness: same (text, width, theme) → identical string, DIFFERENT
 //     text → different string, theme change → different string.
 //
-//  3. Color differentiation: heading color differs between forge-dark and
-//     forge-light (the palette tokens diverge, so the rendered ANSI must differ).
+//  3. Color differentiation: heading color differs between opcode42-dark and
+//     opcode42-light (the palette tokens diverge, so the rendered ANSI must differ).
 //
 //  4. Partial/streaming safety: partial markdown (no trailing newline, unclosed
 //     fence) must not panic.
@@ -29,7 +29,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // truncateForTest returns the first n bytes of s for use in error messages.
@@ -118,8 +118,8 @@ func assertLineBgFilled(t *testing.T, label, rendered string, wantWidth int) {
 	}
 }
 
-// TestRenderMarkdown_GoldenThemes renders repMarkdown under forge-dark and
-// forge-light and asserts:
+// TestRenderMarkdown_GoldenThemes renders repMarkdown under opcode42-dark and
+// opcode42-light and asserts:
 // (a) output is non-empty,
 // (b) key text fragments survive rendering (headings, list items, code),
 // (c) every rendered line is exactly contentWidth wide (anti-bleed guard),
@@ -134,7 +134,7 @@ func TestRenderMarkdown_GoldenThemes(t *testing.T) {
 		fragments []string
 	}{
 		{
-			themeName: "forge-dark",
+			themeName: "opcode42-dark",
 			fragments: []string{
 				"Heading One", "Heading Two", "Heading Three",
 				"bold", "italic", "code span",
@@ -146,7 +146,7 @@ func TestRenderMarkdown_GoldenThemes(t *testing.T) {
 			},
 		},
 		{
-			themeName: "forge-light",
+			themeName: "opcode42-light",
 			fragments: []string{
 				"Heading One", "Heading Two",
 				"bold", "italic",
@@ -190,7 +190,7 @@ func TestRenderMarkdown_GoldenThemes(t *testing.T) {
 //  2. Different text → different output.
 //  3. Theme change → different output (theme name is part of the cache key).
 func TestRenderMarkdown_CacheCorrectness(t *testing.T) {
-	m := testModelForTheme(t, "forge-dark")
+	m := testModelForTheme(t, "opcode42-dark")
 
 	const doc1 = "# Hello\n\nWorld."
 	const doc2 = "# Goodbye\n\nMoon."
@@ -208,7 +208,7 @@ func TestRenderMarkdown_CacheCorrectness(t *testing.T) {
 	}
 
 	// Switch theme: outputs must differ (different palette colors → different ANSI).
-	mLight := testModelForTheme(t, "forge-light")
+	mLight := testModelForTheme(t, "opcode42-light")
 	rLight := mLight.prose(doc1)
 	// In non-TTY test runners lipgloss/glamour emits no ANSI codes, so the
 	// rendered strings may be equal in that environment. We only assert
@@ -218,17 +218,17 @@ func TestRenderMarkdown_CacheCorrectness(t *testing.T) {
 }
 
 // TestRenderMarkdown_ThemeColorsDiffer checks that heading rendering differs
-// between forge-dark and forge-light.  In non-TTY environments (no ANSI) the
+// between opcode42-dark and opcode42-light.  In non-TTY environments (no ANSI) the
 // text is identical; we skip the assertion in that case rather than fail CI.
 func TestRenderMarkdown_ThemeColorsDiffer(t *testing.T) {
-	dark := testModelForTheme(t, "forge-dark")
-	light := testModelForTheme(t, "forge-light")
+	dark := testModelForTheme(t, "opcode42-dark")
+	light := testModelForTheme(t, "opcode42-light")
 
 	// Confirm the palette heading colors actually differ.
-	darkPal, ok1 := theme.ByName("forge-dark")
-	lightPal, ok2 := theme.ByName("forge-light")
+	darkPal, ok1 := theme.ByName("opcode42-dark")
+	lightPal, ok2 := theme.ByName("opcode42-light")
 	if !ok1 || !ok2 {
-		t.Fatal("forge-dark or forge-light not found in theme registry")
+		t.Fatal("opcode42-dark or opcode42-light not found in theme registry")
 	}
 	if darkPal.Markdown.Heading == lightPal.Markdown.Heading {
 		t.Skip("dark/light heading colors are the same — cannot assert output differs (check palette setup)")
@@ -242,15 +242,15 @@ func TestRenderMarkdown_ThemeColorsDiffer(t *testing.T) {
 	// will match — that is acceptable (color is suppressed in non-TTY runners).
 	// We report the difference (or sameness) as a diagnostic, not a hard failure,
 	// because whether ANSI is emitted depends on the test runner environment.
-	t.Logf("forge-dark heading color : %s", string(darkPal.Markdown.Heading))
-	t.Logf("forge-light heading color: %s", string(lightPal.Markdown.Heading))
+	t.Logf("opcode42-dark heading color : %s", string(darkPal.Markdown.Heading))
+	t.Logf("opcode42-light heading color: %s", string(lightPal.Markdown.Heading))
 	t.Logf("outputs differ: %v", dOut != lOut)
 }
 
 // TestRenderMarkdown_PartialStreaming verifies that partial/streaming markdown
 // does not panic and returns something (non-empty or at minimum width-filled).
 func TestRenderMarkdown_PartialStreaming(t *testing.T) {
-	m := testModelForTheme(t, "forge-dark")
+	m := testModelForTheme(t, "opcode42-dark")
 
 	partials := []string{
 		"", // empty string — valid edge case during stream start

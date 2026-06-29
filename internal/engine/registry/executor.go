@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/rotemmiz/forge/internal/engine/permission"
-	"github.com/rotemmiz/forge/internal/engine/processor"
-	"github.com/rotemmiz/forge/internal/engine/tool"
+	"github.com/rotemmiz/opcode42/internal/engine/permission"
+	"github.com/rotemmiz/opcode42/internal/engine/processor"
+	"github.com/rotemmiz/opcode42/internal/engine/tool"
 )
 
 // Asker is the permission gate the executor consults before running a tool

@@ -15,11 +15,11 @@
     "throughput_concurrency": 16,
     "throughput_seconds": 5,
     "opencode_version": "1.15.12",
-    "forge_version": "0.0.1"
+    "opcode42_version": "0.0.1"
   },
   "targets": [
     {
-      "target": "forge",
+      "target": "opcode42",
       "cold_start_ms": {
         "n": 20,
         "min_ms": 48.188542,

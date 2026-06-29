@@ -1,4 +1,4 @@
-// Package theme is the Forge TUI's color system, lifted verbatim from the
+// Package theme is the Opcode42 TUI's color system, lifted verbatim from the
 // design handoff's tokens (design/tui/styles.css :root). It exposes a Palette of
 // truecolor values and the canonical Lipgloss styles the design defines
 // (selection bar, mode chip, semantic text). Lipgloss degrades truecolor to the
@@ -9,7 +9,7 @@ import "github.com/charmbracelet/lipgloss"
 
 // Palette holds the design tokens. Names mirror the CSS custom properties.
 //
-// Flat fields (Bg, Fg, Blue, …) are the original Forge tokens kept for
+// Flat fields (Bg, Fg, Blue, …) are the original Opcode42 tokens kept for
 // back-compat. The three sub-structs (Diff, Markdown, Syntax) and
 // BorderActive extend the palette to opencode's full token surface so that
 // renderers in M4–M6 can consume standard names. The plan-08c mapping table
@@ -31,7 +31,7 @@ type Palette struct {
 	BorderActive lipgloss.Color
 
 	// Text.
-	// opencode: text / textMuted / (faint, ghost are Forge extensions)
+	// opencode: text / textMuted / (faint, ghost are Opcode42 extensions)
 	Fg      lipgloss.Color // primary
 	FgDim   lipgloss.Color // secondary, tool-call lines
 	FgFaint lipgloss.Color // hints, line numbers, metadata
@@ -213,7 +213,7 @@ type SyntaxPalette struct {
 // Accent is the UI accent color (the design aliases --accent to --blue).
 func (p Palette) Accent() lipgloss.Color { return p.Blue }
 
-// Default returns the design's charcoal (forge-dark) palette.
+// Default returns the design's charcoal (opcode42-dark) palette.
 //
 // Sub-struct derivation rationale (plan 08c §1a):
 //

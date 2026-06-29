@@ -150,7 +150,7 @@ func (m Model) connGlyph() string {
 //   - Session title (bold)
 //   - CONTEXT section: token counts (input/output) + cost
 //   - LSP section: server count with a green/muted status dot
-//   - Footer: cwd path + Forge version tag
+//   - Footer: cwd path + Opcode42 version tag
 //
 // Each section header uses s.Dim (all-caps muted label) and each row is a plain
 // Base+Faint pair — mirrors opencode sidebar.tsx label/value pattern.
@@ -196,8 +196,8 @@ func (m Model) sidebarView() string {
 	b.WriteString("\n")
 
 	// LSP section — server count with status dot (opencode footer.tsx lines 70-72).
-	// Forge's TUI loads LSP info via the MCP server list; the count is the number
-	// of connected MCP items (best-effort — Forge doesn't have a dedicated LSP endpoint
+	// Opcode42's TUI loads LSP info via the MCP server list; the count is the number
+	// of connected MCP items (best-effort — Opcode42 doesn't have a dedicated LSP endpoint
 	// yet so we show MCP-connected count the same way opencode shows LSP count).
 	b.WriteString(s.Dim.Render("LSP") + "\n")
 	lspCount := 0
@@ -215,7 +215,7 @@ func (m Model) sidebarView() string {
 
 	body := b.String()
 
-	// Footer pinned to the bottom: cwd:branch + Forge version tag.
+	// Footer pinned to the bottom: cwd:branch + Opcode42 version tag.
 	// Matches opencode footer.tsx (directory left, version right) and sidebar.tsx
 	// (OpenCode + InstallationVersion on the bottom row).
 	var foot strings.Builder
@@ -229,7 +229,7 @@ func (m Model) sidebarView() string {
 	}
 	foot.WriteString(
 		lipgloss.NewStyle().Foreground(s.P.Green).Render("•") +
-			" " + s.Base.Render("Forge") + s.Faint.Render(" dev"),
+			" " + s.Base.Render("Opcode42") + s.Faint.Render(" dev"),
 	)
 
 	pad := m.height - lipgloss.Height(body) - lipgloss.Height(foot.String())

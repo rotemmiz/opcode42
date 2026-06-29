@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/credstore"
+	"github.com/rotemmiz/opcode42/internal/credstore"
 )
 
 // Sentinel errors map to opencode's ProviderAuth tagged errors
@@ -72,7 +72,7 @@ func NewService(proxyURL string) (*Service, error) {
 	}, nil
 }
 
-// builtinProviders returns the providers Forge ships OAuth for.
+// builtinProviders returns the providers Opcode42 ships OAuth for.
 func builtinProviders() []Provider {
 	return []Provider{newXaiProvider()}
 }

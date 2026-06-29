@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
 )
 
 func TestFixtureLookupAndModality(t *testing.T) {

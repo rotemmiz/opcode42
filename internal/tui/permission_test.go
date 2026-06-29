@@ -7,16 +7,16 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
-func permEvent(t *testing.T, id, perm string, meta map[string]any) forgeclient.SSEEvent {
+func permEvent(t *testing.T, id, perm string, meta map[string]any) opcode42client.SSEEvent {
 	t.Helper()
 	m, _ := json.Marshal(meta)
 	props, _ := json.Marshal(map[string]any{
 		"id": id, "sessionID": "ses_1", "permission": perm, "metadata": json.RawMessage(m),
 	})
-	return forgeclient.SSEEvent{Type: "permission.asked", Properties: props}
+	return opcode42client.SSEEvent{Type: "permission.asked", Properties: props}
 }
 
 func TestPermission_AskedThenRepliedReduces(t *testing.T) {
@@ -26,7 +26,7 @@ func TestPermission_AskedThenRepliedReduces(t *testing.T) {
 		t.Fatalf("permission.asked should add a pending permission: %+v", s.permissions)
 	}
 	props, _ := json.Marshal(map[string]any{"requestID": "perm_1", "reply": "once"})
-	s = s.Reduce(forgeclient.SSEEvent{Type: "permission.replied", Properties: props})
+	s = s.Reduce(opcode42client.SSEEvent{Type: "permission.replied", Properties: props})
 	if len(s.permissions) != 0 {
 		t.Fatalf("permission.replied should clear it, got %+v", s.permissions)
 	}

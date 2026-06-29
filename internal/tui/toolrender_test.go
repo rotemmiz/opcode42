@@ -7,7 +7,7 @@ package tui
 //  2. Todo rendering: mixed statuses → correct glyphs + status text.
 //  3. Collapse: collapsed tool → header only; expanded → output panel.
 //  4. Reasoning fold: collapsed one-liner vs expanded full text.
-//  5. Panel background-fill: no transparent trailing cells for forge-dark/forge-light.
+//  5. Panel background-fill: no transparent trailing cells for opcode42-dark/opcode42-light.
 
 import (
 	"encoding/json"
@@ -16,7 +16,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // ── 1. toolHeader table ───────────────────────────────────────────────────────
@@ -246,7 +246,7 @@ func TestThinking_ExpandedShowsFullText(t *testing.T) {
 // panel is exactly panelWidth visible characters wide (no transparent trailing
 // cells). panelWidth = contentWidth - 2 (2-column indent). plan 08c Tier 0.
 func TestToolPanel_BackgroundFill(t *testing.T) {
-	themeNames := []string{"forge-dark", "forge-light"}
+	themeNames := []string{"opcode42-dark", "opcode42-light"}
 	for _, tn := range themeNames {
 		t.Run(tn, func(t *testing.T) {
 			m := New(Config{URL: "http://x"})

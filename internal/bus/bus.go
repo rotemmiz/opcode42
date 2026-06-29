@@ -3,7 +3,7 @@ package bus
 import (
 	"sync"
 
-	"github.com/rotemmiz/forge/internal/id"
+	"github.com/rotemmiz/opcode42/internal/id"
 )
 
 // Event is the payload published on the bus and streamed to SSE clients,

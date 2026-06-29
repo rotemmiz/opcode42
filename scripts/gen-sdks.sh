@@ -22,19 +22,19 @@
 #        OUT_DIR=/tmp/x scripts/gen-sdks.sh   # generate elsewhere (freshness check)
 #
 # Requires: java (>= 11) and go (for the downconvert step). The openapi-generator
-# JAR is downloaded once and cached under ${OPENAPI_GENERATOR_CACHE:-~/.cache/forge-sdk};
+# JAR is downloaded once and cached under ${OPENAPI_GENERATOR_CACHE:-~/.cache/opcode42-sdk};
 # set OPENAPI_GENERATOR_JAR to a pre-downloaded JAR for offline/CI use.
 set -euo pipefail
 
 # --- pinned toolchain -------------------------------------------------------
 OPENAPI_GENERATOR_VERSION="${OPENAPI_GENERATOR_VERSION:-7.10.0}"
-KOTLIN_PACKAGE="dev.forge.sdk"
-SWIFT_PROJECT="ForgeClient"
+KOTLIN_PACKAGE="dev.opcode42.sdk"
+SWIFT_PROJECT="Opcode42Client"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SPEC="$REPO_ROOT/conformance/openapi-reference.json"
 OUT_DIR="${OUT_DIR:-$REPO_ROOT}"
-CACHE_DIR="${OPENAPI_GENERATOR_CACHE:-$HOME/.cache/forge-sdk}"
+CACHE_DIR="${OPENAPI_GENERATOR_CACHE:-$HOME/.cache/opcode42-sdk}"
 GO="${GO:-go}"
 
 if [[ ! -f "$SPEC" ]]; then
@@ -66,13 +66,13 @@ if [[ -z "$JAR" ]]; then
 fi
 
 # --- 1. downconvert 3.1 -> derived 3.0 --------------------------------------
-DERIVED_SPEC="$(mktemp -t forge-sdk-3.0.XXXXXX.json)"
-NORM_SPEC="$(mktemp -t forge-sdk-norm.XXXXXX.json)"
+DERIVED_SPEC="$(mktemp -t opcode42-sdk-3.0.XXXXXX.json)"
+NORM_SPEC="$(mktemp -t opcode42-sdk-norm.XXXXXX.json)"
 trap 'rm -f "$DERIVED_SPEC" "$NORM_SPEC"' EXIT
 echo "== downconvert 3.1 -> 3.0 ==" >&2
 # No -client flag: that disambiguator is specific to oapi-codegen's response
 # wrappers and would rename component schemas the openapi-generator output keeps.
-"$GO" run github.com/rotemmiz/forge/internal/tools/downconvert \
+"$GO" run github.com/rotemmiz/opcode42/internal/tools/downconvert \
   -in "$SPEC" -out "$DERIVED_SPEC" >/dev/null
 
 # --- 2. normalize residual shapes -------------------------------------------
@@ -229,13 +229,13 @@ KOTLIN_OUT="$OUT_DIR/sdk/kotlin/gen"
 rm -rf "$KOTLIN_OUT"
 mkdir -p "$KOTLIN_OUT"
 cp "$REPO_ROOT/sdk/kotlin/.openapi-generator-ignore" "$KOTLIN_OUT/.openapi-generator-ignore"
-# model-name-mappings File=ForgeFile: the `File` schema otherwise collides with
+# model-name-mappings File=Opcode42File: the `File` schema otherwise collides with
 # the Kotlin generator's reserved `java.io.File` mapping (corrupts the class name).
 # (The EventTui* casing/arch issue is handled upstream by normalizer step (c),
 # which drops those now-unreferenced schemas entirely.)
 gen kotlin "$KOTLIN_OUT" \
   --library jvm-okhttp4 \
-  --model-name-mappings 'File=ForgeFile' \
+  --model-name-mappings 'File=Opcode42File' \
   --type-mappings 'AnyType=JsonElement,object=JsonElement' \
   --import-mappings 'JsonElement=kotlinx.serialization.json.JsonElement' \
   --additional-properties="packageName=$KOTLIN_PACKAGE,dateLibrary=java8,serializationLibrary=kotlinx_serialization,useCoroutines=true"

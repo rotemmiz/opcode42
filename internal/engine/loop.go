@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/engine/llm"
-	"github.com/rotemmiz/forge/internal/engine/message"
-	"github.com/rotemmiz/forge/internal/engine/processor"
-	"github.com/rotemmiz/forge/internal/engine/registry"
-	"github.com/rotemmiz/forge/internal/id"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/processor"
+	"github.com/rotemmiz/opcode42/internal/engine/registry"
+	"github.com/rotemmiz/opcode42/internal/id"
 )
 
 // Plan-05 hook names routed from the loop. They mirror the corresponding keys

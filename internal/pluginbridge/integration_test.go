@@ -22,7 +22,7 @@ func findRuntime() string {
 	return ""
 }
 
-// hostScriptPath locates packages/forge-plugin-host/src/index.ts relative to
+// hostScriptPath locates packages/opcode42-plugin-host/src/index.ts relative to
 // this test file (internal/pluginbridge → repo root → packages/...).
 func hostScriptPath(t *testing.T) string {
 	t.Helper()
@@ -31,7 +31,7 @@ func hostScriptPath(t *testing.T) string {
 		t.Fatal("cannot resolve caller path")
 	}
 	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
-	return filepath.Join(repoRoot, "packages", "forge-plugin-host", "src", "index.ts")
+	return filepath.Join(repoRoot, "packages", "opcode42-plugin-host", "src", "index.ts")
 }
 
 func fixtureDir(t *testing.T) string {

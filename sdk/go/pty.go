@@ -1,4 +1,4 @@
-package forgeclient
+package opcode42client
 
 import (
 	"bytes"
@@ -47,20 +47,20 @@ type PTYCreate struct {
 }
 
 // CreatePTY starts a pseudo-terminal.
-func (c *ForgeClient) CreatePTY(ctx context.Context, opts PTYCreate) (PTYInfo, error) {
+func (c *Opcode42Client) CreatePTY(ctx context.Context, opts PTYCreate) (PTYInfo, error) {
 	var info PTYInfo
 	err := c.PostJSON(ctx, "/pty", opts, &info)
 	return info, err
 }
 
 // ResizePTY sets the terminal size (PUT /pty/:id with {size:{cols,rows}}).
-func (c *ForgeClient) ResizePTY(ctx context.Context, id string, cols, rows int) error {
+func (c *Opcode42Client) ResizePTY(ctx context.Context, id string, cols, rows int) error {
 	body := map[string]any{"size": map[string]int{"cols": cols, "rows": rows}}
 	return c.putJSON(ctx, "/pty/"+id, body)
 }
 
 // connectToken mints a short-lived WebSocket connect ticket.
-func (c *ForgeClient) connectToken(ctx context.Context, id string) (string, error) {
+func (c *Opcode42Client) connectToken(ctx context.Context, id string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/pty/"+id+"/connect-token", nil)
 	if err != nil {
 		return "", err
@@ -110,7 +110,7 @@ func (p *PTYConn) Err() <-chan error { return p.errc }
 // the start, -1 for live-only / no replay). The returned PTYConn owns a read
 // goroutine that lives until Close — cancelling ctx aborts only the dial, not the
 // stream, so callers MUST Close (and keep draining Output until then).
-func (c *ForgeClient) ConnectPTY(ctx context.Context, id string, cursor int) (*PTYConn, error) {
+func (c *Opcode42Client) ConnectPTY(ctx context.Context, id string, cursor int) (*PTYConn, error) {
 	ticket, err := c.connectToken(ctx, id)
 	if err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func (p *PTYConn) Close() {
 }
 
 // putJSON performs an authed PUT of a JSON body (used by ResizePTY).
-func (c *ForgeClient) putJSON(ctx context.Context, path string, body any) error {
+func (c *Opcode42Client) putJSON(ctx context.Context, path string, body any) error {
 	b, err := json.Marshal(body)
 	if err != nil {
 		return err

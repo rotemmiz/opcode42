@@ -1,5 +1,5 @@
-// Forge Kotlin SDK — the generated REST client (gen/) plus the hand-written
-// ForgeClient wrapper (src/). Regenerate gen/ with `scripts/gen-sdks.sh`
+// Opcode42 Kotlin SDK — the generated REST client (gen/) plus the hand-written
+// Opcode42Client wrapper (src/). Regenerate gen/ with `scripts/gen-sdks.sh`
 // (`make gen-sdks`); never edit gen/ by hand.
 //
 // This is a plain Kotlin/JVM library so it builds in CI without the Android

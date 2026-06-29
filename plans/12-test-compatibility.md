@@ -1,7 +1,7 @@
 # Plan 12 — Conformance Harness: Wire Compatibility Testing
 
-> Scope: the primary correctness gate for Forge's interoperability claim.
-> A Forge daemon that passes this harness is behaviorally indistinguishable
+> Scope: the primary correctness gate for Opcode42's interoperability claim.
+> A Opcode42 daemon that passes this harness is behaviorally indistinguishable
 > from an opencode daemon to any compliant client.
 > "Interop is both the product goal and the development methodology." — plan 00.
 
@@ -9,7 +9,7 @@
 
 ## Context
 
-Forge's central proposition is **wire compatibility** with opencode's HTTP+SSE+WS API.
+Opcode42's central proposition is **wire compatibility** with opencode's HTTP+SSE+WS API.
 This plan defines the full conformance strategy: capturing the contract from
 `packages/sdk/openapi.json`, recording the empirical SSE event catalog from a real
 opencode session, running a client-driven scenario suite against **both** daemons and
@@ -21,7 +21,7 @@ Interop means:
 2. SSE event streams match type-for-type and field-for-field.
 3. PTY WebSocket framing is identical.
 4. Auth and directory routing behave identically.
-5. opencode's unmodified TUI and web app work against the Forge daemon.
+5. opencode's unmodified TUI and web app work against the Opcode42 daemon.
 
 ### Key source references
 - Wire contract: `packages/sdk/openapi.json` (22 230 lines, 113 path entries)
@@ -39,29 +39,29 @@ Interop means:
 ## (a) Contract Capture and Spec-Drift Gate
 
 ### Canonical spec
-The canonical wire contract is `packages/sdk/openapi.json`, vendored into the Forge
+The canonical wire contract is `packages/sdk/openapi.json`, vendored into the Opcode42
 repo at `conformance/openapi-reference.json`. This file is the source of truth.
 **Never modify it manually.** Update it only by pulling from opencode and running
 the drift check.
 
-### Forge self-emits its spec
-The Forge daemon exposes `GET /openapi.json` (or built in to the oapi-codegen
+### Opcode42 self-emits its spec
+The Opcode42 daemon exposes `GET /openapi.json` (or built in to the oapi-codegen
 server stubs). The emitted spec must match the vendored reference.
 
 ### Drift detection CI gate
 
 ```bash
 # scripts/check-spec-drift.sh
-forge_url=http://localhost:4096
-curl -sf $forge_url/openapi.json > /tmp/forge-spec.json
-npx openapi-diff conformance/openapi-reference.json /tmp/forge-spec.json \
+opcode42_url=http://localhost:4096
+curl -sf $opcode42_url/openapi.json > /tmp/opcode42-spec.json
+npx openapi-diff conformance/openapi-reference.json /tmp/opcode42-spec.json \
   --fail-on-incompatible
 ```
 
 Run as a CI step on every PR. Any breaking difference (missing path, changed
 request/response schema, new required field, changed status code) **fails the build**.
 
-Non-breaking additions (Forge adds an endpoint not in the reference) are allowed
+Non-breaking additions (Opcode42 adds an endpoint not in the reference) are allowed
 but logged as warnings. A `conformance/known-additions.json` registry tracks
 intentional additions.
 
@@ -70,11 +70,11 @@ intentional additions.
 ```go
 // conformance/coverage_test.go
 // For every path + method in openapi-reference.json, verify that
-// the Forge server returns a non-500 status when called with a valid
+// the Opcode42 server returns a non-500 status when called with a valid
 // request. Generates conformance/coverage-report.json.
 func TestSpecCoverage(t *testing.T) {
     // Uses oapi-codegen stubs to enumerate all operations.
-    // For each: construct minimal valid request, call Forge, assert status != 5xx.
+    // For each: construct minimal valid request, call Opcode42, assert status != 5xx.
 }
 ```
 
@@ -124,7 +124,7 @@ the `response.body` string — it is a sequence of `data: {...}\n\n` lines.
 3. Cassettes are written to `conformance/cassettes/<scenario-name>.json`.
 4. Sensitive fields (API keys, auth tokens) are redacted by the default
    `Redactor.defaults()` (`effect.ts:69`).
-5. Commit the cassettes to the Forge repo.
+5. Commit the cassettes to the Opcode42 repo.
 
 **WebSocket (PTY) recording** uses `makeWebSocketExecutor` (`websocket.ts:72`)
 to capture the full PTY WebSocket session: open URL, resize control frames, input
@@ -174,7 +174,7 @@ to interactions. See `schema.ts:3-68` for the complete field definitions.
 ### Design
 
 The scenario suite is a Go test program (`conformance/suite_test.go`) that:
-1. Accepts a `--target` flag: `opencode` or `forge` (daemon URL).
+1. Accepts a `--target` flag: `opencode` or `opcode42` (daemon URL).
 2. Runs every scenario against the target.
 3. Records request/response pairs to a result file.
 4. When run against both targets, diffs the result files using the normalizer.
@@ -183,11 +183,11 @@ The scenario suite is a Go test program (`conformance/suite_test.go`) that:
 # Record against opencode (truth)
 go test ./conformance/... --target=http://localhost:4096 --record --out=results/opencode.json
 
-# Record against Forge
-go test ./conformance/... --target=http://localhost:4097 --record --out=results/forge.json
+# Record against Opcode42
+go test ./conformance/... --target=http://localhost:4097 --record --out=results/opcode42.json
 
 # Diff
-go run ./conformance/cmd/diff results/opencode.json results/forge.json
+go run ./conformance/cmd/diff results/opencode.json results/opcode42.json
 ```
 
 ### Scenario list
@@ -332,7 +332,7 @@ func (n *Normalizer) NormalizeEvent(event map[string]any) map[string]any {
 SCENARIO: prompt-tool-call
 STEP 3: SSE event #7
   EXPECTED (opencode): {"type":"part.updated","properties":{"type":"tool","state":{"status":"completed",...}}}
-  ACTUAL   (forge):    {"type":"part.updated","properties":{"type":"tool","state":{"status":"running",...}}}
+  ACTUAL   (opcode42):    {"type":"part.updated","properties":{"type":"tool","state":{"status":"running",...}}}
   DIFF: properties.state.status: "completed" != "running"
 
 SUMMARY: 1 failure in 1 scenario; 29 scenarios passed.
@@ -350,16 +350,16 @@ jobs:
         image: ghcr.io/sst/opencode:pinned-tag
         ports: ["4096:4096"]
     steps:
-      - name: Build Forge
+      - name: Build Opcode42
         run: make build
-      - name: Start Forge daemon
-        run: ./forged --port 4097 &
+      - name: Start Opcode42 daemon
+        run: ./opcoded --port 4097 &
       - name: Run conformance suite against opencode
         run: go test ./conformance/... --target=http://localhost:4096 --out=results/opencode.json
-      - name: Run conformance suite against Forge
-        run: go test ./conformance/... --target=http://localhost:4097 --out=results/forge.json
+      - name: Run conformance suite against Opcode42
+        run: go test ./conformance/... --target=http://localhost:4097 --out=results/opcode42.json
       - name: Diff results
-        run: go run ./conformance/cmd/diff results/opencode.json results/forge.json
+        run: go run ./conformance/cmd/diff results/opencode.json results/opcode42.json
 ```
 
 The diff step exits non-zero on any structural difference not in the
@@ -367,14 +367,14 @@ known-divergence registry (see below).
 
 ---
 
-## opencode Clients Against Forge (Acceptance)
+## opencode Clients Against Opcode42 (Acceptance)
 
 This is the strongest form of the interop proof. Run opencode's own unmodified
-clients against the Forge daemon and assert they work.
+clients against the Opcode42 daemon and assert they work.
 
 ### Test 1: opencode TUI attach
 ```bash
-forged --port 4097 &
+opcoded --port 4097 &
 opencode attach http://localhost:4097
 ```
 Assert: TUI renders session list; typing a prompt and submitting produces a
@@ -383,7 +383,7 @@ This is a manual test today; automate with `vhs` in Phase D.
 
 ### Test 2: opencode web app
 ```bash
-forged --port 4097 &
+opcoded --port 4097 &
 # Open packages/web in browser, point to http://localhost:4097
 ```
 Assert: session list loads; create session; submit prompt; stream renders.
@@ -399,7 +399,7 @@ const session = await client.session.create({ ... })
 // ... full CRUD + prompt flow
 ```
 Run with `bun test conformance/opencode-sdk-test.ts`. This exercises the exact
-SDK shapes against Forge. Failures here indicate a schema mismatch.
+SDK shapes against Opcode42. Failures here indicate a schema mismatch.
 
 ---
 
@@ -417,9 +417,9 @@ From `packages/http-recorder/src/websocket.ts:43-48`, frames are stored as:
 
 The PTY conformance test verifies:
 - Control frame: first byte `0x00` followed by JSON `{"cursor": {...}}`.
-  Forge must produce the same frame structure when a resize event occurs.
+  Opcode42 must produce the same frame structure when a resize event occurs.
 - Data frames: UTF-8 text chunks. Maximum chunk size matches 64KB.
-- Output buffering: 2MB total buffer; overflow behavior (Forge must drop or error
+- Output buffering: 2MB total buffer; overflow behavior (Opcode42 must drop or error
   consistently with opencode).
 
 Reference: plan 00 PTY WS framing spec. Validate against actual cassette recordings.
@@ -448,7 +448,7 @@ The conformance suite is the **primary merge gate** for the `dev` branch:
 Required status checks:
   conformance/spec-drift        (openapi diff)
   conformance/scenario-suite    (dual-run diff)
-  conformance/sdk-test          (opencode TS SDK against Forge)
+  conformance/sdk-test          (opencode TS SDK against Opcode42)
 ```
 
 Phase A: only spec-drift and 10 core scenarios required.
@@ -471,7 +471,7 @@ but are reported as warnings.
     "scenario": "sync-replay",
     "phase": "A",
     "reason": "SSE replay via /sync/* not implemented in Phase A",
-    "track": "https://github.com/forge/forge/issues/42"
+    "track": "https://github.com/opcode42/opcode42/issues/42"
   },
   {
     "scenario": "experimental-*",

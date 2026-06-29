@@ -1,10 +1,10 @@
-// Package push implements the Forge daemon-side push-notification relay
+// Package push implements the Opcode42 daemon-side push-notification relay
 // (plan 13 §13.8). It lets a mobile client register an FCM device token, maps
 // relevant daemon events (session idle, permission/question asked) to push
 // notifications, and dispatches them to Firebase Cloud Messaging when no SSE
 // client is actively connected.
 //
-// This is a Forge known-addition: opencode has no push surface (verified —
+// This is a Opcode42 known-addition: opencode has no push surface (verified —
 // the only opencode "device token" hits are unrelated OAuth device-code flows).
 // The endpoints are kept off the wire-compat critical path and recorded in
 // conformance/known-additions.json.

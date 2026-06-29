@@ -9,7 +9,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	"gopkg.in/yaml.v3"
 
-	"github.com/rotemmiz/forge/internal/engine/permission"
+	"github.com/rotemmiz/opcode42/internal/engine/permission"
 )
 
 // Agent is the wire shape served by GET /agent (openapi Agent). Permission and
@@ -43,7 +43,7 @@ func allowAll() permission.Ruleset {
 	return permission.Ruleset{{Permission: "*", Pattern: "*", Action: permission.ActionAllow}}
 }
 
-// builtinAgents are the agents opencode ships (agent/agent.ts:129-281). Forge
+// builtinAgents are the agents opencode ships (agent/agent.ts:129-281). Opcode42
 // serves their metadata so the TUI's switcher matches; the full system prompts
 // live with the engine, not here.
 func builtinAgents() map[string]*Agent {

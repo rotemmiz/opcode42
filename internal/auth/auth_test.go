@@ -74,7 +74,7 @@ func TestWrongPassword401(t *testing.T) {
 	}
 }
 
-// TestCheckBindExposure verifies Forge refuses a non-loopback bind without a
+// TestCheckBindExposure verifies Opcode42 refuses a non-loopback bind without a
 // password (plan 13 §Defaults) but allows loopback binds and any bind once a
 // password is set.
 func TestCheckBindExposure(t *testing.T) {
@@ -82,7 +82,7 @@ func TestCheckBindExposure(t *testing.T) {
 	withPass := Config{Username: "opencode", Password: "secret"}
 
 	// No password + non-loopback host → refuse.
-	for _, h := range []string{"0.0.0.0", "192.168.1.5", "::", "forge.example.com"} {
+	for _, h := range []string{"0.0.0.0", "192.168.1.5", "::", "opcode42.example.com"} {
 		if err := noPass.CheckBindExposure(h); err == nil {
 			t.Errorf("CheckBindExposure(%q) with no password = nil, want error", h)
 		}

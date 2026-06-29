@@ -8,11 +8,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/rotemmiz/forge/internal/push"
+	"github.com/rotemmiz/opcode42/internal/push"
 )
 
-// registerPushRoutes wires the Forge push-notification relay endpoints
-// (plan 13 §13.8). These are a Forge known-addition — opencode has no push
+// registerPushRoutes wires the Opcode42 push-notification relay endpoints
+// (plan 13 §13.8). These are a Opcode42 known-addition — opencode has no push
 // surface — recorded in conformance/known-additions.json and kept off the
 // wire-compat critical path.
 //

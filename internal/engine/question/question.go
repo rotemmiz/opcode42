@@ -12,8 +12,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/id"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/id"
 )
 
 // ErrRejected is returned when a question is dismissed by the user.

@@ -1,4 +1,4 @@
-# oapi-codegen configuration — generates Forge's Go client SDK (request
+# oapi-codegen configuration — generates Opcode42's Go client SDK (request
 # functions + models) from the vendored OpenAPI reference. Regenerate with
 # `make gen`. Do not edit the generated file by hand.
 package: gen

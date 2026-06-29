@@ -6,7 +6,7 @@ import (
 )
 
 func TestOpenAppliesPragmas(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "forge.db"))
+	db, err := Open(filepath.Join(t.TempDir(), "opcode42.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestOpenAppliesPragmas(t *testing.T) {
 }
 
 func TestMigrationsCreateTables(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "forge.db"))
+	db, err := Open(filepath.Join(t.TempDir(), "opcode42.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestMigrationsCreateTables(t *testing.T) {
 }
 
 func TestMigrateIsIdempotent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "forge.db")
+	path := filepath.Join(t.TempDir(), "opcode42.db")
 	db, err := Open(path)
 	if err != nil {
 		t.Fatalf("Open #1: %v", err)
@@ -63,7 +63,7 @@ func TestMigrateIsIdempotent(t *testing.T) {
 }
 
 func TestUserVersionAdvances(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "forge.db"))
+	db, err := Open(filepath.Join(t.TempDir(), "opcode42.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

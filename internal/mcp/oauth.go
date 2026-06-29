@@ -17,8 +17,8 @@ import (
 const (
 	oauthCallbackPort = 19876
 	oauthCallbackPath = "/mcp/oauth/callback"
-	oauthClientName   = "Forge"
-	oauthClientURI    = "https://github.com/rotemmiz/forge"
+	oauthClientName   = "Opcode42"
+	oauthClientURI    = "https://github.com/rotemmiz/opcode42"
 )
 
 // redirectURI resolves the effective OAuth redirect URI for a server (mirrors

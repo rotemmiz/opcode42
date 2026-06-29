@@ -6,8 +6,8 @@ scripted run; the unchecked `[ ]` items need your judgment (decisions, design co
 
 ## S1 — Go module + build/test tooling
 
-- [x] `make build` produces `bin/forged`; `./bin/forged --version` prints `0.0.1`. (automated 2026-05-29)
-      (Note: post-S4, `./bin/forged --port N` starts the HTTP server — the original placeholder
+- [x] `make build` produces `bin/opcoded`; `./bin/opcoded --version` prints `0.0.1`. (automated 2026-05-29)
+      (Note: post-S4, `./bin/opcoded --port N` starts the HTTP server — the original placeholder
       behavior was superseded by S4.)
 - [x] `make test` is green. (automated 2026-05-29) (Test files now exist across packages; the
       original `[no test files]` note was pre-test.)
@@ -30,7 +30,7 @@ scripted run; the unchecked `[ ]` items need your judgment (decisions, design co
       is byte-identical to `packages/sdk/openapi.json`; provenance file pins the opencode commit. (automated 2026-05-29)
 - [x] `make gen` succeeds and prints the transform summary (22 exclusiveMinimum, 28 nullable
       collapses, 53 dup union members dropped, 4 schema renames). The generated
-      `internal/api/gen/forge.gen.go` has a `ServerInterface` with **131 methods**, and regeneration
+      `internal/api/gen/opcode42.gen.go` has a `ServerInterface` with **131 methods**, and regeneration
       is byte-stable (no git diff). (automated 2026-05-29)
 - [x] DECISION CONFIRMED (2026-05-29): the generated file (~1.26 MB / 36k lines) stays **committed**.
       Golden path completed — CI job `codegen-fresh` regenerates and runs `git diff --exit-code
@@ -45,16 +45,16 @@ scripted run; the unchecked `[ ]` items need your judgment (decisions, design co
       because opencode ships both dotted and PascalCase variants. Confirm the `*2` names are tolerable
       (they're SSE event types, rarely hand-referenced).
 
-## S4 — forged skeleton
+## S4 — opcoded skeleton
 
-- [x] `./bin/forged --port 4099`, then: `curl /global/health` → `{"healthy":true,"version":"0.0.1"}`;
+- [x] `./bin/opcoded --port 4099`, then: `curl /global/health` → `{"healthy":true,"version":"0.0.1"}`;
       `curl /doc` → openapi `3.1.0`, 113 paths; `curl /session` → 501 `{"_tag":"NotImplemented",...}`;
       `curl /nope` → 404; SIGTERM → clean exit (code 0). (automated 2026-05-29)
 - [x] Startup log line is `opencode server listening on http://...` (clients scrape this prefix). (automated 2026-05-29)
-- [ ] CONFIRM the `/doc` choice: Forge serves the spec at `/doc` (wire-compat with opencode), NOT
+- [ ] CONFIRM the `/doc` choice: Opcode42 serves the spec at `/doc` (wire-compat with opencode), NOT
       `/openapi.json` as plan 12 §a / plan 01 M7 assumed. (You chose `/doc` + `/openapi.json` alias —
       the plan docs still need correcting.)
-- [ ] CONFIRM the 501 envelope `{"_tag","message","operation"}` is acceptable as Forge's Phase-A
+- [ ] CONFIRM the 501 envelope `{"_tag","message","operation"}` is acceptable as Opcode42's Phase-A
       placeholder (opencode never returns 501, so this is an expected conformance divergence).
 
 ## C1 — Go cassette package
@@ -76,13 +76,13 @@ scripted run; the unchecked `[ ]` items need your judgment (decisions, design co
 
 ## C0 — Spec-drift gate
 
-- [x] `./bin/forged --port 4099 &` then `bash scripts/check-spec-drift.sh http://127.0.0.1:4099` →
-      `131 reference operations, 131 forge operations, 0 breaking` (exit 0). (automated 2026-05-29)
+- [x] `./bin/opcoded --port 4099 &` then `bash scripts/check-spec-drift.sh http://127.0.0.1:4099` →
+      `131 reference operations, 131 opcode42 operations, 0 breaking` (exit 0). (automated 2026-05-29)
 - [x] A seeded missing operation makes the gate report `BREAKING` and exit 1. (automated 2026-05-29)
 - [x] `/openapi.json` is served by the skeleton (alias of `/doc`) and logged in
       `conformance/known-additions.json`. (automated 2026-05-29)
 - [ ] NOTE: the gate is semantic (missing operations / changed status-code sets = breaking; extra
-      ops checked against `conformance/known-additions.json`), so it keeps working when Forge
+      ops checked against `conformance/known-additions.json`), so it keeps working when Opcode42
       self-emits a generated spec in plan 01/06 rather than echoing the reference verbatim.
 
 ## C2 + C3 + C6 + C7 — Suite, scenarios, recording, gates (run against live opencode)
@@ -101,7 +101,7 @@ scripted run; the unchecked `[ ]` items need your judgment (decisions, design co
       parentID set / children returns both") is wrong; the suite records truth instead of asserting.
 - [ ] SCOPE: C2 recorded the SSE catalog via a pure-Go recorder (`conformance/cmd/record`), NOT
       opencode's TS `http-recorder` (no `bun` here; Go is better for CI). PTY WS capture (Finding #3)
-      is deferred until forge serves PTY (plan 01 M5 / Phase B); the cassette format already supports
+      is deferred until opcode42 serves PTY (plan 01 M5 / Phase B); the cassette format already supports
       it and has a synthetic control-frame test.
 - [x] Auth scenarios (#20–22) ADDED (2026-05-29): the runner now starts opencode auth-enabled and
       the suite sends Basic creds. auth-basic-ok→200, auth-missing-401→401 + captured
@@ -120,9 +120,9 @@ scripted run; the unchecked `[ ]` items need your judgment (decisions, design co
 
 ## Interop demonstration (2026-05-29) — SUCCESS, both directions
 
-- [x] Forge-authored client (the conformance suite) drives **real opencode**: all 7 agent-free
+- [x] Opcode42-authored client (the conformance suite) drives **real opencode**: all 7 agent-free
       scenarios run green. (automated 2026-05-29)
-- [x] opencode's **own** `@opencode-ai/sdk` against `forged`: `session.list()` → `HTTP 501`
+- [x] opencode's **own** `@opencode-ai/sdk` against `opcoded`: `session.list()` → `HTTP 501`
       `{"_tag":"NotImplemented",...}` (wire contract present; behavior is Phase B). The identical SDK
       call against real opencode → `HTTP 200` + session array. Same client, same request, two daemons
       — only "implemented vs 501" differs. (automated 2026-05-29)
@@ -133,9 +133,9 @@ Implemented: `internal/id` (opencode id.ts port), `internal/config` (JSONC loade
 merge), `internal/auth` (Basic + `?auth_token`), `internal/worktree` (realpath + git-root/`/`
 fallback), `internal/storage` (modernc.org/sqlite + embedded idempotent schema),
 `internal/session` (CRUD + wire shape). Wired into `internal/server` behind an `auth → directory`
-middleware chain; `cmd/forged` opens storage + passes options.
+middleware chain; `cmd/opcoded` opens storage + passes options.
 
-- [x] Dual gate GREEN: fresh `forged` on :4097 (fresh `HOME`/`FORGE_DB`, auth on) vs live opencode
+- [x] Dual gate GREEN: fresh `opcoded` on :4097 (fresh `HOME`/`OPCODE_DB`, auth on) vs live opencode
       → `0 blocking difference(s); 11 known-divergence warning(s); 10 scenarios`. The implemented
       scenarios — `session-create-list`, `session-get-delete`, `session-fork-children`, `config-get`,
       `auth-basic-ok`, `auth-missing-401`, `auth-token-query` — diff to **zero**. (automated)
@@ -144,7 +144,7 @@ middleware chain; `cmd/forged` opens storage + passes options.
       `go test ./...`, `make gen` + `git diff --exit-code internal/api/gen/` unchanged. (automated)
 - [ ] DECISION (user-approved): the session `version` field is a **configurable opencode-compat
       constant** (`session.DefaultCompatVersion = "1.15.11"`, the frozen-contract target), NOT
-      Forge's own build version (`/global/health` still reports `0.0.1`). The conformance normalizer
+      Opcode42's own build version (`/global/health` still reports `0.0.1`). The conformance normalizer
       now collapses any `"version"` string to `<ver>` so the dual diff is build-independent. Confirm
       this split reads correctly.
 - [ ] GATE SCOPING: the dual gate is currently scoped to the implemented endpoints by **temporary
@@ -152,8 +152,8 @@ middleware chain; `cmd/forged` opens storage + passes options.
       (needs the models.dev catalog — plan 04) and `sse-*` (event bus — plan-01 M4). REMOVE these two
       entries when M4 / plan-04 land so the scenarios become blocking again.
 - [ ] FRESH-STATE REQUIREMENT: because `GET /session` is a GLOBAL list, the dual gate only matches
-      when `forged` starts with a fresh DB (the runner already gives opencode a fresh `HOME`). Start
-      forge for the gate with `HOME=$(mktemp -d) FORGE_DB=$HOME/forge.db ./bin/forged --port 4097`
+      when `opcoded` starts with a fresh DB (the runner already gives opencode a fresh `HOME`). Start
+      opcode42 for the gate with `HOME=$(mktemp -d) OPCODE_DB=$HOME/opcode42.db ./bin/opcoded --port 4097`
       and do not hit it with smoke requests first (a lingering session makes `session-create-list`
       report `len 1 != len 2`).
 - [ ] WIRE-SHAPE eyeball: `POST /session` emits exactly
@@ -197,8 +197,8 @@ middleware chain; `cmd/forged` opens storage + passes options.
       project_id + directory (session.ts:897,911-915). Pending the directory-routing investigation
       before a clean per-directory scenario can be written.
 - [ ] NOTED (edge case, deferred with #23-25): opencode decodes a `?directory` query value twice
-      (URLSearchParams + instance-context `decode`); Forge decodes it once. Only matters for paths
-      containing literal `%` sequences. The SDK uses the header path, which Forge handles correctly
+      (URLSearchParams + instance-context `decode`); Opcode42 decodes it once. Only matters for paths
+      containing literal `%` sequences. The SDK uses the header path, which Opcode42 handles correctly
       (PathUnescape, no `+`→space).
 
 ## Plan-01 M3 (instance routing/cache) & M4 (SSE event bus) — 2026-05-29
@@ -208,7 +208,7 @@ fan-out, non-blocking drop, publish forwards to global wrapped {payload,director
 `internal/instance` (directory→Context cache, get-or-create), `internal/server/sse.go`
 (`GET /event` bare stream, `GET /global/event` {payload}-wrapped stream; server.connected first +
 10s heartbeat; instance stream stops on server.instance.disposed). Wired global bus + manager in
-`cmd/forged`.
+`cmd/opcoded`.
 
 - [x] Dual gate GREEN and TIGHTER: `sse-instance-connected` and `sse-global-connected` now match
       opencode FOR REAL (removed from known-divergences.json) — 0 blocking, and only `provider-list`
@@ -247,9 +247,9 @@ ticket instead).
 - [ ] WIRE FORMAT (source-grounded, not yet live-diffed): data = TEXT frames, control = BINARY
       `0x00`+UTF-8 `{"cursor":n}` (pty/index.ts:44-51 string-vs-Uint8Array send). cursor/buffer are
       UTF-16 code units (recorded Finding). `?cursor=-1`=current end, `>=0`=absolute offset,
-      missing/invalid=0. A live opencode-vs-forge PTY WS diff is still DEFERRED (harness PTY capture
+      missing/invalid=0. A live opencode-vs-opcode42 PTY WS diff is still DEFERRED (harness PTY capture
       not built — no bun; verify.md C2 note). Confirm a live interop before claiming PTY done-done.
-- [x] FIXED (review): on process exit Forge now closes the ptmx fd AND removes the session from the
+- [x] FIXED (review): on process exit Opcode42 now closes the ptmx fd AND removes the session from the
       manager, matching opencode (pty/index.ts:264-270) — no fd/session leak; post-exit GET 404s and
       LIST omits it. (Earlier draft retained exited sessions; that was a leak and a divergence.)
 - [x] FIXED (review): `splitValidUTF8` now holds back ONLY a genuine incomplete trailing multibyte
@@ -260,7 +260,7 @@ ticket instead).
 - [ ] NOTED: pty lifecycle bus events (pty.created/updated/exited/deleted) are NOT yet published to
       the event bus — wire when the agent engine needs them (plan 02). Confirm acceptable for now.
 - [ ] DEFERRED (pre-existing gap, tracked): no CORS/origin check on connect-token issuance or ticket
-      consume; opencode gates both on validOrigin (handlers/pty.ts:98,146). Forge has no CORS layer
+      consume; opencode gates both on validOrigin (handlers/pty.ts:98,146). Opcode42 has no CORS layer
       yet anywhere (config field only) — wire when config/CORS lands; add to the divergence registry.
 - [ ] NOTED: malformed JSON on POST/PUT /pty is ignored (proceeds with zero-value input) rather than
       400 like opencode. Minor; revisit with request-validation pass.
@@ -271,7 +271,7 @@ Implemented `internal/mdns` (grandcat/zeroconf publish/withdraw, loopback gating
 settings wiring (`config.Server`, config-over-flags via `flag.Visit`, mDNS forces 0.0.0.0), a base
 context threaded into SSE/PTY streams so shutdown unblocks them, `instance.Manager.DisposeAll`
 (emits `server.instance.disposed`, kills PTYs, clears cache), and the full graceful-shutdown
-sequence in `cmd/forged` (withdraw mDNS → dispose instances → cancel streams → drain HTTP 10s →
+sequence in `cmd/opcoded` (withdraw mDNS → dispose instances → cancel streams → drain HTTP 10s →
 close DB). New flags: `--mdns`, `--mdns-domain`.
 
 - [x] LIVE E2E verified: `--host 0.0.0.0 --mdns` → `dns-sd -B _http._tcp local.` shows
@@ -283,7 +283,7 @@ close DB). New flags: `--mdns`, `--mdns-domain`.
       BaseCtx is cancelled (graceful-shutdown unblock). `go test -race` clean. (automated)
 - [x] CI-mimic + gates GREEN: build/vet/gofmt/golangci-lint(0)/`go test ./...`/gen-diff/spec-drift
       131-131-0/self-diff(0)/dual(0 blocking, 7 provider-list warnings). (automated)
-- [ ] NOTED divergence: mDNS host A-record — Forge advertises via zeroconf RegisterProxy with host
+- [ ] NOTED divergence: mDNS host A-record — Opcode42 advertises via zeroconf RegisterProxy with host
       derived from `--mdns-domain` (default "opencode"); opencode's bonjour advertises host
       "opencode.local". The browse record (instance `opencode-<port>`, `_http._tcp`, txt `path=/`)
       matches, which is what clients discover; the host target differs cosmetically. Confirm OK, or
@@ -299,7 +299,7 @@ graceful shutdown) all merged to main via PRs #1-#? with review gates. M7 (OpenA
 was satisfied earlier (spec served at /doc, 501 fan-out, spec-drift gate). Remaining open items
 are the `[ ]` notes above (deferred edges) + the deferred live PTY WS conformance capture and the
 `provider-list` divergence (plan 04).
-- [ ] NOTED: for a login-capable shell (sh/bash/zsh/...) Forge appends `-l` to args exactly as
+- [ ] NOTED: for a login-capable shell (sh/bash/zsh/...) Opcode42 appends `-l` to args exactly as
       opencode does (pty/index.ts:191-193), even when an explicit `-c` command is given — matches
       opencode, including the quirk that `-l` then lands after the `-c` script.
 
@@ -310,7 +310,7 @@ are the `[ ]` notes above (deferred edges) + the deferred live PTY WS conformanc
 - [x] `toModelMessages` + `filterCompacted`/`latest` ported from opencode's message-v2.test.ts;
       a local review subagent confirmed 1:1 fidelity (no blocking findings). (automated 2026-05-29)
 - [ ] DESIGN CONFIRM: the provider-neutral `llm.ModelMessage` shape (vs mirroring the AI SDK's
-      ModelMessage exactly). Forge produces its own neutral form; the OpenAI/Anthropic *wire* JSON
+      ModelMessage exactly). Opcode42 produces its own neutral form; the OpenAI/Anthropic *wire* JSON
       is rendered from it in M2. Confirm this is the intended boundary.
 - [ ] DIVERGENCE CONFIRM (serialize.go header): (a) tool-result media is uniformly promoted to a
       trailing user message; (b) `providerExecuted` tools are not yet modeled (deferred to the
@@ -328,8 +328,8 @@ are the `[ ]` notes above (deferred edges) + the deferred live PTY WS conformanc
       patch context verify). (automated 2026-05-29)
 - [ ] LIVE PROOF (needs your free-tier key): run one real prompt end-to-end against an
       OpenAI-compatible provider. Example (Groq free tier):
-      `FORGE_TEST_BASE_URL=https://api.groq.com/openai/v1 FORGE_TEST_MODEL=llama-3.3-70b-versatile \
-       FORGE_TEST_API_KEY=$GROQ_API_KEY go test ./internal/engine/enginetest -run TestLive -v`
+      `OPCODE_TEST_BASE_URL=https://api.groq.com/openai/v1 OPCODE_TEST_MODEL=llama-3.3-70b-versatile \
+       OPCODE_TEST_API_KEY=$GROQ_API_KEY go test ./internal/engine/enginetest -run TestLive -v`
       Expect a non-empty reply logged with finish/tokens/cost. (Works with Cerebras/OpenRouter/Ollama too.)
 - [ ] DEFERRED (tracked): Anthropic provider (was M2, now post-M9); M10 compaction (overflow
       threshold to be finalized there); server /session/:id/prompt endpoint wiring (plan 09) so the
@@ -347,8 +347,8 @@ are the `[ ]` notes above (deferred edges) + the deferred live PTY WS conformanc
 - [x] (c) Anthropic provider (PR #8): hand-rolled /v1/messages client, content_block SSE→llm.Event,
       thinking-signature passthrough; provider factory routes anthropic-native vs openai-compatible
       (Bedrock/Vertex excluded). httptest event-sequence + request-render tests. (automated)
-- [ ] LIVE PROOF over HTTP (needs your free-tier key + a running daemon): start `./bin/forged --port 4096`,
-      then with the provider env set (FORGE_PROVIDER_BASE_URL / FORGE_PROVIDER_API_KEY), create a session
+- [ ] LIVE PROOF over HTTP (needs your free-tier key + a running daemon): start `./bin/opcoded --port 4096`,
+      then with the provider env set (OPCODE_PROVIDER_BASE_URL / OPCODE_PROVIDER_API_KEY), create a session
       and `curl -XPOST localhost:4096/session/$ID/message?directory=$PWD -d '{"model":{"providerID":"openai-compatible","modelID":"<model>"},"parts":[{"type":"text","text":"ping"}]}'`.
       (The engine-level TestLive already proves the model wire; this proves the HTTP surface.)
 - [ ] DESIGN CONFIRM: HTTP default permission policy is allow-all until plan-04 config/agent rules;
@@ -366,17 +366,17 @@ are the `[ ]` notes above (deferred edges) + the deferred live PTY WS conformanc
 
 ## Pre-existing (NOT from this work) — flagged
 - [ ] BUG: `scripts/run-conformance.sh self` fails on `session-create-list` step 2
-      (`body.(root): len 22 != len 25`) — recorded fixtures are stale vs the current Forge session
+      (`body.(root): len 22 != len 25`) — recorded fixtures are stale vs the current Opcode42 session
       JSON (3 extra fields). Present on `main` before the TUI work. Re-record the session fixtures
       to make the self-conformance gate green.
 
 ## Phase 2 complete — TUI chrome + navigation (2026-05-30, PRs #19–#22)
-Eyeball these against a daemon (`pnpm --filter @forge/tui start` or the forge-tui binary):
+Eyeball these against a daemon (`pnpm --filter @opcode42/tui start` or the opcode-tui binary):
 - [ ] STATUS BAR (#19): bottom bar shows `mode · model` left, connection dot + tokens/cost + `ctrl+p commands` right.
-- [ ] SIDEBAR (#19): on a ≥80-col session screen, right sidebar shows title + CONTEXT (tokens, cost) + dir + Forge tag; `ctrl+x b` toggles it; the composer never bleeds into it.
+- [ ] SIDEBAR (#19): on a ≥80-col session screen, right sidebar shows title + CONTEXT (tokens, cost) + dir + Opcode42 tag; `ctrl+x b` toggles it; the composer never bleeds into it.
 - [ ] MODELS/SESSIONS (#14/#15): `ctrl+p` palette + `/models` `/sessions`, windowed lists.
 - [ ] AGENTS (#20): `/agents` or `ctrl+x a` → pick build/plan/explore/general (● current); status mode updates; next prompt runs under it. Internal agents (compaction/summary/title) are hidden.
-- [ ] THEMES (#20): `/themes` → forge-dark / forge-light / monochrome; the WHOLE screen (incl. composer + background) repaints legibly — verify forge-light is readable on a dark terminal.
+- [ ] THEMES (#20): `/themes` → opcode42-dark / opcode42-light / monochrome; the WHOLE screen (incl. composer + background) repaints legibly — verify opcode42-light is readable on a dark terminal.
 - [ ] TIMELINE (#21): `/timeline` or `ctrl+x g` → lists your turns; enter reverts the session to before that turn (reversible via opencode /unrevert — not yet UI-exposed).
 - [ ] STATUS MODAL (#21): `/status` or `ctrl+x s` → daemon/state/dir/model/agent/theme/events/sessions/session-id.
 - [ ] SLASH (#18): `/` opens command popup; tab completes; enter runs builtin or daemon command.
@@ -399,19 +399,19 @@ Eyeball these against a daemon (`pnpm --filter @forge/tui start` or the forge-tu
       in-TUI VT pane is deferred stretch (needs a VT emulator dependency).
 - [ ] CONFORMANCE (#U13): `scripts/run-conformance.sh self` now covers agent-list / session-todo /
       session-message-list (deterministic). `GET /command` excluded (opencode order non-deterministic).
-      Dual-run TUI parity vs Forge is blocked until Forge implements /agent, /provider,
+      Dual-run TUI parity vs Opcode42 is blocked until Opcode42 implements /agent, /provider,
       permission/question replies, /find/file, /pty (gap-closing track).
 
-## Forge gap-closing PR-1 — interactive replies + todo (2026-05-31, branch feat/daemon-interactive-endpoints)
-Forge's daemon now implements the manager-backed interactive endpoints (plan 02 M6/M7); they
+## Opcode42 gap-closing PR-1 — interactive replies + todo (2026-05-31, branch feat/daemon-interactive-endpoints)
+Opcode42's daemon now implements the manager-backed interactive endpoints (plan 02 M6/M7); they
 were 501 before. Verified against the live opencode daemon (byte-identical 404 shapes) and via
 dual-run conformance.
 - [x] (automated 2026-05-31) `POST /permission/:id/reply`, `POST /question/:id/reply`,
       `POST /question/:id/reject`, `GET /session/:id/todo` return opencode-identical shapes/status
       (live-smoke vs 127.0.0.1:4096 + dual-run: all four parity scenarios pass).
-- [ ] TUI-AGAINST-FORGE setup. Run a Forge daemon and point the TUI at it (NOT opencode):
-      `go build -o /tmp/forged ./cmd/forged && /tmp/forged --port 4097 --host 127.0.0.1`
-      then `go run ./cmd/forge-tui --url http://127.0.0.1:4097 --dir "$PWD" --provider <id> --model <id>`
+- [ ] TUI-AGAINST-OPCODE42 setup. Run a Opcode42 daemon and point the TUI at it (NOT opencode):
+      `go build -o /tmp/opcoded ./cmd/opcoded && /tmp/opcoded --port 4097 --host 127.0.0.1`
+      then `go run ./cmd/opcode-tui --url http://127.0.0.1:4097 --dir "$PWD" --provider <id> --model <id>`
       (a provider API key must be in the env so the agent can run tools).
 - [ ] QUESTION OVERLAY + TODO DOCK (verifiable now): prompt the agent to call the `question` tool
       (multi-question, matching opencode) — confirm the overlay renders header/options/multiple,
@@ -421,34 +421,34 @@ dual-run conformance.
 - [x] PERMISSION OVERLAY now wired (PR #38, 2026-05-31): the prompt path resolves the named agent
       and applies its permission ruleset instead of allow-all, so a restrictive agent fires
       `permission.asked` and blocks until `POST /permission/:id/reply`. Proven by
-      `TestPrompt_RestrictiveAgentTriggersPermission`. EYEBALL: in a TUI-against-Forge session, run a
+      `TestPrompt_RestrictiveAgentTriggersPermission`. EYEBALL: in a TUI-against-Opcode42 session, run a
       prompt under a restrictive `.opencode/agent/*.md` (e.g. `permission: {bash: ask}`) and confirm
       the U10 overlay blocks the tool until you allow/reject.
 
-## Forge gap-closing PR-2 — GET /find/file (2026-05-31, branch feat/find-file)
+## Opcode42 gap-closing PR-2 — GET /find/file (2026-05-31, branch feat/find-file)
 Fuzzy file/dir search backing the TUI's @-mention picker (plan 04 M8); was 501 before.
 - [x] (automated 2026-05-31) GET /find/file returns repo-relative paths (dirs with trailing /),
       query required (400 if missing), limit 1..200 (default 100), ?type=directory supported.
       Live-smoke vs opencode: top result for "server.go" is identical; ordering is close.
-- [ ] EYEBALL @-MENTION: in the TUI-against-Forge session above, type "@" + a partial filename and
-      confirm the picker shows sensible best-first matches and inserts the chosen path. (Forge's
+- [ ] EYEBALL @-MENTION: in the TUI-against-Opcode42 session above, type "@" + a partial filename and
+      confirm the picker shows sensible best-first matches and inserts the chosen path. (Opcode42's
       fuzzy ranking is its own scorer, not opencode's fuzzysort — order may differ slightly; that's
       an accepted divergence, see conformance/known-divergences.json "find-file".)
-- [ ] NOTE: Forge skips a fixed ignore set (.git/node_modules/vendor/.forge + hidden) rather than
+- [ ] NOTE: Opcode42 skips a fixed ignore set (.git/node_modules/vendor/.opcode42 + hidden) rather than
       parsing .gitignore like opencode's `rg --files`, so results may include files .gitignore would
       hide. Confirm acceptable, or flag for the optional .gitignore-aware walker (PR-3/plan 04).
 
-## Forge gap-closing PR-3 — GET /provider, /agent, /command (2026-05-31, branch feat/resource-endpoints)
+## Opcode42 gap-closing PR-3 — GET /provider, /agent, /command (2026-05-31, branch feat/resource-endpoints)
 Resource loaders (plan 04 M3/M4/M7/M8): all three were 501 before. New package internal/resource
 (built-in agents + .opencode/agent(s)|command(s) markdown loaders + models.dev provider list with
 auth.json/env connected detection). Flips the TUI's model switcher, agents modal, and slash commands
-to Forge.
-- [x] (automated 2026-05-31) Live-smoke vs opencode at its own repo dir: Forge loads the project's
+to Opcode42.
+- [x] (automated 2026-05-31) Live-smoke vs opencode at its own repo dir: Opcode42 loads the project's
       .opencode agents (duplicate-pr, triage) and all 8 .opencode commands identically; /provider
       `all` count matches opencode (137) and `opencode` shows connected via the shared auth.json.
-- [ ] EYEBALL SWITCHERS: in a TUI-against-Forge session, open the model switcher (confirm connected
+- [ ] EYEBALL SWITCHERS: in a TUI-against-Opcode42 session, open the model switcher (confirm connected
       providers' models list), the agents modal (`/agents` — build/plan/general/explore + any project
-      agents), and slash commands (`/` — project commands). Confirm they populate from Forge.
+      agents), and slash commands (`/` — project commands). Confirm they populate from Opcode42.
 - [ ] NOTE (divergences, see known-divergences.json): /agent built-ins carry a simple allow-all
       permission (not opencode's env-specific patterns + prompts) and omit flag-gated `scout`;
       /command returns only .opencode/config commands (opencode also has built-in/MCP/skill commands);
@@ -469,7 +469,7 @@ Plan 02 agent loop completed end-to-end on the Go daemon.
       that the SSE goroutine marshalled while the processor kept mutating them; now it publishes
       immutable snapshots (`message.ClonePart`/`CloneAssistant`, deep-copying `TextPart.Time`). Full
       `go test ./... -race` is clean.
-- [ ] EYEBALL: run the TUI against Forge and drive a multi-step prompt with a subagent (`task`) and a
+- [ ] EYEBALL: run the TUI against Opcode42 and drive a multi-step prompt with a subagent (`task`) and a
       restrictive agent; confirm streaming, the tasks dock, the permission overlay, and subagent
       delegation all work end-to-end. (Needs a real LLM key — left for you.)
 
@@ -487,37 +487,37 @@ multiple machines and are left for you.
 - [x] Constant-time credential compare (`auth.authorized` via `crypto/subtle`), wrong-username
       and wrong-password both 401, both-fields-checked. (automated: `go test ./internal/auth/...`)
 - [x] Non-loopback bind without a password refuses to start (`CheckBindExposure`). (automated:
-      `TestCheckBindExposure`) Spot-check live: `OPENCODE_SERVER_PASSWORD= ./bin/forged --host 0.0.0.0`
+      `TestCheckBindExposure`) Spot-check live: `OPENCODE_SERVER_PASSWORD= ./bin/opcoded --host 0.0.0.0`
       should exit non-zero with a "refusing to bind" error.
 - [x] mDNS advertises BOTH `_http._tcp` and `_opencode._tcp`. (automated: `TestPublishDualRecords`)
-- [ ] EYEBALL (LAN): start `./bin/forged --mdns` (with a password) on one machine; browse
+- [ ] EYEBALL (LAN): start `./bin/opcoded --mdns` (with a password) on one machine; browse
       `_opencode._tcp.local` and `_http._tcp.local` from another (e.g. `dns-sd -B _opencode._tcp`
-      on macOS) — confirm both records appear with TXT `auth=required`/`version=1` on the Forge one.
+      on macOS) — confirm both records appear with TXT `auth=required`/`version=1` on the Opcode42 one.
 - [ ] EYEBALL (release): push a `vX.Y.Z` tag (or run `make release-snapshot`) — confirm goreleaser
       produces linux/darwin amd64+arm64 archives + checksums, and (on a real tag) multi-arch
       `ghcr.io/rotemmiz/forge` images. Binary stays < 40MB (CI asserts this).
 - [ ] EYEBALL (container): `docker run --rm -e OPENCODE_SERVER_PASSWORD=x -p 4096:4096
       ghcr.io/rotemmiz/forge:latest --host 0.0.0.0` then `curl -u opencode:x localhost:4096/global/health`
       returns 200.
-- [ ] EYEBALL (service units): install `packaging/systemd/forge.service` (Linux) or
-      `packaging/launchd/dev.forge.daemon.plist` (macOS); confirm the daemon starts and restarts.
+- [ ] EYEBALL (service units): install `packaging/systemd/opcode42.service` (Linux) or
+      `packaging/launchd/dev.opcode42.daemon.plist` (macOS); confirm the daemon starts and restarts.
 
 ### Deferred to followups (NOT in this PR)
 - [ ] Push notifications (FCM dispatcher, `/push/*` endpoints, notification queue) — plan 13 §13.8.
       Needs an FCM service account + a real Android device; cannot be CI-gated. Left as a followup.
-- [ ] `forge install-service` CLI command (systemd/launchd/Windows-svc generators) — plan 13 §13.13.
+- [ ] `opcode42 install-service` CLI command (systemd/launchd/Windows-svc generators) — plan 13 §13.13.
       Static unit templates ship in `packaging/`; the generator command is deferred.
 - [ ] Windows release target — `internal/lsp/service.go` uses Unix-only syscalls without build
       constraints, so windows/amd64 cross-build fails. goreleaser omits windows until the daemon is
       made Windows-portable (out of this track's scope; do not edit internal/lsp here).
 
-## P07-B — Android repointed to Forge daemon (2026-06-04, plan 07 Phase B)
-Repointed the Android client's HTTP+SSE wiring at the Forge daemon and fixed the SSE
+## P07-B — Android repointed to Opcode42 daemon (2026-06-04, plan 07 Phase B)
+Repointed the Android client's HTTP+SSE wiring at the Opcode42 daemon and fixed the SSE
 consumption path (it was parsing the SSE `event:` name as the type and reading the wrong
 payload field locations). Deterministic JVM unit tests (19) now pin the wire contract and
-run in CI (new `android` job in ci.yml). The flows below need a LIVE Forge daemon + real LLM
+run in CI (new `android` job in ci.yml). The flows below need a LIVE Opcode42 daemon + real LLM
 key, so they are manual EYEBALL items (the gemini free key is throttled):
-- [ ] EYEBALL: `forge serve`, add the server in the app (URL + Basic creds), confirm the session
+- [ ] EYEBALL: `opcode42 serve`, add the server in the app (URL + Basic creds), confirm the session
       list loads (GET /session) and a new session can be created.
 - [ ] EYEBALL: open a running session and confirm streaming works end-to-end via SSE — assistant
       text deltas (`message.part.delta`), full part replaces (`message.part.updated` → nested `part`),
@@ -535,7 +535,7 @@ This slice routes text frames through a new pure-Kotlin `TerminalEmulator` (CR/L
 CSI cursor/erase + SGR/OSC stripping), parses the `0x00 + {cursor}` control frame for
 reconnect-resume, and reports terminal size to the daemon via `PUT /pty/{id}`. JVM unit tests
 (`TerminalEmulatorTest`, `PtyClientCursorTest`) pin the rendering + cursor contract in CI.
-Live-daemon eyeball items (need `forge serve` + a real shell):
+Live-daemon eyeball items (need `opcode42 serve` + a real shell):
 - [ ] EYEBALL: open a session's Terminal pane; run `ls`, `echo`, `vim`/`top` — confirm output is
       readable (colors stripped, no `^[[…m` garbage), progress bars (`\r`) overwrite in place, and
       backspace/tab render correctly.
@@ -561,18 +561,18 @@ Live-daemon eyeball items (need `forge serve` + a real shell):
 
 ## P13-FCM — Daemon-side push-notification relay (2026-06-04, plan 13 §13.8)
 A new `internal/push` package adds FCM push: device-token registration
-(`POST/GET/DELETE /push/register[/{deviceID}]`, Forge known-additions, spec-gated and
+(`POST/GET/DELETE /push/register[/{deviceID}]`, Opcode42 known-additions, spec-gated and
 recorded in `conformance/known-additions.json`), an event→notification mapping
 (`session.idle`→"Agent finished", `permission.asked`→"Permission needed",
 `question.asked`→"Agent has a question"), and an FCM HTTP v1 dispatcher that fires only when
-no SSE client is connected. Without `--fcm-service-account` / `FORGE_FCM_SERVICE_ACCOUNT` the
+no SSE client is connected. Without `--fcm-service-account` / `OPCODE_FCM_SERVICE_ACCOUNT` the
 relay is a no-op (registration still persists; no send; daemon + CI run clean). The store CRUD,
 event mapping, no-client gating, per-device-per-session rate limit, unregistered-token pruning,
 and the FCM JWT/send flow (against a stub) are unit-tested. The LIVE FCM send needs real
 infra (a Firebase project + service-account key + a physical Android device with an FCM token),
 so it is MANUAL-VERIFY:
 - [ ] EYEBALL: create a Firebase project, download its service-account JSON, start
-      `forged --fcm-service-account /path/key.json`; confirm the log says "push relay enabled".
+      `opcoded --fcm-service-account /path/key.json`; confirm the log says "push relay enabled".
 - [ ] EYEBALL: register a real device token via `POST /push/register`, then with NO SSE client
       connected drive an agent to idle (or trigger a permission/question); confirm a push notification
       arrives on the Android device with the mapped title/body and a `data.session_id` that deep-links.
@@ -588,7 +588,7 @@ The Android app now acquires its FCM token, registers it with the daemon relay
 token rotation, `DELETE /push/register/{deviceID}` when the active server is removed), renders
 received pushes as notifications, and deep-links a notification tap to the relevant Chat
 session (`data.session_id`). The whole path is gated on Firebase being configured for the build
-(`PushConfig`): the FCM `ForgeMessagingService` is `android:enabled="false"` in the manifest and
+(`PushConfig`): the FCM `Opcode42MessagingService` is `android:enabled="false"` in the manifest and
 only enabled at runtime when a Firebase config is present, so the app builds and runs on the
 no-`google-services.json` path (the CI path) with push as a clean no-op. The token-register body,
 dedup/refresh/unregister logic, 404-as-success on DELETE, and the `{event_type, session_id}`

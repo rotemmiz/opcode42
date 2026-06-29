@@ -18,7 +18,7 @@ import (
 const grepLimit = 100
 
 // skipDirs are directories Grep never descends into.
-var skipDirs = map[string]bool{".git": true, "node_modules": true, "vendor": true, ".forge": true}
+var skipDirs = map[string]bool{".git": true, "node_modules": true, "vendor": true, ".opcode42": true}
 
 // Grep searches file contents for a regular expression (pure-Go ripgrep stand-in).
 type Grep struct{}

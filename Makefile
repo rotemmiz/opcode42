@@ -1,14 +1,14 @@
 GO      ?= go
 BIN_DIR := bin
-DAEMON  := $(BIN_DIR)/forged
+DAEMON  := $(BIN_DIR)/opcoded
 TARGET  ?= http://localhost:4096
 
 .PHONY: all build test lint gen gen-sdks gen-all check-sdk-fresh tidy conformance record selfdiff release-snapshot clean help
 
 all: build
 
-build: ## Build the forged daemon into bin/forged
-	$(GO) build -o $(DAEMON) ./cmd/forged
+build: ## Build the opcoded daemon into bin/opcoded
+	$(GO) build -o $(DAEMON) ./cmd/opcoded
 
 release-snapshot: ## Dry-run the release build (binaries + archives, no publish) — plan 13
 	goreleaser release --snapshot --clean --skip=docker

@@ -1,6 +1,6 @@
 # Plan 08 — Client: Go TUI (dogfood / test vehicle)
 
-> **Purpose:** a lightweight Go TUI that dogfoods the Forge Go SDK (plan 06) and exercises the
+> **Purpose:** a lightweight Go TUI that dogfoods the Opcode42 Go SDK (plan 06) and exercises the
 > conformance surface. It is a thin client over the opencode wire protocol, not a feature-complete
 > product. It validates the SDK and daemon end-to-end and serves as the primary manual conformance
 > probe for plan 12.
@@ -21,7 +21,7 @@
 
 opencode's own TUI is a thin client: `opencode attach <url>` connects to a running daemon over
 HTTP+SSE+WS-PTY. The TUI publishes actions to the daemon via `/tui/*` endpoints and listens for
-events over the global SSE stream. It does not own any agent state. The Forge Go TUI mirrors
+events over the global SSE stream. It does not own any agent state. The Opcode42 Go TUI mirrors
 exactly this pattern but written in Go using Bubble Tea (charmbracelet). Its job is not to be
 polished — it is to break the Go SDK and daemon.
 
@@ -198,7 +198,7 @@ Bubble Tea's `Program.Send(msg)` is goroutine-safe. The SSE goroutine runs outsi
 event loop and sends messages into it:
 
 ```go
-func sseCmd(ctx context.Context, sdk *forgeclient.Client, program *tea.Program) tea.Cmd {
+func sseCmd(ctx context.Context, sdk *opcode42client.Client, program *tea.Program) tea.Cmd {
     return func() tea.Msg {
         attempt := 0
         for {
@@ -213,7 +213,7 @@ func sseCmd(ctx context.Context, sdk *forgeclient.Client, program *tea.Program) 
     }
 }
 
-func connectAndStream(ctx context.Context, sdk *forgeclient.Client, program *tea.Program, attempt *int) error {
+func connectAndStream(ctx context.Context, sdk *opcode42client.Client, program *tea.Program, attempt *int) error {
     stream, err := sdk.Global.Event(ctx)
     if err != nil { return err }
     defer stream.Close()
@@ -315,7 +315,7 @@ surface:
 | T9 | Permission overlay: non-dismissible view over Chat; `y`/`n` or `Enter`/`Esc` keys; `POST /permission/{id}/reply` |
 | T10 | Question overlay: text input; `POST /question/{id}/reply` |
 | T11 | (Stretch) PTY pane: WS connection, raw byte I/O, simple ANSI terminal rendering |
-| T12 | Integration test: run TUI against real opencode daemon; run identical scenario against Forge daemon; compare outputs |
+| T12 | Integration test: run TUI against real opencode daemon; run identical scenario against Opcode42 daemon; compare outputs |
 
 ---
 
@@ -339,7 +339,7 @@ The TUI's integration test is the main value. A test harness:
    that daemon.
 3. Injects a prompt via stdin; waits for agent completion (observing `session.status` SSE events).
 4. Records the observed SSE event sequence and final state.
-5. Repeats steps 1–4 with the Forge Go daemon on the same port.
+5. Repeats steps 1–4 with the Opcode42 Go daemon on the same port.
 6. Diffs the event sequences and final states; asserts they are functionally equivalent.
 
 This is the TUI-layer face of plan 12's conformance harness.
@@ -353,13 +353,13 @@ Run by a developer before each daemon milestone:
 - [ ] Tool call visible with `running` state → transitions to `completed`
 - [ ] Permission prompt appears → approve → agent continues
 - [ ] Disconnect network → wait 16 s → reconnect → TUI reconnects, state is consistent
-- [ ] Forge daemon (same checklist)
+- [ ] Opcode42 daemon (same checklist)
 
 ---
 
 ## Verification
 
-1. **Health check:** `./forge-tui --url http://localhost:4096 --password secret` — should display
+1. **Health check:** `./opcode-tui --url http://localhost:4096 --password secret` — should display
    session list within 2 s, no errors.
 2. **Auth failure:** wrong password → should display `401 Unauthorized` and exit cleanly.
 3. **Live streaming:** submit a prompt → observe text and tool parts appearing character by
@@ -397,21 +397,21 @@ reality, and say so explicitly" rule.
    tool-rows/diff/write/bash/todos/sub-agent/summary blocks + streaming cursor), sidebar, status
    bar, persistent tasks board, slash/@/`ctrl+x`-leader input, and the seven command modals. The
    "Feature scope (minimal viable)" table above is the fallback floor, not the target.
-2. **Target opencode now, Forge-ready.** Develop against the **real opencode daemon** (full wire
+2. **Target opencode now, Opcode42-ready.** Develop against the **real opencode daemon** (full wire
    surface, zero gaps) for fast UI iteration, keeping everything wire-generic so the URL flips to
-   Forge anytime. A **parallel Forge gap-closing track** wires the endpoints the design needs that
-   Forge currently 501s: `GET /provider`, `GET /agent`, `POST /permission/:id/reply` +
+   Opcode42 anytime. A **parallel Opcode42 gap-closing track** wires the endpoints the design needs that
+   Opcode42 currently 501s: `GET /provider`, `GET /agent`, `POST /permission/:id/reply` +
    `GET /permission`, `POST /question/:id/reply` + `GET /question` (the permission/question managers
    already exist; only the HTTP surface is missing).
 3. **Consume the generated plan-06 Go SDK.** Build the **Go SDK (plan 06) first** as the prerequisite
-   (oapi-codegen REST client + hand-written SSE/WS-PTY clients + a `createForgeClient`-style wrapper
+   (oapi-codegen REST client + hand-written SSE/WS-PTY clients + a `createOpcode42Client`-style wrapper
    doing auth + `x-opencode-directory` injection). The TUI's client layer (U2) consumes it rather
    than hand-rolling.
 
 **Sequenced program:**
 - **Prereq — Plan 06 (Go SDK):** generated REST client + hand-written SSE consumer + WS-PTY + auth/
   directory wrapper; smoke-tested against a running opencode daemon.
-- **Phase 0 — foundation:** `U0` scaffold (`cmd/forge-tui` + `internal/tui/`, Bubble Tea/Lipgloss,
+- **Phase 0 — foundation:** `U0` scaffold (`cmd/opcode-tui` + `internal/tui/`, Bubble Tea/Lipgloss,
   flags) · `U1` theme (lift `design/tui/styles.css` `:root` tokens → Lipgloss palette + styles,
   density variants, truecolor→256 degrade; unit-tested) · `U2` SDK client wiring + health + auth.
 - **Phase 1 — hero conversation stream:** `U3` Model/Update/View + screens + SSE goroutine →
@@ -423,17 +423,17 @@ reality, and say so explicitly" rule.
   autocomplete + @-mention picker + `ctrl+x` leader keys.
 - **Phase 3 — interactive + board:** `U10` permission + question overlays (reply endpoints) ·
   `U11` tasks board dock (reads `tasks.md`/issues) · `U12` (stretch) PTY pane · `U13` conformance
-  parity: identical scenario vs opencode and Forge.
+  parity: identical scenario vs opencode and Opcode42.
   - **Status (2026-05-31): Phase 3 done.** `U10` permission overlay (#24) + question overlay (#25);
     `U11` tasks dock (#26); `U12` — the WS-PTY *transport* (SDK client, #27) is built + live-smoked,
     the interactive in-TUI VT pane is the remaining stretch (needs a VT emulator dep); `U13` —
     extended the plan-12 conformance suite with the TUI's read surface (`/agent`, `/session/:id/todo`,
     `/session/:id/message`), all recording deterministically. `GET /command` is excluded (opencode
-    returns it in non-deterministic order). Full TUI↔Forge dual-run parity is gated on the parallel
-    Forge gap-closing track implementing those endpoints (Forge currently 501s `/agent`, `/provider`,
+    returns it in non-deterministic order). Full TUI↔Opcode42 dual-run parity is gated on the parallel
+    Opcode42 gap-closing track implementing those endpoints (Opcode42 currently 501s `/agent`, `/provider`,
     permission/question replies, `/find/file`, `/pty`).
-- **Parallel — Forge gap-closing:** wire the four endpoint families above so the TUI flips from
-  opencode to Forge cleanly (each small; the engine managers already exist).
+- **Parallel — Opcode42 gap-closing:** wire the four endpoint families above so the TUI flips from
+  opencode to Opcode42 cleanly (each small; the engine managers already exist).
 
 ---
 
@@ -442,12 +442,12 @@ reality, and say so explicitly" rule.
 User-owned client spec, so this is a light touch — but the Status note above is **out of date** and
 the correction is high-value:
 
-- **The "Forge currently 501s `/agent`, `/provider`, permission/question replies, `/find/file`,
+- **The "Opcode42 currently 501s `/agent`, `/provider`, permission/question replies, `/find/file`,
   `/pty`" claim is no longer true.** All are wired: `/agent`+`/provider`
   (`internal/server/resource_handlers.go:14,16`), `POST /permission/{id}/reply`
   (`permission_handlers.go:16`), `POST /question/{id}/reply` (`question_handlers.go:15`),
   `GET /find/file` (`find_handlers.go:30`), `GET`/`POST /pty` (`pty_handlers.go:27-28`). The
-  parallel "Forge gap-closing track" is effectively **done** — so full TUI↔Forge dual-run parity is
+  parallel "Opcode42 gap-closing track" is effectively **done** — so full TUI↔Opcode42 dual-run parity is
   no longer blocked on the HTTP surface; it is now blocked only on plan 02 reaching conformance-green
   (M11) and the LSP/MCP-mutation endpoints.
 - **The TUI is substantially built** (`internal/tui/` ≈ 35 Go files; Phases 0–3 per the addendum),
@@ -455,25 +455,25 @@ the correction is high-value:
 - **Genuinely remaining:** `U12` the in-TUI VT pane (the WS-PTY *transport* exists; the interactive
   terminal pane needs a VT-emulator dependency) and the `GET /command` conformance exclusion
   (opencode returns commands in non-deterministic order — keep this as a recorded divergence, and
-  decide whether Forge sorts deterministically as a known-addition).
+  decide whether Opcode42 sorts deterministically as a known-addition).
 - **Validation:** the `--headless` structured-JSON mode + the extended plan-12 read-surface
   recordings are the right approach; just re-point the dual-run now that the endpoints exist.
 
-## U13 landed (2026-06-04) — TUI↔Forge dual-run parity gate
+## U13 landed (2026-06-04) — TUI↔Opcode42 dual-run parity gate
 
-`U13` is done. The TUI was already wire-generic (it spawns `forged`/connects to any
+`U13` is done. The TUI was already wire-generic (it spawns `opcoded`/connects to any
 HTTP+SSE daemon via the `--url` flag; default `http://127.0.0.1:4096`), so "re-pointing"
 needed no client change — every endpoint the TUI calls (`/session`, `/session/:id/message`,
 `/permission/:id/reply`, `/question/:id/{reply,reject}`, `/session/:id/{abort,summarize,fork}`,
-`/agent`, `/provider`, `/command`, `/find/file`, `/pty`) is now served by Forge, and the SSE
+`/agent`, `/provider`, `/command`, `/find/file`, `/pty`) is now served by Opcode42, and the SSE
 event types it reduces (`message.part.{updated,delta}`, `permission.{asked,replied}`,
 `question.{asked,replied,rejected}`, `session.{updated,deleted}`) match the daemon's emitter
 field-for-field (incl. the `requestID` field on replied events).
 
-The parity gate itself lives TUI-side as `internal/tui/forge_e2e_test.go`: it boots the REAL
+The parity gate itself lives TUI-side as `internal/tui/opcode42_e2e_test.go`: it boots the REAL
 `internal/server` handler wired to the agent engine + a deterministic mock provider (no LLM key,
 CI-safe) behind `httptest`, points the real TUI `Model.Update` loop at it, and asserts the core
-flows work end-to-end against **Forge** over the real wire — health + global SSE subscribe,
+flows work end-to-end against **Opcode42** over the real wire — health + global SSE subscribe,
 session create, prompt → streamed message/part SSE rendered into the store + view, the blocking
 permission round-trip (real `permission.asked` → overlay → `POST /permission/:id/reply` →
 daemon `Ask()` unblocks), and abort. This complements the existing plan-12 read-surface
@@ -498,18 +498,18 @@ This closes the two items the 2026-06-03 review flagged as "genuinely remaining"
   applies them via Lipgloss, and an SGR-reverse cell swaps fg/bg (composing with the cursor-reverse).
   The run-batching key is now the full cell styling (color + attributes). Scrollback remains a
   follow-up. So **no new TUI dependency is added** — `vt10x` was already vendored by #80.
-- **`GET /command` ordering: implemented per masterplan decision #6.** Forge already sorts commands
+- **`GET /command` ordering: implemented per masterplan decision #6.** Opcode42 already sorts commands
   by name (`internal/resource/command.go:50`) — a deterministic known-addition. This change turns
   `/command` from a conformance *exclusion* into an **order-insensitive parity scenario**
   (`command-list`): the harness set-normalizes the `/command` body (`orderInsensitiveListPath` in
   `conformance/client.go`, reusing `NormalizeSetJSON`), so opencode's non-deterministic order and
-  Forge's sorted order compare equal while a genuinely missing/extra command still fails. The
+  Opcode42's sorted order compare equal while a genuinely missing/extra command still fails. The
   self-diff gate (opencode-vs-opencode) now covers `/command`. The `command-list` known-divergence
-  note is updated: ordering is no longer a divergence; the remaining (forge-vs-opencode-only)
-  divergence is that opencode's command SET is a superset (built-in/MCP/skill commands Forge doesn't
+  note is updated: ordering is no longer a divergence; the remaining (opcode42-vs-opencode-only)
+  divergence is that opencode's command SET is a superset (built-in/MCP/skill commands Opcode42 doesn't
   surface yet).
   - **Not recorded in `known-additions.json`** by design: that registry lists *additive operations*
     (endpoints absent from the frozen reference, consumed by the OpenAPI drift gate). `/command` is a
-    reference endpoint; listing it there would falsely mark it Forge-only and weaken the drift gate.
+    reference endpoint; listing it there would falsely mark it Opcode42-only and weaken the drift gate.
     The deterministic-sort is a *behavioral* known-addition, recorded via the order-insensitive
     scenario + the `command-list` divergence note + masterplan decision #6 itself.

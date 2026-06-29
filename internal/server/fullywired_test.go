@@ -6,17 +6,17 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/auth"
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/engine/catalog"
-	"github.com/rotemmiz/forge/internal/engine/llm"
-	"github.com/rotemmiz/forge/internal/engine/message"
-	"github.com/rotemmiz/forge/internal/engine/registry"
-	"github.com/rotemmiz/forge/internal/engine/tool"
-	"github.com/rotemmiz/forge/internal/instance"
-	"github.com/rotemmiz/forge/internal/push"
-	"github.com/rotemmiz/forge/internal/session"
-	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/auth"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/registry"
+	"github.com/rotemmiz/opcode42/internal/engine/tool"
+	"github.com/rotemmiz/opcode42/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/push"
+	"github.com/rotemmiz/opcode42/internal/session"
+	"github.com/rotemmiz/opcode42/internal/storage"
 )
 
 // fullyWiredServer builds a daemon with every Options dependency populated so the
@@ -30,7 +30,7 @@ func fullyWiredServer(t *testing.T) http.Handler {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("OPENCODE_AUTH_CONTENT", "")
 
-	db, err := storage.Open(filepath.Join(t.TempDir(), "forge.db"))
+	db, err := storage.Open(filepath.Join(t.TempDir(), "opcode42.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

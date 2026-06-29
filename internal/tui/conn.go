@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // Connection lifecycle messages.
@@ -14,12 +14,12 @@ type (
 	connectedMsg    struct{}            // health check passed
 	connErrMsg      struct{ err error } // terminal connect/auth failure
 	streamOpenedMsg struct {            // SSE subscription opened (or failed)
-		stream *forgeclient.EventStream
+		stream *opcode42client.EventStream
 		err    error
 	}
-	sseEventMsg  struct{ ev forgeclient.SSEEvent } // one streamed event
-	sseClosedMsg struct{}                          // the stream ended; reconnect
-	reconnectMsg struct{}                          // backoff elapsed; reopen
+	sseEventMsg  struct{ ev opcode42client.SSEEvent } // one streamed event
+	sseClosedMsg struct{}                             // the stream ended; reconnect
+	reconnectMsg struct{}                             // backoff elapsed; reopen
 )
 
 // reconnectBase / reconnectMax bound the exponential backoff (mirrors plan 08 /
@@ -30,7 +30,7 @@ const (
 )
 
 // healthCmd checks the daemon is reachable+authorized.
-func healthCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
+func healthCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
 	return func() tea.Msg {
 		if err := c.Health(ctx); err != nil {
 			return connErrMsg{err: err}
@@ -40,7 +40,7 @@ func healthCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
 }
 
 // openSSECmd opens the global event stream.
-func openSSECmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
+func openSSECmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
 	return func() tea.Msg {
 		s, err := c.GlobalEvents(ctx)
 		return streamOpenedMsg{stream: s, err: err}
@@ -49,7 +49,7 @@ func openSSECmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
 
 // listenCmd waits for the next event on a stream (re-issued after each event so
 // the Bubble Tea loop pulls events one at a time).
-func listenCmd(s *forgeclient.EventStream) tea.Cmd {
+func listenCmd(s *opcode42client.EventStream) tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-s.Events()
 		if !ok {

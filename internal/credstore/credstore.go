@@ -1,8 +1,8 @@
 // Package credstore reads and writes opencode's provider credential store
 // (~/.local/share/opencode/auth.json) — the SAME file opencode uses, so a
-// credential added in Forge is visible to opencode and vice-versa. Records are
+// credential added in Opcode42 is visible to opencode and vice-versa. Records are
 // keyed by (URL-normalized) provider id; each is an api/oauth/wellknown object
-// (auth/index.ts:8-34). Forge stores them as raw JSON so unknown fields
+// (auth/index.ts:8-34). Opcode42 stores them as raw JSON so unknown fields
 // round-trip losslessly.
 package credstore
 

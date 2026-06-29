@@ -52,7 +52,7 @@ func (w WebFetch) Run(ctx context.Context, input map[string]any, _ Context) (Res
 	if err != nil {
 		return Result{}, err
 	}
-	req.Header.Set("User-Agent", "forge/0.0.1")
+	req.Header.Set("User-Agent", "opcode42/0.0.1")
 	resp, err := client.Do(req)
 	if err != nil {
 		return Result{}, fmt.Errorf("webfetch: %w", err)

@@ -9,7 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // Sub-agent navigation (plan 08b §9). Sub-agent runs are child sessions: a
@@ -26,7 +26,7 @@ type childrenLoadedMsg struct {
 
 // loadChildrenCmd fetches a session's sub-agent children. Exercises the frozen
 // GET /session/{id}/children endpoint and tops up any child the store missed.
-func loadChildrenCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID string) tea.Cmd {
+func loadChildrenCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID string) tea.Cmd {
 	return func() tea.Msg {
 		var children []Session
 		err := c.GetJSON(ctx, "/session/"+sessionID+"/children", &children)

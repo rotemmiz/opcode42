@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
-	"github.com/rotemmiz/forge/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
 )
 
 // thinkTagRe strips a leading <think>...</think> block some models emit before

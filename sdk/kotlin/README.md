@@ -1,16 +1,16 @@
-# Forge Kotlin SDK
+# Opcode42 Kotlin SDK
 
-Typed Kotlin client for the Forge / opencode wire contract (plan 06). Generated
+Typed Kotlin client for the Opcode42 / opencode wire contract (plan 06). Generated
 from the frozen contract `conformance/openapi-reference.json` with
 [openapi-generator](https://openapi-generator.tech) (`kotlin`, `jvm-okhttp4`
 library, `kotlinx.serialization`), pinned for deterministic output.
 
 ## Layout
 
-- `gen/` — **generated**: request/response models (`dev.forge.sdk.models`), typed
-  API classes (`dev.forge.sdk.apis`), and OkHttp infrastructure
-  (`dev.forge.sdk.infrastructure`). **Never edit by hand** — regenerate.
-- `src/` — **hand-written**: [`ForgeClient`](src/main/kotlin/dev/forge/sdk/ForgeClient.kt),
+- `gen/` — **generated**: request/response models (`dev.opcode42.sdk.models`), typed
+  API classes (`dev.opcode42.sdk.apis`), and OkHttp infrastructure
+  (`dev.opcode42.sdk.infrastructure`). **Never edit by hand** — regenerate.
+- `src/` — **hand-written**: [`Opcode42Client`](src/main/kotlin/dev/opcode42/sdk/Opcode42Client.kt),
   a thin wrapper that injects Basic auth + the `X-Opencode-Directory` routing
   header into every request (codegen does not cover these cross-cutting concerns).
 - `build.gradle.kts` — a Kotlin/JVM library module compiling `gen/` + `src/`.
@@ -34,6 +34,6 @@ downconvert step the generator consumes).
 ## Usage
 
 ```kotlin
-val forge = ForgeClient("http://localhost:4096", directory = "/work/proj")
-val sessions = forge.sessions().sessionList()
+val opcode42 = Opcode42Client("http://localhost:4096", directory = "/work/proj")
+val sessions = opcode42.sessions().sessionList()
 ```

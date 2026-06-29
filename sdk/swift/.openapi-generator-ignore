@@ -9,7 +9,7 @@ README.md
 
 # Alternative packaging manifests + helper scripts we don't ship.
 Cartfile
-ForgeClient.podspec
+Opcode42Client.podspec
 project.yml
 git_push.sh
 .gitignore

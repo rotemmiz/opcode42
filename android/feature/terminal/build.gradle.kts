@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.forge.feature.terminal"
+    namespace = "dev.opcode42.feature.terminal"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {

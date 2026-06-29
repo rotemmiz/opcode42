@@ -10,8 +10,8 @@ import (
 
 func TestThemeModal_SelectChangesStyles(t *testing.T) {
 	m := New(Config{URL: "http://x"})
-	if m.themeName != "forge-dark" {
-		t.Fatalf("default theme should be forge-dark, got %q", m.themeName)
+	if m.themeName != "opcode42-dark" {
+		t.Fatalf("default theme should be opcode42-dark, got %q", m.themeName)
 	}
 	darkBlue := m.styles.P.Blue
 
@@ -36,7 +36,7 @@ func TestThemeSwitch_RestylesComposer(t *testing.T) {
 		t.Fatal("composer text color should be set from the theme at startup, not terminal-default")
 	}
 
-	m.modal, m.modalSel = modalThemes, 1 // forge-light
+	m.modal, m.modalSel = modalThemes, 1 // opcode42-light
 	next, _ := m.modalSelect()
 	nm := next.(Model)
 	if nm.input.FocusedStyle.Text.GetForeground() == darkText {

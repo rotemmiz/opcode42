@@ -2,7 +2,7 @@
 -- its FCM token so the daemon can relay server-initiated push when the app is
 -- backgrounded and no SSE client is actively connected.
 --
--- This is a Forge known-addition: opencode has no push surface. Registrations
+-- This is a Opcode42 known-addition: opencode has no push surface. Registrations
 -- are per-daemon (single-user, matching opencode's auth model — plan 13 review
 -- "Multi-user — DECIDED: single-user").
 --

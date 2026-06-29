@@ -11,15 +11,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/id"
-	"github.com/rotemmiz/forge/internal/storage"
-	"github.com/rotemmiz/forge/internal/worktree"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/id"
+	"github.com/rotemmiz/opcode42/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/worktree"
 )
 
-// DefaultCompatVersion is the opencode wire version Forge stamps into the
-// session "version" field. It is the version of the frozen contract Forge
-// targets, NOT Forge's own build version (which /global/health reports). The
+// DefaultCompatVersion is the opencode wire version Opcode42 stamps into the
+// session "version" field. It is the version of the frozen contract Opcode42
+// targets, NOT Opcode42's own build version (which /global/health reports). The
 // conformance normalizer collapses this field so dual diffs stay
 // build-independent (see the user-approved "compat constant + normalize"
 // decision in the plan).
@@ -53,7 +53,7 @@ type Info struct {
 	ProjectID string `json:"projectID"`
 	Directory string `json:"directory"`
 	// Path is always present on the wire (opencode emits "" rather than omitting;
-	// optionalOmitUndefined drops only undefined, and Forge always sets a value).
+	// optionalOmitUndefined drops only undefined, and Opcode42 always sets a value).
 	Path     string  `json:"path"`
 	ParentID string  `json:"parentID,omitempty"`
 	Title    string  `json:"title"`

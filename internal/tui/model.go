@@ -1,6 +1,6 @@
-// Package tui is the Forge terminal client: a Bubble Tea app over the
-// opencode/Forge wire protocol (via the Go SDK, plan 06). It is wire-generic —
-// point it at a Forge or a real opencode daemon. Design: design/tui/ (plan 08).
+// Package tui is the Opcode42 terminal client: a Bubble Tea app over the
+// opencode/Opcode42 wire protocol (via the Go SDK, plan 06). It is wire-generic —
+// point it at a Opcode42 or a real opencode daemon. Design: design/tui/ (plan 08).
 package tui
 
 import (
@@ -14,8 +14,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // Screen is the active top-level view.
@@ -68,10 +68,10 @@ type Model struct {
 	err    error
 
 	// Connection.
-	client     *forgeclient.ForgeClient
+	client     *opcode42client.Opcode42Client
 	ctx        context.Context
 	cancel     context.CancelFunc
-	stream     *forgeclient.EventStream
+	stream     *opcode42client.EventStream
 	attempt    int // reconnect backoff attempt
 	eventCount int // events seen this connection (status line)
 
@@ -161,14 +161,14 @@ type Model struct {
 // pickDefaultTheme returns the appropriate default theme name based on whether
 // the terminal has a dark background. This mirrors opencode's theme_mode_lock
 // (kv.json) + dark/light token resolution (context/theme.tsx): on a dark
-// terminal forge-dark fits; on a light/white terminal forge-light is chosen so
+// terminal opcode42-dark fits; on a light/white terminal opcode42-light is chosen so
 // foreground colors remain legible without imposing a dark fill.
 // The darkBg param lets tests inject a value instead of reading the real terminal.
 func pickDefaultTheme(darkBg bool) string {
 	if darkBg {
-		return "forge-dark"
+		return "opcode42-dark"
 	}
-	return "forge-light"
+	return "opcode42-light"
 }
 
 // New builds the initial Model, constructing the SDK client.
@@ -212,7 +212,7 @@ func New(cfg Config) Model {
 	def, _ := theme.ByNameForMode(defName, m.termDark)
 	m = m.applyTheme(defName, def)
 	m.histIdx = -1
-	c, err := forgeclient.New(cfg.URL, forgeclient.Options{
+	c, err := opcode42client.New(cfg.URL, opcode42client.Options{
 		Directory: cfg.Directory, Username: cfg.Username, Password: cfg.Password,
 	})
 	if err != nil {
@@ -1215,7 +1215,7 @@ func (m Model) viewSplash() string {
 		// No layout yet — fall back to plain stacking (used only before the first
 		// WindowSizeMsg; View() returns body unpainted in that case anyway).
 		return lipgloss.JoinVertical(lipgloss.Center,
-			s.Base.Bold(true).Render("forge"), "", m.composerView(), "",
+			s.Base.Bold(true).Render("opcode42"), "", m.composerView(), "",
 			s.Faint.Render("enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit"))
 	}
 	fill := func(st lipgloss.Style, content string) string {
@@ -1223,7 +1223,7 @@ func (m Model) viewSplash() string {
 	}
 	blank := lipgloss.NewStyle().Background(s.P.Bg).Width(w).Render("")
 
-	// Block-pixel "forge" logo with left→right shimmer sweep (plan 08c M10).
+	// Block-pixel "opcode42" logo with left→right shimmer sweep (plan 08c M10).
 	// logoFrame returns one string per row; each row is then full-width Bg-filled via
 	// fill() so no transparent cell escapes to the terminal background.
 	logoRows := logoFrame(m.animFrame, s.P)

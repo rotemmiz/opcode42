@@ -53,13 +53,13 @@ func TestCompareOpsCatchesChangedStatus(t *testing.T) {
 // known-additions registry is BREAKING (FAIL).
 func TestCompareOpsExtraUnknownIsBreaking(t *testing.T) {
 	base := ops([2]string{"GET", "/session"})
-	emit := ops([2]string{"GET", "/session"}, [2]string{"GET", "/forge/secret"})
+	emit := ops([2]string{"GET", "/session"}, [2]string{"GET", "/opcode42/secret"})
 	d := CompareOps(base, emit, nil)
 	if !d.Breaking() {
 		t.Fatal("expected BREAKING for unknown additive op, got clean")
 	}
-	if len(d.Additive) != 1 || d.Additive[0].Path != "/forge/secret" {
-		t.Fatalf("expected /forge/secret additive, got %+v", d.Additive)
+	if len(d.Additive) != 1 || d.Additive[0].Path != "/opcode42/secret" {
+		t.Fatalf("expected /opcode42/secret additive, got %+v", d.Additive)
 	}
 }
 

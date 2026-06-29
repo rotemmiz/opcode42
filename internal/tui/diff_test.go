@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // withDiff builds a model with an open, loaded diff reviewer (files pre-sorted
@@ -184,7 +184,7 @@ func TestDiffOpen_ViaLeader(t *testing.T) {
 //  2. Every rendered row is exactly pane-width visible chars (full-width fill).
 //  3. Gutter line numbers appear and increment correctly across a hunk.
 //  4. Hunk headers are rendered in Diff.HunkHeader color.
-//  5. Properties hold for both forge-dark and forge-light.
+//  5. Properties hold for both opcode42-dark and opcode42-light.
 
 // withDiffModel builds a Model with the given palette and a single-file diff
 // containing a representative hunk with added/removed/context lines.
@@ -210,11 +210,11 @@ func withDiffModel(t *testing.T, palName string) Model {
 }
 
 // TestDiffPatchPane_AddedRowBg verifies that an added diff line row contains
-// the AddedBg color in its visible output when rendered under forge-dark.
+// the AddedBg color in its visible output when rendered under opcode42-dark.
 // Because lipgloss suppresses ANSI in non-TTY environments we fall back to a
 // width check when ANSI is not emitted.
 func TestDiffPatchPane_AddedRowBg(t *testing.T) {
-	m := withDiffModel(t, "forge-dark")
+	m := withDiffModel(t, "opcode42-dark")
 	paneW := m.width // no tree pane
 	pane := m.diffPatchPane(paneW, 20)
 
@@ -245,7 +245,7 @@ func TestDiffPatchPane_AddedRowBg(t *testing.T) {
 
 // TestDiffPatchPane_RemovedRowBg mirrors the added-row test for removed lines.
 func TestDiffPatchPane_RemovedRowBg(t *testing.T) {
-	m := withDiffModel(t, "forge-dark")
+	m := withDiffModel(t, "opcode42-dark")
 	paneW := m.width
 	pane := m.diffPatchPane(paneW, 20)
 
@@ -270,7 +270,7 @@ func TestDiffPatchPane_RemovedRowBg(t *testing.T) {
 // the code body, context lines a blank marker, and that the marker is dropped
 // from the highlighted body (no doubled +/-).
 func TestRenderDiffCodeLine_SignMarkers(t *testing.T) {
-	m := withDiffModel(t, "forge-dark")
+	m := withDiffModel(t, "opcode42-dark")
 	const codeWidth = 40
 
 	cases := []struct {
@@ -305,7 +305,7 @@ func TestRenderDiffCodeLine_SignMarkers(t *testing.T) {
 // TestDiffPatchPane_SignMarkersPresent verifies the rendered pane carries the
 // +/- sign markers ahead of the changed code bodies (not just background tints).
 func TestDiffPatchPane_SignMarkersPresent(t *testing.T) {
-	m := withDiffModel(t, "forge-dark")
+	m := withDiffModel(t, "opcode42-dark")
 	plain := stripANSI(m.diffPatchPane(m.width, 20))
 	lines := strings.Split(plain, "\n")
 
@@ -336,7 +336,7 @@ func TestDiffPatchPane_SignMarkersPresent(t *testing.T) {
 // TestDiffPatchPane_HunkHeaderPresent verifies the @@ line is included in the
 // output and that the plain text starts with "@".
 func TestDiffPatchPane_HunkHeaderPresent(t *testing.T) {
-	m := withDiffModel(t, "forge-dark")
+	m := withDiffModel(t, "opcode42-dark")
 	pane := m.diffPatchPane(m.width, 20)
 	if !strings.Contains(stripANSI(pane), "@@") {
 		t.Error("diffPatchPane output must contain the @@ hunk header")
@@ -347,7 +347,7 @@ func TestDiffPatchPane_HunkHeaderPresent(t *testing.T) {
 // and increment. The patch starts at old=10/new=10 for context; after a
 // removed and added line the context_c line should have old≥11, new≥11.
 func TestDiffPatchPane_GutterLineNumbers(t *testing.T) {
-	m := withDiffModel(t, "forge-dark")
+	m := withDiffModel(t, "opcode42-dark")
 	pane := m.diffPatchPane(m.width, 20)
 
 	plain := stripANSI(pane)
@@ -376,10 +376,10 @@ func TestDiffPatchPane_GutterLineNumbers(t *testing.T) {
 }
 
 // TestDiffPatchPane_FullWidthAllThemes asserts that every row produced by
-// diffPatchPane is exactly paneW visible characters wide for forge-dark and
-// forge-light (the main anti-bleed regression guard for M6).
+// diffPatchPane is exactly paneW visible characters wide for opcode42-dark and
+// opcode42-light (the main anti-bleed regression guard for M6).
 func TestDiffPatchPane_FullWidthAllThemes(t *testing.T) {
-	for _, palName := range []string{"forge-dark", "forge-light"} {
+	for _, palName := range []string{"opcode42-dark", "opcode42-light"} {
 		t.Run(palName, func(t *testing.T) {
 			m := withDiffModel(t, palName)
 			paneW := 100 // fixed width for determinism
@@ -490,7 +490,7 @@ func TestPadRow(t *testing.T) {
 // TestRenderGutter_VisibleWidth confirms the gutter rendered by renderGutter
 // is exactly gutterTotalWidth visible characters wide.
 func TestRenderGutter_VisibleWidth(t *testing.T) {
-	m := withDiffModel(t, "forge-dark")
+	m := withDiffModel(t, "opcode42-dark")
 
 	cases := []struct {
 		old  int

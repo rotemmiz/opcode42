@@ -205,7 +205,7 @@ func (m *Manager) dialErrorStatus(ctx context.Context, name string, s Server, er
 func probeInitialize(ctx context.Context, c conn) error {
 	initReq := mcp.InitializeRequest{}
 	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	initReq.Params.ClientInfo = mcp.Implementation{Name: "forge", Version: "0.0.1"}
+	initReq.Params.ClientInfo = mcp.Implementation{Name: "opcode42", Version: "0.0.1"}
 	_, err := c.Initialize(ctx, initReq)
 	return err
 }
@@ -559,7 +559,7 @@ func probeRemote(ctx context.Context, s Server, c conn) error {
 	defer cancel()
 	initReq := mcp.InitializeRequest{}
 	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	initReq.Params.ClientInfo = mcp.Implementation{Name: "forge", Version: "0.0.1"}
+	initReq.Params.ClientInfo = mcp.Implementation{Name: "opcode42", Version: "0.0.1"}
 	if _, err := c.Initialize(initCtx, initReq); err != nil {
 		return err
 	}

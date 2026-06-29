@@ -102,7 +102,7 @@ func (l *Live) fetch(ctx context.Context) (Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "forge/0.0.1")
+	req.Header.Set("User-Agent", "opcode42/0.0.1")
 	client := l.HTTPClient
 	if client == nil {
 		client = http.DefaultClient
@@ -166,7 +166,7 @@ func Parse(body []byte) (Catalog, error) {
 }
 
 func defaultCachePath() string {
-	if p := os.Getenv("FORGE_MODELS_CACHE"); p != "" {
+	if p := os.Getenv("OPCODE_MODELS_CACHE"); p != "" {
 		return p
 	}
 	cacheHome := os.Getenv("XDG_CACHE_HOME")
@@ -175,5 +175,5 @@ func defaultCachePath() string {
 			cacheHome = filepath.Join(home, ".cache")
 		}
 	}
-	return filepath.Join(cacheHome, "forge", "models.json")
+	return filepath.Join(cacheHome, "opcode42", "models.json")
 }

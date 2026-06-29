@@ -1,4 +1,4 @@
-// Package tool implements Forge's built-in agent tools (read, write, edit, glob,
+// Package tool implements Opcode42's built-in agent tools (read, write, edit, glob,
 // grep, bash, patch, …) behind a small Tool interface. Each tool declares a JSON
 // Schema for its input and runs against a working directory carried on Context.
 //
@@ -12,7 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/rotemmiz/forge/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
 )
 
 // Context carries the ambient identity and working directory for a tool run.

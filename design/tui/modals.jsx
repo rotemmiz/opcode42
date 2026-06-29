@@ -1,5 +1,5 @@
 /* ============================================================
-   FORGE TUI — modal overlays
+   OPCODE42 TUI — modal overlays
    Command palette, models, themes, sessions, agents, timeline, status.
    Each modal manages its own keyboard nav (↑/↓/enter/esc) via the
    shared useListNav hook. Selecting fires onPick(item).

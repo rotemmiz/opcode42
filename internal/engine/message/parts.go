@@ -213,7 +213,7 @@ type SubtaskPart struct {
 
 func (*SubtaskPart) partType() string { return "subtask" }
 
-// rawPart preserves any part type Forge does not model explicitly (snapshot,
+// rawPart preserves any part type Opcode42 does not model explicitly (snapshot,
 // agent, retry, …) so reads/writes round-trip without loss.
 type rawPart struct {
 	PartBase

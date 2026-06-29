@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // U11 — tasks board dock. The session's todos (GET /session/:id/todo, written by
@@ -30,7 +30,7 @@ type todosLoadedMsg struct {
 }
 
 // loadTodosCmd fetches the session's todos.
-func loadTodosCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID string) tea.Cmd {
+func loadTodosCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID string) tea.Cmd {
 	return func() tea.Msg {
 		if sessionID == "" {
 			return todosLoadedMsg{}
@@ -125,7 +125,7 @@ func (m Model) tasksDockView(width int) string {
 // isTodoWriteEvent reports whether an SSE event is a todowrite tool part update
 // (the signal to refetch todos, since there's no todo event). Decodes the typed
 // part rather than substring-matching the raw JSON.
-func isTodoWriteEvent(ev forgeclient.SSEEvent) bool {
+func isTodoWriteEvent(ev opcode42client.SSEEvent) bool {
 	if ev.Type != "message.part.updated" {
 		return false
 	}

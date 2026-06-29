@@ -16,7 +16,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/rotemmiz/forge/internal/oauth"
+	"github.com/rotemmiz/opcode42/internal/oauth"
 )
 
 // Accessor resolves a provider's live OAuth access token, refreshing it when the
@@ -39,7 +39,7 @@ type Credential struct {
 	// OAuth reports whether APIKey came from an OAuth access token (true) versus
 	// the static API-key path (false). It lets the provider client choose a
 	// Bearer header for OAuth even on providers whose static path uses a
-	// different header. For Forge's only OAuth provider today (xai, an
+	// different header. For Opcode42's only OAuth provider today (xai, an
 	// OpenAI-compatible endpoint) both paths use Authorization: Bearer, so this
 	// is informational; it future-proofs Anthropic OAuth (Claude Pro/Max), which
 	// switches from x-api-key to Authorization: Bearer when OAuth-backed.

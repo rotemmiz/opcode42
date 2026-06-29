@@ -3,7 +3,7 @@
 // This file (compiled only under the `bench` build tag) is the live measurement
 // harness for plan 11's W0 baseline. The package doc lives in doc.go.
 //
-// It forks a real daemon (forged or opencode) as a child process and measures
+// It forks a real daemon (opcoded or opencode) as a child process and measures
 // four baseline metrics on the host machine:
 //
 //   - cold start: time from cmd.Start() to first GET /global/health 200
@@ -12,7 +12,7 @@
 //     each receive the server.connected event (p50/p99)
 //   - HTTP throughput: requests/sec a single endpoint sustains over a window
 //
-// The harness is daemon-agnostic: both forged and opencode expose the same
+// The harness is daemon-agnostic: both opcoded and opencode expose the same
 // wire-compatible surface (GET /global/health, GET /event SSE with
 // server.connected, Basic auth, x-opencode-directory routing), so the same code
 // drives both for a fair head-to-head comparison.
@@ -39,7 +39,7 @@ import (
 
 // Target describes a daemon to benchmark.
 type Target struct {
-	// Name is a short label used in reports (e.g. "forge", "opencode").
+	// Name is a short label used in reports (e.g. "opcode42", "opencode").
 	Name string
 	// Bin is the executable to fork.
 	Bin string
@@ -649,5 +649,5 @@ type ReportConfig struct {
 	ThroughputConc    int    `json:"throughput_concurrency"`
 	ThroughputSeconds int    `json:"throughput_seconds"`
 	OpencodeVersion   string `json:"opencode_version,omitempty"`
-	ForgeVersion      string `json:"forge_version,omitempty"`
+	Opcode42Version   string `json:"opcode42_version,omitempty"`
 }

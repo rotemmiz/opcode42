@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.forge.feature.settings"
+    namespace = "dev.opcode42.feature.settings"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {

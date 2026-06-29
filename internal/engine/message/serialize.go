@@ -3,7 +3,7 @@ package message
 import (
 	"fmt"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
 )
 
 // abortedErrorName is the NamedError name for a cancelled run (message-v2.ts:41).
@@ -20,7 +20,7 @@ type SerializeModel struct {
 	ModelID    string
 	// SupportsMediaInToolResult reports whether the target model accepts the
 	// given media MIME type inline in a tool result. When nil, the
-	// OpenAI-compatible default (true) applies. Forge always promotes media to a
+	// OpenAI-compatible default (true) applies. Opcode42 always promotes media to a
 	// follow-up user message regardless (see ToModelMessages) — this flag only
 	// gates opencode parity branches and is a no-op in M1.
 	SupportsMediaInToolResult func(mime string) bool
@@ -46,11 +46,11 @@ type SerializeOptions struct {
 // Known divergences (conformance-flagged):
 //   - media attachments on tool results are uniformly promoted to a trailing
 //     synthetic user message rather than ever kept inline in the tool result.
-//     Forge's first providers are text-first; the media-heavy Anthropic path is
+//     Opcode42's first providers are text-first; the media-heavy Anthropic path is
 //     deferred (plan 02 addendum).
 //   - provider-executed tools (metadata.providerExecuted) are not yet modeled:
 //     opencode keeps such a tool's call+result inline in the assistant message,
-//     while Forge always splits a tool-role message. No provider-executed tools
+//     while Opcode42 always splits a tool-role message. No provider-executed tools
 //     exist before the Anthropic/server-tool path, where this must be handled.
 func ToModelMessages(input []WithParts, model SerializeModel, opts SerializeOptions) []llm.ModelMessage {
 	var out []llm.ModelMessage

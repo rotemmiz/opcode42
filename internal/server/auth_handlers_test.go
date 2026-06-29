@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/auth"
-	"github.com/rotemmiz/forge/internal/credstore"
-	"github.com/rotemmiz/forge/internal/engine/catalog"
-	"github.com/rotemmiz/forge/internal/oauth"
-	"github.com/rotemmiz/forge/internal/resource"
+	"github.com/rotemmiz/opcode42/internal/auth"
+	"github.com/rotemmiz/opcode42/internal/credstore"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/oauth"
+	"github.com/rotemmiz/opcode42/internal/resource"
 )
 
 // newOAuthServer builds a minimal handler with only the provider OAuth surface

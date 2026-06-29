@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/engine/permission"
-	"github.com/rotemmiz/forge/internal/engine/processor"
-	"github.com/rotemmiz/forge/internal/engine/tool"
+	"github.com/rotemmiz/opcode42/internal/engine/permission"
+	"github.com/rotemmiz/opcode42/internal/engine/processor"
+	"github.com/rotemmiz/opcode42/internal/engine/tool"
 )
 
 func builtins() *Registry {
@@ -200,10 +200,10 @@ func TestExecutor_NilPluginsIsNoOp(t *testing.T) {
 
 func TestSystemPromptVariant(t *testing.T) {
 	cases := map[string]string{
-		"gpt-4o": "Forge", "gemini-2.0-flash": "Forge", "claude-sonnet-4-6": "Forge", "llama-3.3": "Forge",
+		"gpt-4o": "Opcode42", "gemini-2.0-flash": "Opcode42", "claude-sonnet-4-6": "Opcode42", "llama-3.3": "Opcode42",
 	}
 	for model := range cases {
-		if !strings.Contains(SystemPrompt(model), "Forge") {
+		if !strings.Contains(SystemPrompt(model), "Opcode42") {
 			t.Fatalf("prompt for %s missing", model)
 		}
 	}

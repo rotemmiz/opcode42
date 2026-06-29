@@ -1,4 +1,4 @@
-// Package config loads and merges opencode-format JSONC configuration so Forge
+// Package config loads and merges opencode-format JSONC configuration so Opcode42
 // is a drop-in for opencode's config files.
 //
 // Load order and merge rules mirror opencode (plan 01 §4):

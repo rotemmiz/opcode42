@@ -29,4 +29,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/rotemmiz/forge
+        - github.com/rotemmiz/opcode42

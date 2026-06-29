@@ -9,7 +9,7 @@ package openai
 import (
 	"net/http"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
 )
 
 // Client is one configured OpenAI-compatible endpoint+model.

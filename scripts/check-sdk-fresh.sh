@@ -28,7 +28,7 @@ if ! command -v java >/dev/null 2>&1; then
   exit 0
 fi
 
-TMP="$(mktemp -d -t forge-sdk-fresh.XXXXXX)"
+TMP="$(mktemp -d -t opcode42-sdk-fresh.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 
 echo "check-sdk-fresh: regenerating SDKs into a scratch tree ..." >&2

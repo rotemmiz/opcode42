@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "dev.forge.app"
+    namespace = "dev.opcode42.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.forge.app"
+        applicationId = "dev.opcode42.app"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

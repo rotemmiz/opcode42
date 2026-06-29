@@ -17,7 +17,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -231,7 +231,7 @@ func TestToastOverlayViewMultipleToasts(t *testing.T) {
 // NO_COLOR), so we check structural properties (non-empty lines, text content)
 // rather than raw ANSI sequences.
 func TestToastOverlayViewBackgroundFilled(t *testing.T) {
-	for _, tn := range []string{"forge-dark", "forge-light"} {
+	for _, tn := range []string{"opcode42-dark", "opcode42-light"} {
 		t.Run(tn, func(t *testing.T) {
 			p, ok := theme.ByName(tn)
 			if !ok {

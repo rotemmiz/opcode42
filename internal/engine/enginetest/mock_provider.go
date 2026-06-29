@@ -11,7 +11,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
 )
 
 // MockProvider replays one or more scripted streams. Each call to Stream pops

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/rotemmiz/forge/internal/engine/question"
+	"github.com/rotemmiz/opcode42/internal/engine/question"
 )
 
 // These tools depend on collaborators delivered by later milestones/plans

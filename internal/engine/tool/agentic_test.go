@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/engine/question"
+	"github.com/rotemmiz/opcode42/internal/engine/question"
 )
 
 func TestWebFetch_StripsHTML(t *testing.T) {

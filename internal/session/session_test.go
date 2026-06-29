@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/storage"
-	"github.com/rotemmiz/forge/internal/worktree"
+	"github.com/rotemmiz/opcode42/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/worktree"
 )
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	db, err := storage.Open(filepath.Join(t.TempDir(), "forge.db"))
+	db, err := storage.Open(filepath.Join(t.TempDir(), "opcode42.db"))
 	if err != nil {
 		t.Fatalf("storage.Open: %v", err)
 	}

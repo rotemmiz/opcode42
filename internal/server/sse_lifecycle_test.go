@@ -12,16 +12,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/auth"
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/engine/catalog"
-	"github.com/rotemmiz/forge/internal/engine/llm"
-	"github.com/rotemmiz/forge/internal/engine/message"
-	"github.com/rotemmiz/forge/internal/engine/registry"
-	"github.com/rotemmiz/forge/internal/engine/tool"
-	"github.com/rotemmiz/forge/internal/instance"
-	"github.com/rotemmiz/forge/internal/session"
-	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/auth"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/registry"
+	"github.com/rotemmiz/opcode42/internal/engine/tool"
+	"github.com/rotemmiz/opcode42/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/session"
+	"github.com/rotemmiz/opcode42/internal/storage"
 )
 
 // lifecycleServer builds a fully-wired httptest server (sessions + messages +
@@ -34,7 +34,7 @@ func lifecycleServer(t *testing.T) (*httptest.Server, *message.Store) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("OPENCODE_AUTH_CONTENT", "")
 
-	db, err := storage.Open(filepath.Join(t.TempDir(), "forge.db"))
+	db, err := storage.Open(filepath.Join(t.TempDir(), "opcode42.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -296,7 +296,7 @@ func TestSessionUpdateNotFound(t *testing.T) {
 //   - empty / absent body            -> 400 BadRequest
 //   - wrong-typed title / archived   -> 400 BadRequest
 //   - unknown top-level field        -> 200, ignored (NOT rejected)
-//   - malformed JSON                 -> 400 (Forge; opencode 500s — known divergence)
+//   - malformed JSON                 -> 400 (Opcode42; opencode 500s — known divergence)
 func TestSessionUpdateBodyContract(t *testing.T) {
 	srv, _ := lifecycleServer(t)
 	dir := t.TempDir()
@@ -329,7 +329,7 @@ func TestSessionUpdateBodyContract(t *testing.T) {
 	// Wrong-typed fields -> 400.
 	assertBadRequest("title-non-string", `{"title":123}`)
 	assertBadRequest("archived-non-number", `{"time":{"archived":"x"}}`)
-	// Malformed JSON -> 400 (Forge's intentional divergence from opencode's 500).
+	// Malformed JSON -> 400 (Opcode42's intentional divergence from opencode's 500).
 	assertBadRequest("malformed-json", `{"title":`)
 
 	// Unknown top-level field is IGNORED, returning 200 with the session (matching

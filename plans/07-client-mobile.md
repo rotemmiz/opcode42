@@ -1,7 +1,7 @@
 # Plan 07 — Client: Mobile (Android) — PRIMARY DELIVERABLE
 
 > **Primary deliverable.** The Android app is built and validated against the **real opencode
-> daemon from day one** (Phase A), then repointed to the Forge daemon (Phase B+). Because
+> daemon from day one** (Phase A), then repointed to the Opcode42 daemon (Phase B+). Because
 > clients are wire-compatible, mobile progress is completely decoupled from Go daemon progress.
 
 ---
@@ -437,7 +437,7 @@ Settings
 ### Command palette (`/`) — built-in client actions + daemon commands
 
 Pressing `/` opens **one** discoverable launcher mixing two layers, exactly like opencode and the
-Forge TUI (`internal/tui/slash.go:31-45`, `builtinCommands` tagged `slashBuiltin`, merged ahead of
+Opcode42 TUI (`internal/tui/slash.go:31-45`, `builtinCommands` tagged `slashBuiltin`, merged ahead of
 the daemon list in `filterSlash`):
 
 1. **Daemon commands** — advertised over the wire by `GET /command` (`source: command | mcp |
@@ -448,7 +448,7 @@ the daemon list in `filterSlash`):
 
 **No wire-contract change.** Android owns its built-in list; it is *not* fetched.
 
-Architecture (module `:feature:chat`, package `dev.forge.feature.chat.commands`, kept free of
+Architecture (module `:feature:chat`, package `dev.opcode42.feature.chat.commands`, kept free of
 Compose/Android types so it is unit-testable):
 
 - `BuiltinCommand` — `name`, `description`, `implemented`, `isAvailable(actions)`, `execute(actions)`.
@@ -563,11 +563,11 @@ surfaces the data opencode's Sessions view + Claude Code mobile show. A single s
 per worktree + sandbox **in parallel** (skipping the synthetic "global" project's `/` worktree), plus
 one no-directory `GET /session`, then dedupes by `id`. Every call is wrapped so one unreachable
 directory can't blank the list. This works against opencode (which scopes a no-arg `/session` to its
-fallback CWD) **and** the Forge daemon (whose `store.List` already returns everything globally — the
+fallback CWD) **and** the Opcode42 daemon (whose `store.List` already returns everything globally — the
 fan-out just dedupes to the same set). The connection's working-directory is now truly optional
 (`AddServerScreen` field relabeled "leave blank to see all projects"); opening any session uses that
 session's own `directory` for the per-directory parts stream, so cross-project open/stream still works.
-The new `Project`/`ProjectTime` models live in `core/model`; `ForgeClient.listProjects()` decodes them.
+The new `Project`/`ProjectTime` models live in `core/model`; `Opcode42Client.listProjects()` decodes them.
 
 **Pure projection** `projectSessionList(appState, showArchived, query, filter, now)`
 (`SessionListViewModel.kt`):
@@ -584,7 +584,7 @@ The new `Project`/`ProjectTime` models live in `core/model`; `ForgeClient.listPr
   else needs-input/active/idle color), title, a muted `directory · relativeTime` meta line, the inline
   pending-action affordances, and a long-press menu (Rename / Fork / Archive / Delete).
 
-Deferred: **pin/unpin** — opencode/Forge have no pin field or endpoint (session PATCH writes only
+Deferred: **pin/unpin** — opencode/Opcode42 have no pin field or endpoint (session PATCH writes only
 `title` + `time.archived`), so it would be device-local-only; punted for now.
 
 ### PTY terminal pane
@@ -604,7 +604,7 @@ Deferred: **pin/unpin** — opencode/Forge have no pin field or endpoint (sessio
 
 Full design in plan 13. Summary from mobile perspective:
 
-- The Forge daemon (or a notification relay service) sends FCM high-priority messages when:
+- The Opcode42 daemon (or a notification relay service) sends FCM high-priority messages when:
   - Agent completes a session (turn finished, no further prompts pending).
   - `permission.asked` or `question.asked` event fires (agent is blocked, waiting for user).
 - On FCM receipt, the Android app:
@@ -618,7 +618,7 @@ Full design in plan 13. Summary from mobile perspective:
 
 ## Phased delivery
 
-### Phase A — v0 against the real opencode daemon (no Forge daemon needed)
+### Phase A — v0 against the real opencode daemon (no Opcode42 daemon needed)
 
 Goal: a functional Android app that works with `opencode serve`.
 
@@ -637,9 +637,9 @@ Goal: a functional Android app that works with `opencode serve`.
 
 Phase A complete = a usable mobile coding assistant against real opencode.
 
-### Phase B — Repoint to Forge daemon
+### Phase B — Repoint to Opcode42 daemon
 
-- Change base URL in ServerConnectionManager to point to Forge daemon.
+- Change base URL in ServerConnectionManager to point to Opcode42 daemon.
 - Run the conformance harness (plan 12) to verify parity.
 - Fix any divergences found; no app code changes expected if the daemon is wire-compatible.
 
@@ -690,7 +690,7 @@ Run on Firebase Test Lab with real devices for physical sensor / thermal tests.
 ### Dual-daemon validation
 
 Each Phase A milestone is tested against **both** the real opencode daemon and (once available in
-Phase B) the Forge Go daemon. The test fixtures are identical; only the base URL changes. This is
+Phase B) the Opcode42 Go daemon. The test fixtures are identical; only the base URL changes. This is
 the mobile-side face of plan 12's conformance harness.
 
 ---
@@ -719,7 +719,7 @@ the mobile-side face of plan 12's conformance harness.
 6. **Background/foreground:** put app in background for 60 s → return to foreground → verify
    SSE reconnects, session list and any new messages are up to date without a manual refresh.
 
-7. **Cross-daemon:** run flow 2–4 against opencode daemon, then identically against Forge daemon;
+7. **Cross-daemon:** run flow 2–4 against opencode daemon, then identically against Opcode42 daemon;
    assert identical user-visible behavior.
 
 ---
@@ -757,4 +757,4 @@ re-prescribe client architecture.
   - **Background signal.** Risks assume push (plan 13) is the background path, but plan 13 is not
     started — until then the app is foreground-SSE only. Make that explicit as the current contract.
 - **Validation is strong** (property-based `reduce`, MockWebServer SSE, dual-daemon). The only gap is
-  that the dual-daemon face is blocked on Forge reaching conformance-green (masterplan: M11 unrun).
+  that the dual-daemon face is blocked on Opcode42 reaching conformance-green (masterplan: M11 unrun).

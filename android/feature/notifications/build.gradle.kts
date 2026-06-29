@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.forge.feature.notifications"
+    namespace = "dev.opcode42.feature.notifications"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {

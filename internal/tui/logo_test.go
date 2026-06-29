@@ -1,6 +1,6 @@
 package tui
 
-// logo_test.go — Plan 08c M10: tests for block-pixel "forge" logo + shimmer sweep.
+// logo_test.go — Plan 08c M10: tests for block-pixel "opcode42" logo + shimmer sweep.
 //
 // Coverage:
 //  1. logoFrame: pure and deterministic — same (frame, palette) always yields the
@@ -19,7 +19,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // ── logoFrame tests ───────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ func TestLogoFrameGoldenFrame0(t *testing.T) {
 	rows := logoFrame(0, p)
 	for i, row := range rows {
 		plain := stripANSI(row)
-		want := []rune(forgeGlyph[i])
+		want := []rune(opcode42Glyph[i])
 		// Pad to logoWidth.
 		for len(want) < logoWidth {
 			want = append(want, ' ')
@@ -219,7 +219,7 @@ func TestLogoFrameTextUnchanged(t *testing.T) {
 		for i, row := range rows {
 			plain := stripANSI(row)
 			// Build the expected padded glyph row.
-			want := forgeGlyph[i]
+			want := opcode42Glyph[i]
 			for len([]rune(want)) < logoWidth {
 				want += " "
 			}

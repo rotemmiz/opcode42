@@ -9,17 +9,17 @@ import (
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/engine/permission"
-	"github.com/rotemmiz/forge/internal/engine/processor"
-	"github.com/rotemmiz/forge/internal/engine/registry"
-	"github.com/rotemmiz/forge/internal/mcp"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/engine/permission"
+	"github.com/rotemmiz/opcode42/internal/engine/processor"
+	"github.com/rotemmiz/opcode42/internal/engine/registry"
+	"github.com/rotemmiz/opcode42/internal/mcp"
 )
 
 // TestMCPToolCallEmitsPermissionAsked is the plan-12 conformance assertion for
 // Track C C3: opencode routes MCP tool execution through the same permission
 // ask path as built-in tools (session/tools.ts:135), publishing a
-// permission.asked bus event keyed on the flattened tool name. Forge must do the
+// permission.asked bus event keyed on the flattened tool name. Opcode42 must do the
 // same. This drives the registry executor in-process against a stub MCP server
 // (no LLM/provider needed) and asserts the event fires before the tool runs.
 func TestMCPToolCallEmitsPermissionAsked(t *testing.T) {

@@ -19,7 +19,7 @@ import (
 
 	"github.com/creack/pty"
 
-	"github.com/rotemmiz/forge/internal/id"
+	"github.com/rotemmiz/opcode42/internal/id"
 )
 
 const (
@@ -414,7 +414,7 @@ func meta(cursor int) []byte {
 // reads is reassembled, never corrupted); every other byte is emitted as valid
 // UTF-8, with U+FFFD substituted for invalid bytes — matching node-pty, which
 // hands opencode an already-decoded string (pty/index.ts:239). This guarantees
-// the text WebSocket frames forge sends are always valid UTF-8 (RFC 6455).
+// the text WebSocket frames opcode42 sends are always valid UTF-8 (RFC 6455).
 func splitValidUTF8(b []byte) (string, []byte) {
 	if len(b) == 0 {
 		return "", nil

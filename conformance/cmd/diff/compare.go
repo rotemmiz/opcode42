@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/rotemmiz/forge/conformance/result"
+	"github.com/rotemmiz/opcode42/conformance/result"
 )
 
 // Finding is one structural difference between the two runs.

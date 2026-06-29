@@ -1,6 +1,6 @@
 package tui
 
-// logo.go — Plan 08c M10: block-pixel "forge" wordmark + left→right brightness
+// logo.go — Plan 08c M10: block-pixel "opcode42" wordmark + left→right brightness
 // shimmer sweep, animated via M9's animTick infrastructure.
 //
 // Design reference: opencode's component/logo.tsx ShimmerConfig (period 4600ms,
@@ -31,7 +31,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // ── Block-pixel glyph matrix ────────────────────────────────────────────────
@@ -57,7 +57,7 @@ import (
 //	cols 0-2: f   cols 3: gap   cols 4-6: o
 //	cols 7: gap   cols 8-10: r  cols 11: gap  cols 12-14: g
 //	cols 15: gap  cols 16-18: e
-var forgeGlyph = [5]string{
+var opcode42Glyph = [5]string{
 	"██  ███ ██  ███ ███", // row 0 (top)
 	"█   █ █ █   █ █ █  ", // row 1
 	"██  █ █ █   █ █ ██ ", // row 2 (mid)
@@ -65,7 +65,7 @@ var forgeGlyph = [5]string{
 	"█   ███ █     █ ███", // row 4 (bottom)
 }
 
-// logoWidth is the number of columns in a forgeGlyph row.
+// logoWidth is the number of columns in a opcode42Glyph row.
 // All rows are padded to this width in logoFrame.
 const logoWidth = 19
 
@@ -192,7 +192,7 @@ func columnColor(x int, frame int, p theme.Palette) lipgloss.Color {
 	}
 }
 
-// logoFrame renders the 5-row block-pixel "forge" wordmark with a left→right
+// logoFrame renders the 5-row block-pixel "opcode42" wordmark with a left→right
 // brightness shimmer sweep, returning one string per row.  It is pure and
 // deterministic given (frame, palette) — no global state, safe to call from
 // View() on any goroutine.
@@ -203,8 +203,8 @@ func columnColor(x int, frame int, p theme.Palette) lipgloss.Color {
 //
 // frame is m.animFrame (monotonic, incremented per animTickMsg at 10fps).
 func logoFrame(frame int, p theme.Palette) []string {
-	rows := make([]string, len(forgeGlyph))
-	for row, line := range forgeGlyph {
+	rows := make([]string, len(opcode42Glyph))
+	for row, line := range opcode42Glyph {
 		// Pad row to logoWidth so all rows have identical column count.
 		padded := line
 		for len([]rune(padded)) < logoWidth {

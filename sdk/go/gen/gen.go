@@ -1,5 +1,5 @@
 // Package gen holds the generated Go REST client (request functions +
-// request/response models) for the Forge / opencode wire contract, produced by
+// request/response models) for the Opcode42 / opencode wire contract, produced by
 // oapi-codegen. The generated file (client.gen.go) is committed; never edit it
 // by hand — regenerate with `make gen`.
 //
@@ -9,9 +9,9 @@
 // disambiguates schema names that collide with client "<OperationId>Response"
 // wrappers (a collision the server generator never hits).
 //
-// The hand-written ForgeClient wrapper (auth/directory injection, SSE, WS-PTY)
-// lives one level up in package forgeclient.
+// The hand-written Opcode42Client wrapper (auth/directory injection, SSE, WS-PTY)
+// lives one level up in package opcode42client.
 package gen
 
-//go:generate go run github.com/rotemmiz/forge/internal/tools/downconvert -client -in ../../../conformance/openapi-reference.json -out openapi-3.0.derived.json
+//go:generate go run github.com/rotemmiz/opcode42/internal/tools/downconvert -client -in ../../../conformance/openapi-reference.json -out openapi-3.0.derived.json
 //go:generate go tool oapi-codegen -config oapi-codegen.yaml openapi-3.0.derived.json

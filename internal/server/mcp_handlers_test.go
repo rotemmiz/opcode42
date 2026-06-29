@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/auth"
+	"github.com/rotemmiz/opcode42/internal/auth"
 )
 
 // reqBody issues an HTTP request with a JSON body to h, returning the recorder

@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
-	"github.com/rotemmiz/forge/internal/engine/tool"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/tool"
 )
 
 // Flags gate optional tools.

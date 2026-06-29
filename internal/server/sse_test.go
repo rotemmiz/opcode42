@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rotemmiz/forge/internal/auth"
+	"github.com/rotemmiz/opcode42/internal/auth"
 )
 
 // firstSSEEvent connects to an SSE endpoint and returns the first "data:" line

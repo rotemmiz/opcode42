@@ -5,7 +5,7 @@ import (
 	"sort"
 )
 
-// Drift classifies how a candidate operation set (e.g. Forge's self-emitted
+// Drift classifies how a candidate operation set (e.g. Opcode42's self-emitted
 // spec) differs from a baseline operation set (the frozen contract), per the
 // locked conformance policy (masterplan "Decisions locked" #2):
 //
@@ -16,7 +16,7 @@ import (
 //   - Additive: an operation the candidate serves that is not in the baseline.
 //     WARN if listed in the known-additions registry; otherwise BREAKING.
 //
-// Unimplemented operations are NOT a drift signal: Forge registers a 501 stub for
+// Unimplemented operations are NOT a drift signal: Opcode42 registers a 501 stub for
 // every reference operation, so they remain present in the emitted spec (the
 // locked decision treats unimplemented as 501, not spec-absence).
 type Drift struct {
@@ -39,7 +39,7 @@ func (d Drift) Breaking() bool {
 }
 
 // CompareOps diffs an emitted operation set against a baseline (reference) set.
-// known is the set of additive operations permitted as Forge known-additions;
+// known is the set of additive operations permitted as Opcode42 known-additions;
 // such extras land in KnownAdded (WARN) rather than Additive (FAIL).
 //
 // Each map value is the operation's declared response status codes; pass nil/empty

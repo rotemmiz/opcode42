@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 func TestTasksDock_TogglesAndRenders(t *testing.T) {
@@ -70,15 +70,15 @@ func TestTodosLoaded_OnlyAppliesToCurrentSession(t *testing.T) {
 }
 
 func TestIsTodoWriteEvent(t *testing.T) {
-	yes := forgeclient.SSEEvent{Type: "message.part.updated", Properties: []byte(`{"part":{"type":"tool","tool":"todowrite"}}`)}
+	yes := opcode42client.SSEEvent{Type: "message.part.updated", Properties: []byte(`{"part":{"type":"tool","tool":"todowrite"}}`)}
 	if !isTodoWriteEvent(yes) {
 		t.Fatal("a todowrite part update should be detected")
 	}
-	no := forgeclient.SSEEvent{Type: "message.part.updated", Properties: []byte(`{"part":{"type":"tool","tool":"bash"}}`)}
+	no := opcode42client.SSEEvent{Type: "message.part.updated", Properties: []byte(`{"part":{"type":"tool","tool":"bash"}}`)}
 	if isTodoWriteEvent(no) {
 		t.Fatal("a non-todowrite part should not trigger a refetch")
 	}
-	if isTodoWriteEvent(forgeclient.SSEEvent{Type: "session.updated"}) {
+	if isTodoWriteEvent(opcode42client.SSEEvent{Type: "session.updated"}) {
 		t.Fatal("a non-part event should not match")
 	}
 }

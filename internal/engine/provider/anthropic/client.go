@@ -8,7 +8,7 @@ package anthropic
 import (
 	"net/http"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
 )
 
 // Defaults for the Anthropic API.

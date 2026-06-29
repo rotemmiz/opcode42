@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/rotemmiz/forge/internal/credstore"
-	"github.com/rotemmiz/forge/internal/oauth"
+	"github.com/rotemmiz/opcode42/internal/credstore"
+	"github.com/rotemmiz/opcode42/internal/oauth"
 )
 
 // registerProviderAuthRoutes wires the credential write/delete endpoints onto

@@ -1,9 +1,9 @@
-# Forge TUI screenshot harness
+# Opcode42 TUI screenshot harness
 
-Deterministic, repeatable screenshots of `forge-tui` for design-system
+Deterministic, repeatable screenshots of `opcode-tui` for design-system
 reference and visual-diff regression against the opencode TUI. No LLM calls:
 a fixed session (reusing opencode's `fixture-session.json`) is imported into
-a sandboxed opencode daemon, and `forge-tui` attaches to it as a pure HTTP+SSE
+a sandboxed opencode daemon, and `opcode-tui` attaches to it as a pure HTTP+SSE
 client. Scenes are numbered identically to opencode's reference harness so
 frames line up 1:1 for side-by-side comparison.
 
@@ -18,21 +18,21 @@ fixture-session.json   (opencode's hand-built session: reasoning, md, tools, dif
        │
        │   HTTP + SSE
        ▼
-  forge-tui --url http://127.0.0.1:4199 --session ses_00… --theme forge-dark/light
+  opcode-tui --url http://127.0.0.1:4199 --session ses_00… --theme opcode42-dark/light
        │
        │   VHS tapes
        ▼
-  out/forge-{dark,light}/NN-scene.png
+  out/opcode42-{dark,light}/NN-scene.png
 ```
 
-**Why opencode as the daemon?** `forge-tui` is a pure HTTP+SSE client (plan 08
+**Why opencode as the daemon?** `opcode-tui` is a pure HTTP+SSE client (plan 08
 architecture). It owns no agent state — the daemon is the source of truth.
-opencode is wire-compatible, so pointing `forge-tui` at an opencode daemon
+opencode is wire-compatible, so pointing `opcode-tui` at an opencode daemon
 seeded with the *same* fixture that opencode's reference harness uses gives
 identical content in both front-ends. This is the most honest path to 1:1
 visual parity.
 
-**Theme pinning:** `forge-tui` now accepts `--theme <name>` (added in plan 08c
+**Theme pinning:** `opcode-tui` now accepts `--theme <name>` (added in plan 08c
 M3), which overrides the KV-pinned or auto-detected theme for deterministic
 capture. The harness also writes a sandboxed `tui-kv.json` for belt-and-
 suspenders determinism.
@@ -46,12 +46,12 @@ cd tools/tui-shots
 ./capture.sh light         # light only
 ```
 
-Output lands in `out/forge-{dark,light}/`.
+Output lands in `out/opcode42-{dark,light}/`.
 
 ## Side-by-side compare
 
 ```bash
-./compare.sh dark    # montage forge vs opencode reference for dark mode
+./compare.sh dark    # montage opcode42 vs opencode reference for dark mode
 ./compare.sh light
 ```
 
@@ -77,11 +77,11 @@ pairs you can open manually.
 | 22 | timeline | `Ctrl+X g` |
 | 23 | status | `Ctrl+X s` |
 
-## forge-tui keybindings (vs opencode's `Ctrl+X`)
+## opcode-tui keybindings (vs opencode's `Ctrl+X`)
 
-forge-tui also uses `Ctrl+X` as leader key:
+opcode-tui also uses `Ctrl+X` as leader key:
 
-| Action | forge-tui | opencode |
+| Action | opcode-tui | opencode |
 |--------|-----------|---------|
 | Sessions | `Ctrl+X l` | `Ctrl+X l` |
 | New session | `Ctrl+X n` | `Ctrl+X n` |
@@ -102,11 +102,11 @@ forge-tui also uses `Ctrl+X` as leader key:
 
 - `vhs` (+ `ttyd`, `ffmpeg`) — install with `brew install vhs`
 - `opencode` ≥ 1.15.12 — `npm install -g opencode-ai`
-- `go` ≥ 1.22 — to build `forge-tui`
+- `go` ≥ 1.22 — to build `opcode-tui`
 - `curl` — for daemon health-check polling
 
 ## Reference
 
 - opencode's reference harness: `../../screenshots-harness/`
 - plan 08c §V.1 — the mandate for this harness
-- Theme --flag: `cmd/forge-tui/main.go`, `internal/tui/model.go` `Config.Theme`
+- Theme --flag: `cmd/opcode-tui/main.go`, `internal/tui/model.go` `Config.Theme`

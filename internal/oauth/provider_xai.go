@@ -98,8 +98,8 @@ func (p *xaiProvider) Authorize(_ context.Context, methodIndex int, _ map[string
 	}
 	return Authorization{
 		URL:          authURL,
-		Method:       "auto", // Forge's loopback server captures the redirect.
-		Instructions: "Complete sign-in in your browser; Forge will capture the redirect automatically.",
+		Method:       "auto", // Opcode42's loopback server captures the redirect.
+		Instructions: "Complete sign-in in your browser; Opcode42 will capture the redirect automatically.",
 	}, hs, nil
 }
 
@@ -161,7 +161,7 @@ func (p *xaiProvider) postToken(ctx context.Context, form url.Values) (Token, er
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	// xAI's auth server attributes requests by User-Agent (xai.ts authHeaders).
-	req.Header.Set("User-Agent", "forge")
+	req.Header.Set("User-Agent", "opcode42")
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		return Token{}, fmt.Errorf("xai token request: %w", err)

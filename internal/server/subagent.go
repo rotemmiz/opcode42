@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/rotemmiz/forge/internal/engine"
-	"github.com/rotemmiz/forge/internal/engine/message"
-	"github.com/rotemmiz/forge/internal/engine/tool"
-	"github.com/rotemmiz/forge/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/engine"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/tool"
+	"github.com/rotemmiz/opcode42/internal/instance"
 )
 
 // subagentRunner implements tool.SubagentRunner for the `task` tool. It creates

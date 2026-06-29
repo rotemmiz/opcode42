@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sync the frozen wire contract from the opencode reference checkout into the
-# Forge repo. This is the ONLY way the vendored reference should change — never
+# Opcode42 repo. This is the ONLY way the vendored reference should change — never
 # edit conformance/openapi-reference.json by hand.
 #
 # Usage: scripts/sync-openapi.sh [path-to-opencode-checkout]

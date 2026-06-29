@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/storage"
+	"github.com/rotemmiz/opcode42/internal/storage"
 )
 
 // seedSession inserts the project+session rows the message FK requires.

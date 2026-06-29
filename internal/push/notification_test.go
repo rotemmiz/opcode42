@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/bus"
 )
 
 func TestFromEventMapping(t *testing.T) {

@@ -1,6 +1,6 @@
 # Plan 08a — TUI feature parity: implementable now
 
-> **Scope.** Gaps between the Forge TUI (`internal/tui/`, Go/Bubble Tea) and opencode's TUI
+> **Scope.** Gaps between the Opcode42 TUI (`internal/tui/`, Go/Bubble Tea) and opencode's TUI
 > (`packages/opencode/src/cli/cmd/tui/`, TypeScript/opentui) that need **no new subsystem** — each is
 > either an existing wire-compat endpoint or pure client-side UI. The architecturally-heavy gaps
 > (diff viewer, PTY pane, workspaces, provider auth, plugin host, stash) live in **plan 08b**.
@@ -17,14 +17,14 @@
 - Frozen contract: `/Users/rotemmiz/git/opencode/packages/sdk/openapi.json`.
 - Sibling: `plans/08b-tui-parity-planned.md`.
 
-## Forge TUI extension points (where everything plugs in)
+## Opcode42 TUI extension points (where everything plugs in)
 Verified against the current tree (`internal/tui/`, ~4.7k LOC):
 - **`modal.go`** — `modalKind` enum (`modalNone/Palette/Sessions/Models/Agents/Themes/Timeline/Status`),
   `paletteAction` enum, `paletteItems []paletteCmd`. New overlays + palette entries are added here.
 - **`model.go`** — Bubble Tea `Update` (key routing) + `View` (compose panes/overlays).
 - **`store.go`** — `Reduce(model, event)` SSE switch (`session.*`, `message.*`, `permission.*`,
   `question.*`). New server-pushed state lands here.
-- **`conn.go`** — async `tea.Cmd`s wrapping the Go SDK (`forgeclient "github.com/rotemmiz/forge/sdk/go"`).
+- **`conn.go`** — async `tea.Cmd`s wrapping the Go SDK (`opcode42client "github.com/rotemmiz/opcode42/sdk/go"`).
 - **`sdk/go/`** — thin client: generic `GetJSON`/`PostJSON`/`Delete` + typed `CreatePTY`/`ConnectPTY`/
   `Events`/`Health`. New session ops are 5-line typed wrappers over `PostJSON`/`Delete`.
 - **`slash.go`** — slash-command registry (`/new /sessions /models /agents /themes /timeline /status
@@ -40,10 +40,10 @@ emit events the reducer handles, so the UI updates for free).
 
 ## A. Session operations (wire-coverage — highest conformance value)
 opencode binds these as `session_*` keybinds (`config/keybind.ts`) and dialogs
-(`component/dialog-session-rename.tsx`, etc.); each maps to a frozen endpoint. The Forge **Android**
+(`component/dialog-session-rename.tsx`, etc.); each maps to a frozen endpoint. The Opcode42 **Android**
 client already implements all of them (PRs #72/#74) — this is porting the same SDK calls to Go.
 
-| Op | Endpoint (verified in openapi.json) | opencode ref | Forge TUI work |
+| Op | Endpoint (verified in openapi.json) | opencode ref | Opcode42 TUI work |
 |---|---|---|---|
 | **Rename** | `PATCH /session/{id}` `{title}` → `Session` | `dialog-session-rename.tsx`, keybind `session_rename` | new `dialog-prompt`-style overlay (reuse `modalSelect` text input) → `SDK.RenameSession` → `session.updated` reducer already updates the title |
 | **Share / Unshare** | `POST` / `DELETE /session/{id}/share` → `Session` (`share.url`) | `session_share` / `session_unshare` | palette entries; on share, toast the `share.url` + copy to clipboard (`util/clipboard` analog) |
@@ -78,15 +78,15 @@ Server (`session/prompt.ts:496` `shellImpl`) writes a synthetic **user** message
 tool — so the output streams into the conversation via the same `message.part.*` events the TUI
 already reduces.
 
-**Forge TUI work:**
+**Opcode42 TUI work:**
 1. `composer.go` — add a `mode` field (`normal|shell`); `!` at an empty/at-start buffer toggles
    `shell`; `esc` exits. Render a `!` prefix/indicator (opencode shows a shell glyph + theme accent).
 2. `sdk/go` — `ShellCommand(ctx, sessionID string, in ShellInput) (Message, error)` over `PostJSON`.
 3. On submit-in-shell-mode, dispatch the cmd with the effective agent + model; **no new render path** —
-   output arrives as normal tool parts (Forge already renders `tool` parts in all states).
+   output arrives as normal tool parts (Opcode42 already renders `tool` parts in all states).
 
 **Effort:** ~0.5 day. **Conformance value: high** (new endpoint + the synthetic-message shape).
-**Neither Forge client (TUI nor Android) has this yet** — see the Android backlog note at the end.
+**Neither Opcode42 client (TUI nor Android) has this yet** — see the Android backlog note at the end.
 
 ---
 
@@ -95,7 +95,7 @@ opencode's richest keymap cluster (`messages_*` in `config/keybind.ts`): `messag
 `messages_line_up/down`, `messages_page_up/down`, `messages_half_page_*`, `messages_first/last`,
 `messages_last_user`, `messages_copy`, `messages_toggle_conceal`. All **viewport-local — no endpoint**.
 
-**Forge TUI work (in `render.go` + `model.go`):**
+**Opcode42 TUI work (in `render.go` + `model.go`):**
 1. A **message cursor** (selected message index) over the rendered timeline; vim-style keys
    (`j/k`, `ctrl+d/u`, `g/G`, `n/p`) move it; highlight the selected block.
 2. `messages_copy` (`y`) — copy the selected message/part text to the system clipboard
@@ -113,11 +113,11 @@ opencode `session_toggle_timestamps`, `session_toggle_generic_tool_output`, `too
 `display_thinking` (`context/thinking.ts`), `messages_toggle_conceal`, `app_toggle_diffwrap`,
 `app_toggle_file_context`. All flip a **client render flag** — no endpoint.
 
-**Forge TUI work:** a `viewState` struct of bools threaded into `render.go`; palette toggles +
-keybinds. Forge already renders reasoning/tool parts, so these gate existing render branches:
+**Opcode42 TUI work:** a `viewState` struct of bools threaded into `render.go`; palette toggles +
+keybinds. Opcode42 already renders reasoning/tool parts, so these gate existing render branches:
 - **timestamps** on/off per message header,
 - **generic tool output** collapse (opencode `util/collapse-tool-output.ts` — collapse noisy
-  read/grep/glob output to a one-line summary; Forge has the grouping seed in `render.go`),
+  read/grep/glob output to a one-line summary; Opcode42 has the grouping seed in `render.go`),
 - **thinking/reasoning** show/hide,
 - **tool details** expand/collapse the selected tool part.
 
@@ -127,10 +127,10 @@ keybinds. Forge already renders reasoning/tool parts, so these gate existing ren
 
 ## E. Help / which-key overlay
 opencode: `ui/dialog-help.tsx` (`help_show`) + `feature-plugins/system/which-key.tsx` (live
-leader-key hint popup) + `POST /tui/open-help`. Forge has a `ctrl+x` leader (`model.go`) but no
+leader-key hint popup) + `POST /tui/open-help`. Opcode42 has a `ctrl+x` leader (`model.go`) but no
 discoverability.
 
-**Forge TUI work:** a `modalHelp` overlay listing keybinds/commands (static, generated from the
+**Opcode42 TUI work:** a `modalHelp` overlay listing keybinds/commands (static, generated from the
 keybind table); optional which-key hint strip after the leader is pressed. **No endpoint** (the
 `/tui/open-help` route is for *external* control of the TUI — out of scope here).
 
@@ -142,7 +142,7 @@ keybind table); optional which-key hint strip after the leader is pressed. **No 
 opencode `editor_open` (`context/editor.ts`, `context/editor-zed.ts`) opens the composer buffer (or a
 file) in the user's editor and reads it back. Pure client feature.
 
-**Forge TUI work:** `util/editor.go` — write buffer to a tempfile, `exec.Command($EDITOR)`,
+**Opcode42 TUI work:** `util/editor.go` — write buffer to a tempfile, `exec.Command($EDITOR)`,
 Bubble Tea `tea.ExecProcess` (suspends the TUI), read back on exit into the composer. **Effort:**
 ~0.5 day. **Conformance value: none.** Optional.
 
@@ -150,10 +150,10 @@ Bubble Tea `tea.ExecProcess` (suspends the TUI), read back on exit into the comp
 
 ## G. Read-only resource dialogs (cheap wire-coverage)
 opencode dialogs over read endpoints: `dialog-mcp.tsx` (`GET /mcp`, `mcp_list`), `dialog-skill.tsx`
-(`GET /skill`, `prompt_skills`). Forge has `/agents`, `/models`, `/themes`, `/status` dialogs — same
+(`GET /skill`, `prompt_skills`). Opcode42 has `/agents`, `/models`, `/themes`, `/status` dialogs — same
 pattern, new data sources.
 
-**Forge TUI work:** two `modalSelect`-style list overlays + `/mcp` and `/skills` slash verbs →
+**Opcode42 TUI work:** two `modalSelect`-style list overlays + `/mcp` and `/skills` slash verbs →
 `SDK.ListMCP` (`GET /mcp`) and `SDK.ListSkills` (`GET /skill`). Read-only (connect/auth flows are
 plan 08b). **Effort:** ~0.5 day. **Conformance value: medium** (adds `GET /mcp`, `GET /skill` to the
 dual-run surface).
@@ -166,7 +166,7 @@ ranking (`component/prompt/frecency.tsx`); **model** `model_cycle_recent`/`model
 `model_favorite_toggle`; **agent** `agent_cycle`/`agent_cycle_reverse`. All backed by a **local KV**
 (`context/kv.tsx`) — no endpoint.
 
-**Forge TUI work:** a small on-disk KV (JSON under the config dir; opencode keys e.g.
+**Opcode42 TUI work:** a small on-disk KV (JSON under the config dir; opencode keys e.g.
 `diff_viewer_single_patch`, favorites). Then: ↑/↓ history in the composer; `model_cycle_recent` to
 flip models without opening the modal; `agent_cycle` likewise; star/recent ordering in the existing
 model/agent modals. **Effort:** ~1.5 days (the KV + wiring across composer/model/agent).
@@ -177,7 +177,7 @@ model/agent modals. **Effort:** ~1.5 days (the KV + wiring across composer/model
 ## I. Notifications / attention bell
 opencode `feature-plugins/system/notifications.ts` + `attention.ts` + `util/audio.ts`: ring the
 terminal bell / desktop notification when the agent finishes or asks a permission while unfocused.
-**Forge TUI work:** on `session.idle`-equivalent (turn finished) or `permission.asked`/`question.asked`
+**Opcode42 TUI work:** on `session.idle`-equivalent (turn finished) or `permission.asked`/`question.asked`
 while the terminal is unfocused, emit `\a` (BEL) and/or an OSC-9 desktop notification. **Effort:**
 ~0.5 day. **Conformance value: none.** Optional polish.
 
@@ -215,6 +215,6 @@ variant, tag, dedicated sub-agent UX, and opencode's pure-flourish items (bg-pul
 heap-snapshot/debug console).
 
 ## Cross-client note
-The **`!` bang shell (section B) is also missing from Forge Android** — same `POST /session/{id}/shell`
+The **`!` bang shell (section B) is also missing from Opcode42 Android** — same `POST /session/{id}/shell`
 endpoint. If built for the TUI, mirror it into the Android composer (an `!`-prefix mode) as a small
 follow-up; it's the cheaper, more broadly-useful cousin of the PTY pane.

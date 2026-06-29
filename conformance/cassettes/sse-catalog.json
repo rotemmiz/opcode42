@@ -11,7 +11,7 @@
         "method": "GET",
         "url": "http://127.0.0.1:4096/global/health",
         "headers": {
-          "x-opencode-directory": "/tmp/forge-record"
+          "x-opencode-directory": "/tmp/opcode42-record"
         },
         "body": ""
       },
@@ -29,7 +29,7 @@
         "method": "GET",
         "url": "http://127.0.0.1:4096/event",
         "headers": {
-          "x-opencode-directory": "/tmp/forge-record"
+          "x-opencode-directory": "/tmp/opcode42-record"
         },
         "body": ""
       },
@@ -47,7 +47,7 @@
         "method": "GET",
         "url": "http://127.0.0.1:4096/global/event",
         "headers": {
-          "x-opencode-directory": "/tmp/forge-record"
+          "x-opencode-directory": "/tmp/opcode42-record"
         },
         "body": ""
       },

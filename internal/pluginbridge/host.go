@@ -82,11 +82,11 @@ func (b *Bridge) start(ctx context.Context) error {
 
 	cmd := exec.CommandContext(ctx, runtimeBin, runtimeArgs(runtimeBin, script)...)
 	cmd.Env = append(os.Environ(),
-		"FORGE_PLUGIN_SOCKET="+socketPath,
-		"FORGE_URL="+b.cfg.ServerURL,
-		"FORGE_AUTH_HEADER="+b.cfg.AuthHeader,
-		"FORGE_DIRECTORY="+b.cfg.Directory,
-		"FORGE_PLUGIN_SPECS="+string(specsJSON),
+		"OPCODE_PLUGIN_SOCKET="+socketPath,
+		"OPCODE_URL="+b.cfg.ServerURL,
+		"OPCODE_AUTH_HEADER="+b.cfg.AuthHeader,
+		"OPCODE_DIRECTORY="+b.cfg.Directory,
+		"OPCODE_PLUGIN_SPECS="+string(specsJSON),
 	)
 	cmd.Stdout = os.Stderr // host log output to the daemon's stderr
 	cmd.Stderr = os.Stderr
@@ -253,22 +253,22 @@ func resolveRuntime(pref string) (string, error) {
 		if p, err := exec.LookPath("node"); err == nil {
 			return p, nil
 		}
-		return "", errors.New("no plugin runtime found: install bun or node, or set FORGE_PLUGIN_RUNTIME")
+		return "", errors.New("no plugin runtime found: install bun or node, or set OPCODE_PLUGIN_RUNTIME")
 	default:
 		return "", fmt.Errorf("invalid plugin runtime %q (want bun|node)", pref)
 	}
 }
 
 // resolveHostScript finds the plugin-host entry script. Explicit override wins;
-// otherwise FORGE_PLUGIN_HOST_SCRIPT; otherwise the bundled package relative to
+// otherwise OPCODE_PLUGIN_HOST_SCRIPT; otherwise the bundled package relative to
 // the executable. The file must exist.
 func resolveHostScript(override string) (string, error) {
-	candidates := []string{override, os.Getenv("FORGE_PLUGIN_HOST_SCRIPT")}
+	candidates := []string{override, os.Getenv("OPCODE_PLUGIN_HOST_SCRIPT")}
 	if exe, err := os.Executable(); err == nil {
 		dir := filepath.Dir(exe)
 		candidates = append(candidates,
-			filepath.Join(dir, "forge-plugin-host", "src", "index.ts"),
-			filepath.Join(dir, "..", "packages", "forge-plugin-host", "src", "index.ts"),
+			filepath.Join(dir, "opcode42-plugin-host", "src", "index.ts"),
+			filepath.Join(dir, "..", "packages", "opcode42-plugin-host", "src", "index.ts"),
 		)
 	}
 	for _, c := range candidates {
@@ -279,7 +279,7 @@ func resolveHostScript(override string) (string, error) {
 			return filepath.Abs(c)
 		}
 	}
-	return "", errors.New("plugin host script not found (set FORGE_PLUGIN_HOST_SCRIPT)")
+	return "", errors.New("plugin host script not found (set OPCODE_PLUGIN_HOST_SCRIPT)")
 }
 
 // newSocketPath returns a short, unique unix-socket path. macOS/BSD cap the
@@ -289,7 +289,7 @@ func newSocketPath() (string, error) {
 	if _, err := rand.Read(buf[:]); err != nil {
 		return "", err
 	}
-	name := fmt.Sprintf("forge-ph-%s.sock", hex.EncodeToString(buf[:]))
+	name := fmt.Sprintf("opcode42-ph-%s.sock", hex.EncodeToString(buf[:]))
 	path := filepath.Join(os.TempDir(), name)
 	if runtime.GOOS == "windows" {
 		// Unix sockets exist on modern Windows but path semantics differ; the

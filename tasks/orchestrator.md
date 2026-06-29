@@ -1,4 +1,4 @@
-# Forge — Orchestrator Runbook
+# Opcode42 — Orchestrator Runbook
 
 How to execute the plan suite through subagents without blowing up the orchestrator's
 context window. **You (the session reading this) are the orchestrator.** Stay thin: you
@@ -71,15 +71,15 @@ Invoke with: **"run the orchestrator"** (process the whole READY set) or
 ## IMPLEMENTER TEMPLATE (fill the <…> and pass as the worker prompt)
 
 ```
-You are implementing ONE milestone of the Forge project. Work only within your scope.
+You are implementing ONE milestone of the Opcode42 project. Work only within your scope.
 
 SCOPE: <task id> — <task title>
-PLAN:  Read ONLY the section <plan ref> of /Users/rotemmiz/git/forge/<plan file>.
+PLAN:  Read ONLY the section <plan ref> of /Users/rotemmiz/git/opcode42/<plan file>.
        Do NOT read other plan files. Read the referenced opencode source for wire-compat
        claims (cite file:line) — opencode is at /Users/rotemmiz/git/opencode.
 
 RULES:
-- Follow /Users/rotemmiz/git/forge/CLAUDE.md (wire-compat non-negotiables, Go-only, single binary).
+- Follow /Users/rotemmiz/git/opcode42/CLAUDE.md (wire-compat non-negotiables, Go-only, single binary).
 - Match surrounding code style. No Co-Authored-By in any commit.
 - If you hit one of the unresolved ambiguities in tasks/progress.md, STOP and report it as
   BLOCKED rather than guessing a wire contract.
@@ -102,7 +102,7 @@ RETURN (≤15 lines, this is all the orchestrator sees):
 You are reviewing ONE milestone's diff. You did NOT write it. Be a skeptical reviewer.
 
 TASK:  <task id> — <task title>
-PLAN:  Read ONLY <plan ref> of /Users/rotemmiz/git/forge/<plan file>.
+PLAN:  Read ONLY <plan ref> of /Users/rotemmiz/git/opcode42/<plan file>.
 DIFF:  Review the uncommitted changes in this worktree (git diff / git status).
 
 CHECK:

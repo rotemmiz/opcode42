@@ -20,7 +20,7 @@ func (e *binUnavailableError) Error() string {
 func errBinaryUnavailable(name string) error { return &binUnavailableError{name: name} }
 
 // binResolver is the default BinResolver. It looks up binaries on PATH and, for
-// gopls, auto-installs via `go install` into the Forge cache bin dir when absent
+// gopls, auto-installs via `go install` into the Opcode42 cache bin dir when absent
 // (unless disabled). typescript-language-server and pyright must already be on
 // PATH (matching opencode's behaviour of resolving them via the toolchain rather
 // than downloading from this slice). Mirrors lsp/server.ts Gopls.spawn:354-375.
@@ -43,7 +43,7 @@ func NewBinResolver(disableAutoInstall bool) BinResolver {
 }
 
 // Which returns the absolute path to name on PATH, or "" if absent. It also
-// checks the Forge cache bin dir (where a prior gopls install lives) so an
+// checks the Opcode42 cache bin dir (where a prior gopls install lives) so an
 // installed-but-not-on-PATH binary is still found.
 func (r *binResolver) Which(name string) string {
 	if p, err := exec.LookPath(name); err == nil {
@@ -88,7 +88,7 @@ func (r *binResolver) EnsureGopls() string {
 			return
 		}
 		// `go install golang.org/x/tools/gopls@latest` with GOBIN pointed at the
-		// Forge cache bin dir (lsp/server.ts:360-361).
+		// Opcode42 cache bin dir (lsp/server.ts:360-361).
 		cmd := exec.Command(goBin, "install", "golang.org/x/tools/gopls@latest")
 		cmd.Env = append(os.Environ(), "GOBIN="+dir)
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -105,8 +105,8 @@ func (r *binResolver) EnsureGopls() string {
 	return r.goplsPath
 }
 
-// cacheBinDir is $XDG_CACHE_HOME/forge/bin (falling back to ~/.cache/forge/bin),
-// matching the cache convention used elsewhere in Forge (engine/catalog) and
+// cacheBinDir is $XDG_CACHE_HOME/opcode42/bin (falling back to ~/.cache/opcode42/bin),
+// matching the cache convention used elsewhere in Opcode42 (engine/catalog) and
 // mirroring opencode's Global.Path.bin (= xdgCache/opencode/bin).
 func (r *binResolver) cacheBinDir() string {
 	r.binDirOnce.Do(func() {
@@ -118,7 +118,7 @@ func (r *binResolver) cacheBinDir() string {
 			}
 			cacheHome = filepath.Join(home, ".cache")
 		}
-		r.binDir = filepath.Join(cacheHome, "forge", "bin")
+		r.binDir = filepath.Join(cacheHome, "opcode42", "bin")
 	})
 	return r.binDir
 }

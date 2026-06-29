@@ -10,7 +10,7 @@
              enabled at runtime ONLY when Firebase is configured (PushConfig), so
              the no-google-services build neither advertises nor starts it. -->
         <service
-            android:name=".ForgeMessagingService"
+            android:name=".Opcode42MessagingService"
             android:enabled="false"
             android:exported="false">
             <intent-filter>
@@ -21,7 +21,7 @@
         <!-- Default notification channel for FCM-display fallbacks. -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="forge_agent_activity" />
+            android:value="opcode42_agent_activity" />
     </application>
 
 </manifest>

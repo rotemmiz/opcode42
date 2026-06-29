@@ -63,9 +63,9 @@ func IsLoopbackHost(host string) bool {
 	return ok
 }
 
-// CheckBindExposure enforces Forge's stronger-than-opencode default: a
+// CheckBindExposure enforces Opcode42's stronger-than-opencode default: a
 // non-loopback bind requires a password. opencode merely warns
-// (cli/cmd/serve.ts:15); Forge refuses (plan 13 §"Defaults": "0.0.0.0 bind
+// (cli/cmd/serve.ts:15); Opcode42 refuses (plan 13 §"Defaults": "0.0.0.0 bind
 // requires a password; daemon refuses to start otherwise"). It returns a
 // non-nil error the caller should treat as a hard start failure when host is
 // exposed and auth is not required; otherwise nil.
@@ -113,7 +113,7 @@ func (c Config) Middleware(next http.Handler) http.Handler {
 }
 
 // authorized reports whether the presented (user, pass) match the configured
-// credentials. Unlike opencode's plain `===` compare (auth.ts:30), Forge uses
+// credentials. Unlike opencode's plain `===` compare (auth.ts:30), Opcode42 uses
 // crypto/subtle.ConstantTimeCompare so the response time does not leak how many
 // leading bytes of the password were correct (plan 13 §"Auth", threat row
 // "Timing attacks on password compare"). Both fields are compared

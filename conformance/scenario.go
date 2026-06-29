@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/rotemmiz/forge/conformance/result"
+	"github.com/rotemmiz/opcode42/conformance/result"
 )
 
 // Scenario is one named sequence of interactions. Run records the observable
@@ -26,12 +26,12 @@ var Scenarios = []Scenario{
 	{Name: "provider-list", Run: scenarioProviderList},
 	{Name: "agent-list", Run: scenarioAgentList},
 	// GET /command IS a parity scenario, compared order-insensitively: opencode
-	// returns the command list in a non-deterministic (map/glob) order while Forge
+	// returns the command list in a non-deterministic (map/glob) order while Opcode42
 	// sorts by name (masterplan decision #6, a recorded known-addition). The
 	// harness set-normalizes /command (orderInsensitiveListPath in client.go), so
 	// two runs' identical command SET compares equal regardless of order while a
-	// genuinely missing/extra command still fails. (forge-vs-opencode additionally
-	// differs because opencode surfaces built-in/MCP/skill commands Forge doesn't —
+	// genuinely missing/extra command still fails. (opcode42-vs-opencode additionally
+	// differs because opencode surfaces built-in/MCP/skill commands Opcode42 doesn't —
 	// that remains the `command-list` known-divergence, separate from ordering.)
 	{Name: "command-list", Run: scenarioCommandList},
 	{Name: "session-todo-empty", Run: scenarioSessionTodo},
@@ -102,7 +102,7 @@ func scenarioSessionGetDelete(c *Client) ([]result.Step, error) {
 // {time:{archived:null}} which opencode treats as a no-op (the schema types
 // archived as a finite number and drops null; there is no un-archive path, so the
 // archived timestamp stays set). The normalizer collapses the volatile title/time
-// bits so two opencode runs (and a forge dual run) compare equal; the fixed
+// bits so two opencode runs (and a opcode42 dual run) compare equal; the fixed
 // "renamed" title and the literal archived value are the parity signal.
 func scenarioSessionUpdate(c *Client) ([]result.Step, error) {
 	var steps []result.Step
@@ -178,7 +178,7 @@ func scenarioAgentList(c *Client) ([]result.Step, error) {
 
 // scenarioCommandList reads the slash-command list (the TUI's `/` switcher and
 // autocomplete source, plan 08 U9). The body is set-normalized in client.go so
-// opencode's non-deterministic order and Forge's sorted order both compare equal
+// opencode's non-deterministic order and Opcode42's sorted order both compare equal
 // (masterplan decision #6).
 func scenarioCommandList(c *Client) ([]result.Step, error) {
 	s, err := c.Do("command", http.MethodGet, "/command", nil)

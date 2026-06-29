@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/auth"
+	"github.com/rotemmiz/opcode42/internal/auth"
 )
 
 // findProject lays out a small tree and returns its root.
@@ -16,7 +16,7 @@ func findProject(t *testing.T) string {
 	root := t.TempDir()
 	for _, rel := range []string{
 		"README.md",
-		"cmd/forged/main.go",
+		"cmd/opcoded/main.go",
 		"internal/server/server.go",
 		"internal/server/find_handlers.go",
 		"internal/engine/engine.go",

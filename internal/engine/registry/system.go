@@ -12,7 +12,7 @@ import (
 var promptFS embed.FS
 
 // systemPromptVariant maps a model id to its embedded base prompt, mirroring
-// opencode's provider() routing (system.ts:19-33). Forge ships default/gpt/
+// opencode's provider() routing (system.ts:19-33). Opcode42 ships default/gpt/
 // gemini/anthropic today; the Anthropic prompt is wired now so the deferred
 // Anthropic provider (plan 02 addendum) is drop-in.
 func systemPromptVariant(modelID string) string {

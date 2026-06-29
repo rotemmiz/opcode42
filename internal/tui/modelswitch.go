@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // modelChoice is one selectable provider/model pair in the model switcher.
@@ -86,7 +86,7 @@ func (r providerResp) choices() []modelChoice {
 }
 
 // loadProvidersCmd fetches GET /provider and flattens it into model choices.
-func loadProvidersCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
+func loadProvidersCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
 	return func() tea.Msg {
 		var resp providerResp
 		if err := c.GetJSON(ctx, "/provider", &resp); err != nil {

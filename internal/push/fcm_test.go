@@ -31,7 +31,7 @@ func genServiceAccountJSON(t *testing.T, tokenURL string) []byte {
 		"type":         "service_account",
 		"project_id":   "test-project",
 		"private_key":  string(pemBytes),
-		"client_email": "forge@test-project.iam.gserviceaccount.com",
+		"client_email": "opcode42@test-project.iam.gserviceaccount.com",
 		"token_uri":    tokenURL,
 	}
 	b, err := json.Marshal(sa)

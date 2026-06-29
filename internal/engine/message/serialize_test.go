@@ -5,12 +5,12 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
 )
 
-// Ports opencode's message-v2.test.ts "toModelMessage" suite to Forge's
+// Ports opencode's message-v2.test.ts "toModelMessage" suite to Opcode42's
 // provider-neutral ModelMessage shape. Where opencode keeps tool-result media
-// inline for some providers, Forge uniformly promotes it to a trailing user
+// inline for some providers, Opcode42 uniformly promotes it to a trailing user
 // message (documented divergence in ToModelMessages); those provider-transform
 // cases are intentionally not ported here.
 

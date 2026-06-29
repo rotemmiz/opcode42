@@ -13,15 +13,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rotemmiz/forge/conformance/result"
+	"github.com/rotemmiz/opcode42/conformance/result"
 )
 
 // LiveModel is the model every live scenario is pinned to. LLM output is
 // non-deterministic, so the live dual-run asserts SHAPE (response field
 // presence/types + the SSE event-type sequence), not exact text — see the
 // live normalizer (normalize.NewLive). gemini-2.5-flash is fast, cheap, and
-// both daemons reach it the same way (Forge via the google OpenAI-compatible
-// endpoint; see cmd/forged builtinBaseURL).
+// both daemons reach it the same way (Opcode42 via the google OpenAI-compatible
+// endpoint; see cmd/opcoded builtinBaseURL).
 const (
 	LiveProvider = "google"
 	LiveModel    = "gemini-2.5-flash"
@@ -30,7 +30,7 @@ const (
 // liveEventCatalog is the set of SSE event TYPES the live dual-run compares. It
 // is the SHARED lifecycle catalog — the subset of opencode's authoritative SSE
 // event catalog (enumerated from openapi.json's Event union; see
-// TestLiveEventCatalogIsAuthoritative in catalog_test.go) that Forge's engine
+// TestLiveEventCatalogIsAuthoritative in catalog_test.go) that Opcode42's engine
 // also emits for the core agent flow. The cross-daemon diff asserts these event
 // kinds appear in the same order on both daemons.
 //
@@ -40,12 +40,12 @@ const (
 // be a real opencode event type, enforced by the catalog test. It deliberately
 // EXCLUDES opencode's experimental session.next.* telemetry stream
 // (session-event.ts; gated behind opencode's experimentalEventSystem flag and
-// not part of the stable wire contract Forge targets), which Forge does not
+// not part of the stable wire contract Opcode42 targets), which Opcode42 does not
 // emit. Those are tracked as a known, intentional divergence (catalog_test.go +
 // the live divergence registry), not faked.
 //
 // session.status is INTENTIONALLY omitted from the ordering diff even though
-// Forge now emits it (and the catalog test asserts it is authoritative): opencode
+// Opcode42 now emits it (and the catalog test asserts it is authoritative): opencode
 // re-publishes session.status{busy} at the TOP of every loop iteration
 // (prompt.ts:1253, status.ts:77 publishes unconditionally), so on a multi-step
 // run it appears repeatedly, NON-consecutively, interleaved with message events.
@@ -402,7 +402,7 @@ func RunLive(target, user, pass string) (*result.File, error) {
 // rulesets are not parity-comparable; see the agent-list known-divergence) — and
 // runs it against a live (model-output-masking) client.
 func runLiveScenario(target, user, pass string, sc LiveScenario) result.Scenario {
-	dir, err := os.MkdirTemp("", "forge-live-")
+	dir, err := os.MkdirTemp("", "opcode42-live-")
 	if err != nil {
 		return result.Scenario{Name: sc.Name, Steps: []result.Step{errStep("mkdtemp", err)}}
 	}
@@ -468,7 +468,7 @@ func providerErrorName(steps []result.Step) string {
 
 // isTransientProviderError reports whether an assistant error is an upstream
 // provider failure that should not count as a conformance divergence — a network
-// /rate-limit/quota/5xx error rather than a Forge-vs-opencode behavior gap.
+// /rate-limit/quota/5xx error rather than a Opcode42-vs-opencode behavior gap.
 func isTransientProviderError(name, message string) bool {
 	switch name {
 	case "APIError", "ProviderError", "AI_APICallError":

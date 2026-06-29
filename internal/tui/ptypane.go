@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/hinshun/vt10x"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // PTY pane (plan 08b §2). An embedded terminal inside the TUI: a vt10x virtual
@@ -34,7 +34,7 @@ type ptyState struct {
 	connecting bool
 	err        error
 	id         string // pty id (POST /pty)
-	conn       *forgeclient.PTYConn
+	conn       *opcode42client.PTYConn
 	term       vt10x.Terminal // the virtual screen (shared pointer across Model copies)
 	cols, rows int
 	gen        int // monotonic open generation; stamps async msgs so stale ones drop
@@ -46,7 +46,7 @@ type (
 	ptyConnectedMsg struct {
 		gen  int
 		id   string
-		conn *forgeclient.PTYConn
+		conn *opcode42client.PTYConn
 		err  error
 	}
 	ptyOutputMsg struct {
@@ -61,9 +61,9 @@ type (
 
 // openPTYCmd creates a pseudo-terminal in the session directory and dials its
 // WebSocket (replaying from the start so the grid reflects full state).
-func openPTYCmd(ctx context.Context, c *forgeclient.ForgeClient, cwd string, cols, rows, gen int) tea.Cmd {
+func openPTYCmd(ctx context.Context, c *opcode42client.Opcode42Client, cwd string, cols, rows, gen int) tea.Cmd {
 	return func() tea.Msg {
-		info, err := c.CreatePTY(ctx, forgeclient.PTYCreate{Cwd: cwd})
+		info, err := c.CreatePTY(ctx, opcode42client.PTYCreate{Cwd: cwd})
 		if err != nil {
 			return ptyConnectedMsg{gen: gen, err: err}
 		}
@@ -75,7 +75,7 @@ func openPTYCmd(ctx context.Context, c *forgeclient.ForgeClient, cwd string, col
 
 // ptyReadCmd waits for the next output chunk (re-issued after each, like the SSE
 // listen loop). When the stream closes it surfaces the terminal error.
-func ptyReadCmd(conn *forgeclient.PTYConn, gen int) tea.Cmd {
+func ptyReadCmd(conn *opcode42client.PTYConn, gen int) tea.Cmd {
 	return func() tea.Msg {
 		b, ok := <-conn.Output()
 		if !ok {
@@ -91,7 +91,7 @@ func ptyReadCmd(conn *forgeclient.PTYConn, gen int) tea.Cmd {
 }
 
 // resizePTYCmd pushes a new size to the daemon (PUT /pty/{id}).
-func resizePTYCmd(ctx context.Context, c *forgeclient.ForgeClient, id string, cols, rows int) tea.Cmd {
+func resizePTYCmd(ctx context.Context, c *opcode42client.Opcode42Client, id string, cols, rows int) tea.Cmd {
 	return func() tea.Msg {
 		_ = c.ResizePTY(ctx, id, cols, rows)
 		return nil

@@ -6,7 +6,7 @@ import (
 	"sort"
 )
 
-// Emit builds the OpenAPI document Forge self-emits from its own route table
+// Emit builds the OpenAPI document Opcode42 self-emits from its own route table
 // (plan 06 Phase 2 / M10). Unlike Reference() — which serves the frozen contract
 // verbatim — the emitted doc's `paths` are derived from the operations the daemon
 // actually registered, so removing or re-pathing a handler changes the served
@@ -17,8 +17,8 @@ import (
 // contract; only `paths` is rebuilt. For each registered operation:
 //   - matched against the reference: the reference operation object is copied
 //     verbatim (full request/response contract preserved);
-//   - not in the reference (a Forge addition): a minimal operation stub is
-//     emitted, tagged `x-forge-addition: true` so the diff gate can classify it.
+//   - not in the reference (a Opcode42 addition): a minimal operation stub is
+//     emitted, tagged `x-opcode42-addition: true` so the diff gate can classify it.
 //
 // Output is deterministic: Go marshals map keys in sorted order, and operations
 // within a path are ordered by method, so the bytes are stable across runs.
@@ -61,14 +61,14 @@ func Emit(registered []Operation) ([]byte, error) {
 				continue
 			}
 		}
-		// Forge addition: no matching reference operation. Emit a minimal stub
+		// Opcode42 addition: no matching reference operation. Emit a minimal stub
 		// tagged so the diff gate classifies it as additive rather than a contract
 		// match.
 		stub, err := json.Marshal(map[string]any{
-			"x-forge-addition": true,
-			"operationId":      additionOperationID(op),
+			"x-opcode42-addition": true,
+			"operationId":         additionOperationID(op),
 			"responses": map[string]any{
-				"200": map[string]any{"description": "Forge additive endpoint (not in the frozen contract)"},
+				"200": map[string]any{"description": "Opcode42 additive endpoint (not in the frozen contract)"},
 			},
 		})
 		if err != nil {
@@ -92,7 +92,7 @@ func Emit(registered []Operation) ([]byte, error) {
 
 // EmittedOperations parses an emitted (or reference) spec document and returns
 // its operation set with the per-operation set of declared response status codes.
-// The drift gate uses this to compare Forge's self-emitted spec against the
+// The drift gate uses this to compare Opcode42's self-emitted spec against the
 // frozen reference.
 func EmittedOperations(doc []byte) (map[Operation][]string, error) {
 	// Path-item values are decoded as raw messages first because a path item may
@@ -130,7 +130,7 @@ func EmittedOperations(doc []byte) (map[Operation][]string, error) {
 }
 
 func additionOperationID(op Operation) string {
-	return "forgeAddition_" + op.Method + "_" + op.Path
+	return "opcode42Addition_" + op.Method + "_" + op.Path
 }
 
 func lower(s string) string {

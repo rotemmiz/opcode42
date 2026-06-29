@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // U10 — permission overlay. A `permission.asked` SSE event yields a pending
@@ -43,7 +43,7 @@ type permissionRepliedMsg struct {
 }
 
 // replyPermissionCmd answers a permission request.
-func replyPermissionCmd(ctx context.Context, c *forgeclient.ForgeClient, id, reply string) tea.Cmd {
+func replyPermissionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id, reply string) tea.Cmd {
 	return func() tea.Msg {
 		err := c.PostJSON(ctx, "/permission/"+id+"/reply", map[string]string{"reply": reply}, nil)
 		return permissionRepliedMsg{id: id, err: err}

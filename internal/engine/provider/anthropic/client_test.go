@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
 )
 
 func sseServer(t *testing.T, body string, captured *messagesRequest) *httptest.Server {

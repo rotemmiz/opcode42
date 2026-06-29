@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rotemmiz/forge/conformance/cassette"
+	"github.com/rotemmiz/opcode42/conformance/cassette"
 )
 
 // authoritativeEventCatalog reads opencode's frozen wire contract
@@ -87,7 +87,7 @@ func authoritativeEventCatalog(t *testing.T) map[string]bool {
 	return out
 }
 
-// forgeEmittedEventCatalog is the set of SSE event types Forge's daemon emits.
+// opcode42EmittedEventCatalog is the set of SSE event types Opcode42's daemon emits.
 // Keep this in lockstep with the actual emitters — grep:
 //
 //	rg 'NewEvent\("' internal/ cmd/
@@ -95,7 +95,7 @@ func authoritativeEventCatalog(t *testing.T) map[string]bool {
 //
 // The test below asserts every entry is a real opencode event type, so an
 // invented/misspelled type fails CI.
-var forgeEmittedEventCatalog = map[string]bool{
+var opcode42EmittedEventCatalog = map[string]bool{
 	// transport (internal/bus/bus.go, internal/server SSE handler)
 	"server.connected":         true,
 	"server.heartbeat":         true,
@@ -128,20 +128,20 @@ var forgeEmittedEventCatalog = map[string]bool{
 	"lsp.updated":       true,
 }
 
-// TestForgeEmittedEventsAreAuthoritative gates every SSE event type Forge emits
+// TestOpcode42EmittedEventsAreAuthoritative gates every SSE event type Opcode42 emits
 // against opencode's authoritative catalog (Ambiguity #2: opencode source is
-// the truth). A Forge event type absent from opencode's Event union is a wire
+// the truth). A Opcode42 event type absent from opencode's Event union is a wire
 // divergence and fails here. This is the catalog half of the Phase-B SSE
 // conformance gate (plan 02 §M11); the live dual-run gates ordering/shape.
-func TestForgeEmittedEventsAreAuthoritative(t *testing.T) {
+func TestOpcode42EmittedEventsAreAuthoritative(t *testing.T) {
 	catalog := authoritativeEventCatalog(t)
 	// server.heartbeat is a transport-only keepalive injected by the SSE handler
-	// (opencode event.ts:32; Forge's SSE handler) — it is published by NEITHER
+	// (opencode event.ts:32; Opcode42's SSE handler) — it is published by NEITHER
 	// daemon's Bus and so is intentionally absent from the openapi Event union.
 	// Both daemons emit it identically, so it is not a divergence.
 	transportInjected := map[string]bool{"server.heartbeat": true}
 	var unknown []string
-	for typ := range forgeEmittedEventCatalog {
+	for typ := range opcode42EmittedEventCatalog {
 		if transportInjected[typ] {
 			continue
 		}
@@ -151,12 +151,12 @@ func TestForgeEmittedEventsAreAuthoritative(t *testing.T) {
 	}
 	sort.Strings(unknown)
 	if len(unknown) > 0 {
-		t.Errorf("Forge emits event type(s) not in opencode's authoritative catalog: %v", unknown)
+		t.Errorf("Opcode42 emits event type(s) not in opencode's authoritative catalog: %v", unknown)
 	}
 }
 
 // TestLiveEventCatalogIsAuthoritative gates the live dual-run's compared event
-// set: every type it diffs must be a real opencode event type AND one Forge
+// set: every type it diffs must be a real opencode event type AND one Opcode42
 // actually emits. This keeps the cross-daemon ordering diff honest — it can only
 // assert lifecycle events both daemons genuinely share.
 func TestLiveEventCatalogIsAuthoritative(t *testing.T) {
@@ -165,8 +165,8 @@ func TestLiveEventCatalogIsAuthoritative(t *testing.T) {
 		if !catalog[typ] {
 			t.Errorf("liveEventCatalog type %q is not in opencode's authoritative catalog", typ)
 		}
-		if !forgeEmittedEventCatalog[typ] {
-			t.Errorf("liveEventCatalog type %q is gated but Forge does not emit it", typ)
+		if !opcode42EmittedEventCatalog[typ] {
+			t.Errorf("liveEventCatalog type %q is gated but Opcode42 does not emit it", typ)
 		}
 	}
 }
@@ -202,7 +202,7 @@ func interactionForPath(c *cassette.Cassette, suffix string) *cassette.Interacti
 // TestSSECatalogShapesFromRecordedTruth locks Finding #2 against the committed
 // real-opencode cassette: the instance /event stream sends a BARE
 // {id,type,properties}, while the global /global/event stream WRAPS it as
-// {payload:{...}}. Forge must reproduce both shapes distinctly.
+// {payload:{...}}. Opcode42 must reproduce both shapes distinctly.
 func TestSSECatalogShapesFromRecordedTruth(t *testing.T) {
 	raw, err := os.ReadFile("cassettes/sse-catalog.json")
 	if err != nil {

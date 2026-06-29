@@ -1,8 +1,8 @@
-// Package server hosts the HTTP transport for the Forge daemon.
+// Package server hosts the HTTP transport for the Opcode42 daemon.
 //
 // It wires the opencode-compatible middleware chain (auth → directory) and the
 // real endpoints implemented so far, falling back to a structured 501 for every
-// other documented operation (a Forge Phase-A placeholder; opencode never
+// other documented operation (a Opcode42 Phase-A placeholder; opencode never
 // returns 501, so this is an expected conformance divergence until the
 // remaining plan-01 milestones implement the handlers).
 //
@@ -10,7 +10,7 @@
 //   - GET /global/health -> {healthy:true, version} (handlers/global.ts:76)
 //   - GET /doc -> embedded OpenAPI reference, served verbatim
 //     (server/routes/instance/httpapi/server.ts:162-167)
-//   - GET /openapi.json -> Forge-self-emitted spec derived from the route table
+//   - GET /openapi.json -> Opcode42-self-emitted spec derived from the route table
 //     (a known-addition; opencode has no such endpoint — plan 06 Phase 2 / M10)
 //   - GET /config -> merged opencode-format config (M1)
 //   - session CRUD (M2): see session_handlers.go
@@ -23,19 +23,19 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/rotemmiz/forge/internal/api/spec"
-	"github.com/rotemmiz/forge/internal/auth"
-	"github.com/rotemmiz/forge/internal/bus"
-	"github.com/rotemmiz/forge/internal/config"
-	"github.com/rotemmiz/forge/internal/engine"
-	"github.com/rotemmiz/forge/internal/engine/catalog"
-	"github.com/rotemmiz/forge/internal/engine/message"
-	"github.com/rotemmiz/forge/internal/engine/registry"
-	"github.com/rotemmiz/forge/internal/engine/tool"
-	"github.com/rotemmiz/forge/internal/instance"
-	"github.com/rotemmiz/forge/internal/oauth"
-	"github.com/rotemmiz/forge/internal/push"
-	"github.com/rotemmiz/forge/internal/session"
+	"github.com/rotemmiz/opcode42/internal/api/spec"
+	"github.com/rotemmiz/opcode42/internal/auth"
+	"github.com/rotemmiz/opcode42/internal/bus"
+	"github.com/rotemmiz/opcode42/internal/config"
+	"github.com/rotemmiz/opcode42/internal/engine"
+	"github.com/rotemmiz/opcode42/internal/engine/catalog"
+	"github.com/rotemmiz/opcode42/internal/engine/message"
+	"github.com/rotemmiz/opcode42/internal/engine/registry"
+	"github.com/rotemmiz/opcode42/internal/engine/tool"
+	"github.com/rotemmiz/opcode42/internal/instance"
+	"github.com/rotemmiz/opcode42/internal/oauth"
+	"github.com/rotemmiz/opcode42/internal/push"
+	"github.com/rotemmiz/opcode42/internal/session"
 )
 
 // Options configures the daemon HTTP handler.
@@ -74,7 +74,7 @@ type Options struct {
 	// Push, when set, backs the FCM device-registration endpoints (/push/*,
 	// plan 13 §13.8). nil disables those endpoints (they fall through to the 501
 	// placeholder). Registration persists regardless of whether FCM credentials
-	// are configured; live delivery is handled by the relay (cmd/forged).
+	// are configured; live delivery is handled by the relay (cmd/opcoded).
 	Push *push.Store
 }
 
@@ -115,9 +115,9 @@ func New(opts Options) (http.Handler, error) {
 	// Real endpoints first; the spec-driven 501 loop skips anything already set.
 	reg(http.MethodGet, "/global/health", healthHandler(opts.Version))
 	reg(http.MethodGet, "/doc", docHandler())
-	// /openapi.json is a Forge known-addition (opencode serves the spec only at
+	// /openapi.json is a Opcode42 known-addition (opencode serves the spec only at
 	// /doc; logged in conformance/known-additions.json). Unlike /doc — which
-	// serves the frozen reference verbatim — /openapi.json serves the spec Forge
+	// serves the frozen reference verbatim — /openapi.json serves the spec Opcode42
 	// self-emits from its registered route table (plan 06 Phase 2 / M10).
 	reg(http.MethodGet, "/openapi.json", emittedDocHandler)
 	reg(http.MethodGet, "/config", configHandler())
@@ -217,7 +217,7 @@ func notImplemented(method, path string) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotImplemented, map[string]any{
 			"_tag":      "NotImplemented",
-			"message":   "operation not implemented in Forge Phase A",
+			"message":   "operation not implemented in Opcode42 Phase A",
 			"operation": method + " " + path,
 		})
 	}

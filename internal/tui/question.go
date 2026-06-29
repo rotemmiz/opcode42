@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // U10 — question overlay. A `question.asked` SSE event yields a pending Question
@@ -40,14 +40,14 @@ type questionRepliedMsg struct {
 	err error
 }
 
-func replyQuestionCmd(ctx context.Context, c *forgeclient.ForgeClient, id string, answers [][]string) tea.Cmd {
+func replyQuestionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id string, answers [][]string) tea.Cmd {
 	return func() tea.Msg {
 		err := c.PostJSON(ctx, "/question/"+id+"/reply", map[string]any{"answers": answers}, nil)
 		return questionRepliedMsg{id: id, err: err}
 	}
 }
 
-func rejectQuestionCmd(ctx context.Context, c *forgeclient.ForgeClient, id string) tea.Cmd {
+func rejectQuestionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id string) tea.Cmd {
 	return func() tea.Msg {
 		err := c.PostJSON(ctx, "/question/"+id+"/reject", nil, nil)
 		return questionRepliedMsg{id: id, err: err}

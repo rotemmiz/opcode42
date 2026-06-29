@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // Read-only resource dialogs (plan 08a §G): configured MCP servers (GET /mcp)
@@ -37,7 +37,7 @@ type (
 )
 
 // loadMCPCmd fetches the configured MCP servers.
-func loadMCPCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
+func loadMCPCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
 	return func() tea.Msg {
 		// GET /mcp is a loose map: { "<name>": { ... } }. List names; surface a
 		// status-ish field if one is present, else leave it blank.
@@ -78,7 +78,7 @@ func mcpStatus(cfg json.RawMessage) string {
 }
 
 // loadSkillsCmd fetches the available skills.
-func loadSkillsCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
+func loadSkillsCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
 	return func() tea.Msg {
 		var arr []struct {
 			Name        string `json:"name"`

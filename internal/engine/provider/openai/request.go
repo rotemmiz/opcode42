@@ -3,7 +3,7 @@ package openai
 import (
 	"encoding/json"
 
-	"github.com/rotemmiz/forge/internal/engine/llm"
+	"github.com/rotemmiz/opcode42/internal/engine/llm"
 )
 
 // chatRequest is the OpenAI chat-completions request body.

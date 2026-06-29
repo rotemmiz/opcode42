@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	forgeclient "github.com/rotemmiz/forge/sdk/go"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // promptModel is the provider/model a submitted prompt targets.
@@ -61,7 +61,7 @@ type shellBody struct {
 
 // shellCmd runs a shell command in the session context (POST /session/:id/shell).
 // The command's output streams back as normal tool parts via message.part.* SSE.
-func shellCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID, command, agent string, pm promptModel) tea.Cmd {
+func shellCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID, command, agent string, pm promptModel) tea.Cmd {
 	return func() tea.Msg {
 		body := shellBody{Command: command, Agent: agent}
 		if pm.ok() {
@@ -91,7 +91,7 @@ type partInput struct {
 
 // loadConfigCmd fetches /config to resolve a default model when no --provider/
 // --model was given. opencode stores it as "providerID/modelID".
-func loadConfigCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
+func loadConfigCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
 	return func() tea.Msg {
 		var cfg struct {
 			Model string `json:"model"`
@@ -105,7 +105,7 @@ func loadConfigCmd(ctx context.Context, c *forgeclient.ForgeClient) tea.Cmd {
 }
 
 // promptCmd submits a prompt to an existing session (under the given agent).
-func promptCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID, text string, pm promptModel, agent string) tea.Cmd {
+func promptCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID, text string, pm promptModel, agent string) tea.Cmd {
 	return func() tea.Msg {
 		body := promptBody{
 			Model:   promptModelWire{ProviderID: pm.Provider, ModelID: pm.Model},
@@ -119,7 +119,7 @@ func promptCmd(ctx context.Context, c *forgeclient.ForgeClient, sessionID, text 
 }
 
 // createSessionCmd creates a session, carrying the prompt text to send next.
-func createSessionCmd(ctx context.Context, c *forgeclient.ForgeClient, text string) tea.Cmd {
+func createSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, text string) tea.Cmd {
 	return func() tea.Msg {
 		var ss Session
 		err := c.PostJSON(ctx, "/session", map[string]any{}, &ss)

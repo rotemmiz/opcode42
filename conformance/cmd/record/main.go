@@ -21,13 +21,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rotemmiz/forge/conformance/cassette"
+	"github.com/rotemmiz/opcode42/conformance/cassette"
 )
 
 func main() {
 	url := flag.String("url", "http://127.0.0.1:4096", "opencode base URL")
 	out := flag.String("out", "conformance/cassettes/sse-catalog.json", "cassette output path")
-	dir := flag.String("dir", "/tmp/forge-record", "x-opencode-directory")
+	dir := flag.String("dir", "/tmp/opcode42-record", "x-opencode-directory")
 	flag.Parse()
 
 	rec := &recorder{base: strings.TrimRight(*url, "/"), dir: *dir, client: &http.Client{}}

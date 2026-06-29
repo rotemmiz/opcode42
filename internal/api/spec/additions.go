@@ -7,7 +7,7 @@ import (
 
 // ParseKnownAdditions decodes the known-additions registry
 // (conformance/known-additions.json) into a lookup set. The registry is a JSON
-// array of [METHOD, PATH] pairs naming endpoints Forge intentionally adds beyond
+// array of [METHOD, PATH] pairs naming endpoints Opcode42 intentionally adds beyond
 // the frozen contract (e.g. ["GET", "/openapi.json"]). The drift gate downgrades
 // these from FAIL to WARN.
 func ParseKnownAdditions(data []byte) (map[Operation]bool, error) {

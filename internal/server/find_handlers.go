@@ -18,10 +18,10 @@ const (
 
 // findSkipDirs are directories the file finder never descends into, mirroring
 // the Grep tool's ignore set. opencode delegates to `rg --files`, which honors
-// .gitignore; Forge approximates that with a fixed ignore set plus the
+// .gitignore; Opcode42 approximates that with a fixed ignore set plus the
 // hidden-entry rule below (logged in conformance/known-divergences.json).
 var findSkipDirs = map[string]bool{
-	".git": true, "node_modules": true, "vendor": true, ".forge": true,
+	".git": true, "node_modules": true, "vendor": true, ".opcode42": true,
 }
 
 // registerFindRoutes wires GET /find/file (the TUI's @-mention completion and

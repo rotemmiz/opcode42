@@ -70,8 +70,8 @@ func TestDoesNotClobberSmallIntegerFieldsNamedLikeTimes(t *testing.T) {
 }
 
 func TestReplacesAbsolutePaths(t *testing.T) {
-	n := New("/tmp/forge-test-project")
-	in := `{"directory":"/tmp/forge-test-project/src","worktree":"/tmp/forge-test-project"}`
+	n := New("/tmp/opcode42-test-project")
+	in := `{"directory":"/tmp/opcode42-test-project/src","worktree":"/tmp/opcode42-test-project"}`
 	m := normJSON(t, n, in)
 	if m["directory"] != "<path>/src" {
 		t.Errorf("path prefix not replaced: %v", m["directory"])
@@ -137,8 +137,8 @@ func TestReplacesULIDEmbeddedInErrorMessage(t *testing.T) {
 func TestPathReplacementIsDeterministicAcrossSymlinkForms(t *testing.T) {
 	// /tmp/x is a substring of /private/tmp/x; longest-first must win so both
 	// forms normalize identically regardless of registration order.
-	n := New("/tmp/forge-conf-abc", "/private/tmp/forge-conf-abc")
-	m := normJSON(t, n, `{"directory":"/private/tmp/forge-conf-abc","other":"/tmp/forge-conf-abc"}`)
+	n := New("/tmp/opcode42-conf-abc", "/private/tmp/opcode42-conf-abc")
+	m := normJSON(t, n, `{"directory":"/private/tmp/opcode42-conf-abc","other":"/tmp/opcode42-conf-abc"}`)
 	if m["directory"] != "<path>" {
 		t.Errorf("directory: want <path>, got %v", m["directory"])
 	}
@@ -151,8 +151,8 @@ func TestPathReplacementCoversRelativeForm(t *testing.T) {
 	// opencode's session "path" is the cwd with the leading "/" stripped. The
 	// normalizer registers only the absolute dir, so the relative form must be
 	// derived automatically — otherwise the random temp suffix diffs run-to-run.
-	n := New("/tmp/forge-conf-abc")
-	m := normJSON(t, n, `{"directory":"/tmp/forge-conf-abc","path":"tmp/forge-conf-abc"}`)
+	n := New("/tmp/opcode42-conf-abc")
+	m := normJSON(t, n, `{"directory":"/tmp/opcode42-conf-abc","path":"tmp/opcode42-conf-abc"}`)
 	if m["directory"] != "<path>" {
 		t.Errorf("directory: want <path>, got %v", m["directory"])
 	}
@@ -164,9 +164,9 @@ func TestPathReplacementCoversRelativeForm(t *testing.T) {
 func TestConfDirScrubbedWhenNotRegistered(t *testing.T) {
 	// GET /session returns a global list spanning sibling scenarios' temp dirs,
 	// which this client never registered. They must still be scrubbed so two runs
-	// don't diff on the random forge-conf suffix.
-	n := New("/tmp/forge-conf-100")
-	m := normJSON(t, n, `{"directory":"/private/tmp/claude-501/forge-conf-999","path":"private/tmp/claude-501/forge-conf-999"}`)
+	// don't diff on the random opcode42-conf suffix.
+	n := New("/tmp/opcode42-conf-100")
+	m := normJSON(t, n, `{"directory":"/private/tmp/claude-501/opcode42-conf-999","path":"private/tmp/claude-501/opcode42-conf-999"}`)
 	if m["directory"] != "<path>" || m["path"] != "<path>" {
 		t.Errorf("unregistered conf dir not scrubbed: %v", m)
 	}
@@ -175,7 +175,7 @@ func TestConfDirScrubbedWhenNotRegistered(t *testing.T) {
 func TestConfHomeScrubbedInPermissionPattern(t *testing.T) {
 	// opencode bakes the per-run temp HOME into agent permission patterns; the
 	// volatile mktemp prefix must collapse while the stable data-dir tail stays.
-	n := New("/tmp/forge-conf-1")
+	n := New("/tmp/opcode42-conf-1")
 	for _, home := range []string{
 		"/tmp/tmp.24TAFncWtJ",
 		"tmp/tmp.24TAFncWtJ", // leading-slash-stripped relative form

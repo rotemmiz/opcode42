@@ -176,7 +176,7 @@ func (s *callbackServer) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pc.ch <- callbackResult{code: code}
-	writeCallbackHTML(w, http.StatusOK, "Authorization successful. You can close this window and return to Forge.")
+	writeCallbackHTML(w, http.StatusOK, "Authorization successful. You can close this window and return to Opcode42.")
 }
 
 // shutdown stops the loopback listener (best-effort) and fails any waiters.
@@ -201,8 +201,8 @@ func writeCallbackHTML(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_, _ = fmt.Fprintf(w, "<!doctype html><html><head><meta charset=\"utf-8\">"+
-		"<title>Forge OAuth</title></head><body style=\"font-family:system-ui;text-align:center;margin-top:4rem\">"+
-		"<h1>Forge</h1><p>%s</p></body></html>", html.EscapeString(message))
+		"<title>Opcode42 OAuth</title></head><body style=\"font-family:system-ui;text-align:center;margin-top:4rem\">"+
+		"<h1>Opcode42</h1><p>%s</p></body></html>", html.EscapeString(message))
 }
 
 // validateProxyURL checks that an --oauth-callback-proxy-url is a well-formed

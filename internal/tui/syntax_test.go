@@ -8,14 +8,14 @@ package tui
 //  1. highlightCode: a Go snippet and a TypeScript snippet produce non-empty
 //     output that contains the original text (ANSI-stripped).
 //  2. Empty code / unknown language do not panic and return non-empty output.
-//  3. Colors differ between forge-dark and forge-light (tokenColor maps to
+//  3. Colors differ between opcode42-dark and opcode42-light (tokenColor maps to
 //     different palette values).  Reported as a diagnostic in non-TTY
 //     environments where lipgloss suppresses ANSI, not a hard failure.
 //  4. highlightCodeBg: every token carries the requested row background so
 //     no cell falls back to terminal default (anti-bleed property).
 //  5. tokenColor mapping spot-checks: Keyword, String, Number, Comment,
 //     Function, Type, Operator, Punctuation each map to the expected
-//     SyntaxPalette field for forge-dark.
+//     SyntaxPalette field for opcode42-dark.
 
 import (
 	"strings"
@@ -24,7 +24,7 @@ import (
 	chroma "github.com/alecthomas/chroma/v2"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rotemmiz/forge/internal/tui/theme"
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // goSnippet is a small Go function that exercises keywords, identifiers,
@@ -114,7 +114,7 @@ func TestHighlightCode_EmptyAndUnknown(t *testing.T) {
 }
 
 // TestHighlightCode_ColorsDifferAcrossThemes checks that the same code
-// snippet produces different rendered output for forge-dark vs forge-light.
+// snippet produces different rendered output for opcode42-dark vs opcode42-light.
 //
 // NOTE: in non-TTY test runners lipgloss does not emit ANSI escape codes so
 // both outputs may be identical plain text — acceptable. We log the outcome
@@ -131,8 +131,8 @@ func TestHighlightCode_ColorsDifferAcrossThemes(t *testing.T) {
 	outDark := highlightCode(goSnippet, "main.go", dark)
 	outLight := highlightCode(goSnippet, "main.go", light)
 
-	t.Logf("forge-dark  Syntax.Keyword : %s", string(dark.Syntax.Keyword))
-	t.Logf("forge-light Syntax.Keyword : %s", string(light.Syntax.Keyword))
+	t.Logf("opcode42-dark  Syntax.Keyword : %s", string(dark.Syntax.Keyword))
+	t.Logf("opcode42-light Syntax.Keyword : %s", string(light.Syntax.Keyword))
 	t.Logf("outputs differ: %v", outDark != outLight)
 
 	// Only assert if ANSI escapes are present (TTY / $COLORTERM env).
@@ -164,7 +164,7 @@ func TestHighlightCodeBg_TokensCarryBackground(t *testing.T) {
 }
 
 // TestTokenColor_Mapping spot-checks the chroma token → SyntaxPalette mapping
-// for forge-dark. Each case asserts that the returned color equals the expected
+// for opcode42-dark. Each case asserts that the returned color equals the expected
 // field in the SyntaxPalette.
 func TestTokenColor_Mapping(t *testing.T) {
 	p := theme.Default()
@@ -219,7 +219,7 @@ func TestTokenColor_Mapping(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := tokenColor(tc.tt, p)
 			if got != tc.wantCol {
-				t.Errorf("tokenColor(%s, forge-dark) = %q, want %q", tc.name, got, tc.wantCol)
+				t.Errorf("tokenColor(%s, opcode42-dark) = %q, want %q", tc.name, got, tc.wantCol)
 			}
 		})
 	}

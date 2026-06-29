@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/rotemmiz/forge/internal/session"
+	"github.com/rotemmiz/opcode42/internal/session"
 )
 
 // registerSessionRoutes wires the M2 session CRUD endpoints. Paths use the spec
@@ -65,7 +65,7 @@ func getSession(store *session.Store) http.HandlerFunc {
 // updateSessionBody is the PATCH /session/{id} request shape. It mirrors
 // opencode's UpdatePayload: every field is optional and partial
 // (server/.../groups/session.ts:46-54, openapi.json session.update). `permission`
-// is accepted-and-ignored for now (Forge has no per-session permission ruleset
+// is accepted-and-ignored for now (Opcode42 has no per-session permission ruleset
 // store yet); title and time.archived are persisted. Unknown top-level fields are
 // IGNORED, not rejected: despite the spec's additionalProperties:false, opencode's
 // runtime decode accepts and drops extra keys (verified live: PATCH {"bogus":1}
@@ -98,7 +98,7 @@ type updateSessionBody struct {
 // non-object JSON) 400s with {name:"BadRequest", data:{message,kind}}.
 //
 // KNOWN DIVERGENCE: for a syntactically MALFORMED JSON body opencode returns 500
-// (UnknownError) — an uncaught decode throw on this endpoint — whereas Forge
+// (UnknownError) — an uncaught decode throw on this endpoint — whereas Opcode42
 // returns the more correct 400 BadRequest. Recorded in
 // conformance/known-divergences.json (session-update-malformed-body-status).
 func updateSession(store *session.Store) http.HandlerFunc {

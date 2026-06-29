@@ -1,4 +1,4 @@
-module github.com/rotemmiz/forge
+module github.com/rotemmiz/opcode42
 
 go 1.26.3
 

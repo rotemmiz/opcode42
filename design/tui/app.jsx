@@ -1,8 +1,8 @@
 /* ============================================================
-   FORGE TUI — main application
+   OPCODE42 TUI — main application
    ============================================================ */
 const { useState: uS, useEffect: uE, useRef: uR, useCallback } = React;
-const F = window.FORGE;
+const F = window.OPCODE42;
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -39,7 +39,7 @@ function App() {
   const [mode, setMode] = uS("build");
   const [model, setModel] = uS("Claude Opus 4.8");
   const [provider, setProvider] = uS("Anthropic");
-  const [theme, setTheme] = uS("forge");
+  const [theme, setTheme] = uS("opcode42");
   const [sidebarHidden, setSidebarHidden] = uS(false);
   const [crt, setCrt] = uS(false);
   const [tasksOpen, setTasksOpen] = uS(true);
@@ -380,7 +380,7 @@ function App() {
         <div className="main">
           {screen === "splash" ? (
             <div className="splash">
-              <div className="wordmark">forge</div>
+              <div className="wordmark">opcode42</div>
               {composer}
               {!tasksHidden && (
                 <div className={"splash-dock-wrap" + (tasksOpen ? "" : " collapsed")}>

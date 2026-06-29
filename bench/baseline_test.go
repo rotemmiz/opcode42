@@ -20,7 +20,7 @@ import (
 //
 // Required env (set by bench/run_baseline.sh):
 //
-//	BENCH_FORGE_BIN, BENCH_FORGE_PORT
+//	BENCH_OPCODE_BIN, BENCH_OPCODE_PORT
 //	BENCH_OPENCODE_BIN, BENCH_OPENCODE_PORT
 //	BENCH_USER, BENCH_PASS          (Basic auth applied to both)
 //	BENCH_DIR                       (x-opencode-directory for routed endpoints)
@@ -34,8 +34,8 @@ import (
 //	BENCH_TP_CONCURRENCY=16
 //	BENCH_TP_SECONDS=5
 func TestBaseline(t *testing.T) {
-	forgeBin := mustEnv(t, "BENCH_FORGE_BIN")
-	forgePort := mustEnvInt(t, "BENCH_FORGE_PORT")
+	opcode42Bin := mustEnv(t, "BENCH_OPCODE_BIN")
+	opcode42Port := mustEnvInt(t, "BENCH_OPCODE_PORT")
 	ocBin := mustEnv(t, "BENCH_OPENCODE_BIN")
 	ocPort := mustEnvInt(t, "BENCH_OPENCODE_PORT")
 	user := os.Getenv("BENCH_USER")
@@ -56,7 +56,7 @@ func TestBaseline(t *testing.T) {
 	// Both daemons bind 127.0.0.1 and speak the same wire surface. opencode
 	// needs an isolated HOME so its SQLite DB does not bleed across runs; the
 	// child env inherits the parent's PATH etc.
-	forgeEnv := append(os.Environ(),
+	opcode42Env := append(os.Environ(),
 		"OPENCODE_SERVER_USERNAME="+user,
 		"OPENCODE_SERVER_PASSWORD="+pass,
 	)
@@ -68,12 +68,12 @@ func TestBaseline(t *testing.T) {
 		ocEnv = append(ocEnv, "HOME="+ocHome)
 	}
 
-	forge := Target{
-		Name: "forge",
-		Bin:  forgeBin,
-		Args: []string{"--port", strconv.Itoa(forgePort), "--host", "127.0.0.1"},
-		Env:  forgeEnv,
-		Port: forgePort, User: user, Pass: pass, Dir: dir,
+	opcode42 := Target{
+		Name: "opcode42",
+		Bin:  opcode42Bin,
+		Args: []string{"--port", strconv.Itoa(opcode42Port), "--host", "127.0.0.1"},
+		Env:  opcode42Env,
+		Port: opcode42Port, User: user, Pass: pass, Dir: dir,
 	}
 	opencode := Target{
 		Name: "opencode",
@@ -89,7 +89,7 @@ func TestBaseline(t *testing.T) {
 		ThroughputConc:    tpConc,
 		ThroughputSeconds: tpSecs,
 		OpencodeVersion:   captureVersion(opencode),
-		ForgeVersion:      captureForgeVersion(forge),
+		Opcode42Version:   captureOpcode42Version(opcode42),
 	}
 
 	// Bound the whole run with an internal deadline so a single stuck daemon
@@ -112,7 +112,7 @@ func TestBaseline(t *testing.T) {
 	}
 
 	var results []MetricResult
-	for _, tgt := range []Target{forge, opencode} {
+	for _, tgt := range []Target{opcode42, opencode} {
 		// One-time on-disk migration warm-up (opencode migrates its SQLite DB on
 		// first boot against a fresh HOME). Run once, un-timed, so the cold-start
 		// numbers reflect steady-state startup, not a one-off migration.
@@ -253,14 +253,14 @@ func warm(ctx context.Context, t *testing.T, tgt Target, logDir string) {
 
 func renderMarkdown(r Report) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# Forge performance baseline (plan 11, W0)\n\n")
+	fmt.Fprintf(&b, "# Opcode42 performance baseline (plan 11, W0)\n\n")
 	fmt.Fprintf(&b, "> %s\n\n", r.Disclaimer)
 	fmt.Fprintf(&b, "- Generated: `%s`\n", r.GeneratedAt)
 	fmt.Fprintf(&b, "- Machine: `%s` — %s %s, %d CPU, %s\n",
 		r.Machine.Hostname, r.Machine.OS, r.Machine.Arch, r.Machine.NumCPU, r.Machine.Model)
 	fmt.Fprintf(&b, "- Go: `%s`\n", r.Machine.GoVer)
-	fmt.Fprintf(&b, "- forge version: `%s`; opencode version: `%s`\n",
-		r.Config.ForgeVersion, r.Config.OpencodeVersion)
+	fmt.Fprintf(&b, "- opcode42 version: `%s`; opencode version: `%s`\n",
+		r.Config.Opcode42Version, r.Config.OpencodeVersion)
 	fmt.Fprintf(&b, "- Config: cold-start iters=%d, SSE subscribers=%d, throughput=%d workers × %ds\n\n",
 		r.Config.ColdStartIters, r.Config.SubCount, r.Config.ThroughputConc, r.Config.ThroughputSeconds)
 
@@ -269,10 +269,10 @@ func renderMarkdown(r Report) string {
 	for _, m := range r.Targets {
 		byName[m.Target] = m
 	}
-	f, hasF := byName["forge"]
+	f, hasF := byName["opcode42"]
 	o, hasO := byName["opencode"]
 
-	fmt.Fprintf(&b, "| Metric | forge | opencode | ratio (opencode/forge) |\n")
+	fmt.Fprintf(&b, "| Metric | opcode42 | opencode | ratio (opencode/opcode42) |\n")
 	fmt.Fprintf(&b, "|--------|-------|----------|------------------------|\n")
 	row := func(label string, fv, ov float64, unit string, lowerIsBetter bool) {
 		fstr, ostr := "n/a", "n/a"
@@ -306,7 +306,7 @@ func renderMarkdown(r Report) string {
 	rssSubsLabel := subsLabel(f, hasF)
 	if hasO {
 		if ol := subsLabel(o, hasO); ol != rssSubsLabel {
-			rssSubsLabel = fmt.Sprintf("forge %s / opencode %s", rssSubsLabel, ol)
+			rssSubsLabel = fmt.Sprintf("opcode42 %s / opencode %s", rssSubsLabel, ol)
 		}
 	}
 
@@ -319,7 +319,7 @@ func renderMarkdown(r Report) string {
 	row("GET /global/health (req/s)", f.HealthThroughputRPS, o.HealthThroughputRPS, "", false)
 	row("GET /session (req/s)", f.SessionListThroughputRPS, o.SessionListThroughputRPS, "", false)
 
-	fmt.Fprintf(&b, "\nRatios are derived, not asserted: a value > 1x means forge measured better on this host. ")
+	fmt.Fprintf(&b, "\nRatios are derived, not asserted: a value > 1x means opcode42 measured better on this host. ")
 	fmt.Fprintf(&b, "They are valid only for this machine and these versions.\n")
 	fmt.Fprintf(&b, "\nPercentiles (p50/p99) are linear-interpolated between ranks; with small n a p99 is an ")
 	fmt.Fprintf(&b, "interpolated tail estimate, not necessarily the max sample. ")
@@ -345,7 +345,7 @@ func captureVersion(t Target) string {
 	return strings.TrimSpace(out)
 }
 
-func captureForgeVersion(t Target) string { return captureVersion(t) }
+func captureOpcode42Version(t Target) string { return captureVersion(t) }
 
 func mustEnv(t *testing.T, k string) string {
 	v := os.Getenv(k)
