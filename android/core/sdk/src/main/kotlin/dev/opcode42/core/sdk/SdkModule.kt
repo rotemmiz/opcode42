@@ -1,4 +1,6 @@
 package dev.opcode42.core.sdk
 
-// BaseUrlProvider is bound by :feature:connections ConnectionsModule via ServerConnectionManager.
-// This module is intentionally empty — Hilt wiring for Opcode42Client happens via constructor injection.
+// Opcode42Client and HttpTransport are both @Singleton with @Inject constructors, so Hilt wires
+// them with no @Provides needed. Their only external dependencies — OkHttpClient (core/network)
+// and BaseUrlProvider (bound by :feature:connections ServerConnectionManager) — are provided
+// elsewhere. This module is intentionally empty.

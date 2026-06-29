@@ -1,6 +1,7 @@
 package dev.opcode42.feature.notifications
 
 import dev.opcode42.core.sdk.BaseUrlProvider
+import dev.opcode42.core.sdk.HttpTransport
 import dev.opcode42.core.sdk.Opcode42Client
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -39,7 +40,7 @@ class PushRegistrarTest {
         prefs = FakeIdentityStore(deviceId = "device-123")
         tokenProvider = FakeTokenProvider(token = "tok-A")
         baseUrl = MutableBaseUrl(server.url("/").toString().trimEnd('/'))
-        val client = Opcode42Client(OkHttpClient(), baseUrl)
+        val client = Opcode42Client(HttpTransport(OkHttpClient(), baseUrl))
         registrar = PushRegistrar(client, prefs, tokenProvider, baseUrl)
     }
 
@@ -158,7 +159,7 @@ class PushRegistrarTest {
         // Direct client check: session_filter is omitted by default and encoded as
         // a JSON array when present (matches pushRegisterInput.session_filter).
         server.enqueue(MockResponse().setBody("true"))
-        val client = Opcode42Client(OkHttpClient(), baseUrl)
+        val client = Opcode42Client(HttpTransport(OkHttpClient(), baseUrl))
 
         client.registerPush(
             deviceId = "d",
