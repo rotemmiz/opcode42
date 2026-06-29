@@ -43,6 +43,9 @@ class VoiceInputController internal constructor(
     /** Whether an on-device/cloud recognition provider exists. Cached at construction. */
     val isAvailable: Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
+    // Not session-scoped: onResults/onError flip this off unconditionally, so a
+    // stale callback from a just-stopped session can clear a freshly-started one's
+    // indicator. Narrow sub-second-double-tap edge; an epoch token would close it.
     var isListening by mutableStateOf(false)
         private set
 
