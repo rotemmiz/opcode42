@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,11 +29,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.opcode42.core.design.theme.Error
+import dev.opcode42.core.design.theme.OnSurface
+import dev.opcode42.core.design.theme.OnSurfaceGhost
+import dev.opcode42.core.design.theme.OnSurfaceVariant
+import dev.opcode42.core.design.theme.Primary
+import dev.opcode42.core.design.theme.Secondary
+import dev.opcode42.core.design.theme.SecondaryContainer
 import dev.opcode42.core.model.PermissionRequest
 import dev.opcode42.core.model.QuestionRequest
 import dev.opcode42.core.model.Session
@@ -76,11 +83,21 @@ internal fun SessionRow(
     val metaSize = if (compact) 11.sp else 12.sp
     val vPad = if (compact) 7.dp else 10.dp
     val hPad = if (compact) 12.dp else 16.dp
+    val accent = Secondary
 
     Box(
         modifier
             .fillMaxWidth()
-            .background(if (isActive) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent),
+            // Active row: amber selection tint + a 2.5dp amber accent rail down the left.
+            .then(
+                if (isActive) {
+                    Modifier
+                        .background(SecondaryContainer)
+                        .drawBehind { drawRect(accent, size = Size(2.5.dp.toPx(), size.height)) }
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         Column(Modifier.fillMaxWidth()) {
             // Only the title row opens the session; the inline actions are siblings outside
@@ -99,7 +116,7 @@ internal fun SessionRow(
                         text = session.title?.takeIf { it.isNotBlank() } ?: "New session",
                         fontSize = titleSize,
                         fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = OnSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -111,7 +128,7 @@ internal fun SessionRow(
                         Text(
                             text = meta,
                             fontSize = metaSize,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = OnSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -166,9 +183,9 @@ private fun StatusLeading(busy: Boolean, needsInput: Boolean, isActive: Boolean)
         return
     }
     val color = when {
-        needsInput -> MaterialTheme.colorScheme.error
-        isActive -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.outlineVariant
+        needsInput -> Error
+        isActive -> Primary
+        else -> OnSurfaceGhost
     }
     Box(Modifier.size(12.dp), contentAlignment = Alignment.Center) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(color))

@@ -65,6 +65,8 @@ data class Opcode42Colors(
     val linkCyan: Color,
     val onPrimary: Color,
     val onSecondary: Color,
+    /** Amber selection tint — selected rows, the bottom-nav pill, active session rows. */
+    val secondaryContainer: Color,
 )
 
 // ─── Dark scheme (the charcoal default) ───────────────────────────────────────
@@ -90,6 +92,7 @@ val DarkOpcode42Colors = Opcode42Colors(
     linkCyan = Color(0xFF5FB3C4),
     onPrimary = Color(0xFF0A1722),
     onSecondary = Color(0xFF1A1207),
+    secondaryContainer = Color(0x29D99A4E), // amber @ ~16% — selection tint
 )
 
 // ─── Light scheme (inverted ramp; hues darkened for AA on light surfaces) ──────
@@ -115,6 +118,7 @@ val LightOpcode42Colors = Opcode42Colors(
     linkCyan = Color(0xFF1E8092),
     onPrimary = Color(0xFFFFFFFF),
     onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0x29A66E16), // amber @ ~16% — selection tint
 )
 
 val LocalOpcode42Colors = staticCompositionLocalOf { DarkOpcode42Colors }
@@ -141,6 +145,7 @@ val HeaderPurple: Color @Composable get() = LocalOpcode42Colors.current.headerPu
 val LinkCyan: Color @Composable get() = LocalOpcode42Colors.current.linkCyan
 val OnPrimary: Color @Composable get() = LocalOpcode42Colors.current.onPrimary
 val OnSecondary: Color @Composable get() = LocalOpcode42Colors.current.onSecondary
+val SecondaryContainer: Color @Composable get() = LocalOpcode42Colors.current.secondaryContainer
 
 private fun Opcode42Colors.toM3Scheme(dark: Boolean) = if (dark) {
     darkColorScheme(

@@ -22,7 +22,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,9 +32,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.opcode42.core.design.theme.Opcode42Mono
+import dev.opcode42.core.design.theme.OnSurfaceVariant
+import dev.opcode42.core.design.theme.Secondary
+import dev.opcode42.core.design.theme.Surface
 import dev.opcode42.core.model.Session
 import dev.opcode42.feature.sessions.SessionFilter
 import dev.opcode42.feature.sessions.SessionListUiState
@@ -101,7 +105,7 @@ fun SessionBrowser(
                     } else {
                         "No sessions"
                     },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = OnSurfaceVariant,
                     fontSize = 13.sp,
                 )
             }
@@ -179,14 +183,18 @@ private fun FilterTabs(
 
 @Composable
 private fun DateHeader(text: String, hPad: androidx.compose.ui.unit.Dp) {
+    // Amber uppercase mono, matching the in-chat sidebar section headers (SESSION / MODEL …).
     Text(
-        text = text,
+        text = text.uppercase(),
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = hPad + 4.dp, vertical = 6.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.secondary,
+            .background(Surface)
+            .padding(start = hPad + 4.dp, end = hPad + 4.dp, top = 12.dp, bottom = 5.dp),
+        fontFamily = Opcode42Mono,
+        fontSize = 10.5.sp,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = 0.8.sp,
+        color = Secondary,
     )
 }
 
