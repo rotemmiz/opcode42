@@ -262,12 +262,9 @@ fun AdaptiveChatScreen(
         null
     }
 
-    // The chat surface. In multi-pane it also hosts the [railContent] rail + [infoContent]
-    // sidebar so the top bar spans the full width above all three; single-pane = null slots.
-    val chat: @Composable (
-        railContent: (@Composable () -> Unit)?,
-        infoContent: (@Composable () -> Unit)?,
-    ) -> Unit = { railContent, infoContent ->
+    // The chat surface. In multi-pane it hosts the [infoContent] sidebar so the top bar
+    // spans the chat area (stream + sidebar); the rail stays outside (see InlinePush).
+    val chat: @Composable (infoContent: (@Composable () -> Unit)?) -> Unit = { infoContent ->
         ChatScreen(
             sessionId = sessionId,
             onNavigateBack = onNavigateBack,
@@ -284,7 +281,6 @@ fun AdaptiveChatScreen(
             onToggleInfoPanel = { infoPanelOpen = !infoPanelOpen },
             showTodoSheet = !rightPanelVisible,
             isDraft = sessionId == DRAFT_SESSION_ID,
-            railContent = railContent,
             infoContent = infoContent,
             viewModel = chatViewModel,
         )
@@ -320,7 +316,7 @@ fun AdaptiveChatScreen(
     ) {
         when (layout.leftRailMode) {
             // Compact width: single pane — the sessions menu floats over the chat as a
-            // scrim drawer; the chat hosts no panes (rail = drawer, no sidebar).
+            // scrim drawer; the chat hosts no sidebar (rail = drawer).
             LeftRailMode.Overlay -> ModalNavigationDrawer(
                 drawerState = drawerState,
                 drawerContent = {
@@ -330,11 +326,19 @@ fun AdaptiveChatScreen(
                     }
                 },
             ) {
-                chat(null, null)
+                chat(null)
             }
-            // Wider windows: the chat hosts the triptych — rail (full 220dp or the 60dp
-            // collapsed icon band) + sidebar — UNDER a single full-width top bar.
-            LeftRailMode.InlinePush -> chat(railSlot, infoSlot)
+            // Wider windows: the sessions rail sits BESIDE the chat (outside it), so the
+            // chat's top bar spans only the chat area (stream + sidebar) and stops at the
+            // rail's edge — it does not extend left over the rail. Open = the full 220dp
+            // rail; collapsed = the 60dp icon band.
+            LeftRailMode.InlinePush -> Row(Modifier.fillMaxSize()) {
+                railSlot()
+                Box(Modifier.width(1.dp).fillMaxHeight().background(Hairline))
+                Box(Modifier.weight(1f).fillMaxHeight()) {
+                    chat(infoSlot)
+                }
+            }
         }
 
         SnackbarHost(sessionSnackbar, Modifier.align(Alignment.BottomCenter))
