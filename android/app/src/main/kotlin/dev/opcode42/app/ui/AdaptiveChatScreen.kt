@@ -265,9 +265,15 @@ fun AdaptiveChatScreen(
             )
         }
 
-    val aggregatedDiffs = remember(chatUiState.diffs) {
+    val aggregatedDiffs = remember(chatUiState.diffs, chatUiState.session?.directory) {
+        val dir = chatUiState.session?.directory
         chatUiState.diffs.values
             .flatten()
+            // Relativize to the session's working dir first: server/VCS diffs carry no
+            // relativity guarantee, so an absolute path would otherwise truncate to its
+            // (useless) prefix under end-ellipsis — and relativizing also merges any
+            // absolute/relative duplicates of the same file before grouping.
+            .map { it.copy(file = relativeToDir(it.file, dir)) }
             .groupBy { it.file }
             .map { (_, entries) ->
                 entries.reduce { acc, diff ->
@@ -706,9 +712,10 @@ internal fun SessionInfoPanel(
             // Hoist the amber accent out of the per-row draw scope (it's a @Composable token).
             val accent = Secondary
             diffs.forEachIndexed { index, diff ->
-                // The most-changed file (first — diffs are churn-sorted) is the focal edit:
-                // flag it with the amber active-row treatment shared with the sessions rail.
-                val active = index == 0
+                // Accent the most-changed file (first — diffs are churn-sorted) with the
+                // amber active-row treatment shared with the sessions rail. Only when it
+                // stands out: skip a lone row, and a 0/0 (status-only) top row.
+                val active = index == 0 && diffs.size > 1 && (diff.additions + diff.deletions) > 0
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -734,7 +741,7 @@ internal fun SessionInfoPanel(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = diff.file ?: "unknown",
+                        text = diff.file?.takeIf { it.isNotBlank() } ?: "unknown",
                         fontFamily = Opcode42Mono,
                         fontSize = 12.5.sp,
                         color = if (active) Secondary else Tertiary,
@@ -878,6 +885,14 @@ private fun InfoRow(key: String, value: String) {
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+/** Collapse a diff path to be relative to the session's working dir (a no-op if it
+ *  already is, or if the dir is unknown), so the filename — not a long absolute prefix —
+ *  is what survives in the narrow CHANGES list. */
+private fun relativeToDir(file: String?, dir: String?): String? {
+    if (file == null || dir.isNullOrEmpty() || !file.startsWith(dir)) return file
+    return file.removePrefix(dir).removePrefix("/").ifEmpty { file }
 }
 
 private fun formatTokens(n: Long): String = when {
