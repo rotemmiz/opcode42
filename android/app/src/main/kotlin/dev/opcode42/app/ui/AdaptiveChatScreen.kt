@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material3.*
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
@@ -146,6 +147,7 @@ fun AdaptiveChatScreen(
     onNavigateToSession: (String) -> Unit,
     onNewSession: () -> Unit = {},
     onOpenTasksBoard: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     chatViewModel: ChatViewModel = hiltViewModel(),
     // The sessions rail is shared across chat destinations: scope its ViewModel to the
     // Activity (not the per-session nav entry) so switching sessions doesn't tear down and
@@ -157,9 +159,9 @@ fun AdaptiveChatScreen(
     val chatUiState by chatViewModel.uiState.collectAsStateWithLifecycle()
     val chatCommands by chatViewModel.commands.collectAsStateWithLifecycle()
 
-    // Session-list action errors (rename/archive/delete/reply/… from the rail) surface here in
-    // multi-pane — the single-pane SessionListScreen isn't composed in this host, so without this
-    // collector those events would have no consumer. (Chat-side errors are handled by ChatScreen.)
+    // Session-list action errors (rename/archive/delete/reply/… from the rail) surface here — the
+    // rail is the app's only session-list surface, so without this collector those events would
+    // have no consumer. (Chat-side errors are handled by ChatScreen.)
     val sessionSnackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) {
         sessionListViewModel.events.collect { event ->
@@ -168,8 +170,8 @@ fun AdaptiveChatScreen(
             }
         }
     }
-    // Multi-pane has no full-screen session-list error surface (that lives in single-pane
-    // SessionListScreen), so a catastrophic load failure is surfaced here as a snackbar instead.
+    // There is no full-screen session-list error surface anymore (the rail is the only session
+    // list), so a catastrophic load failure is surfaced here as a snackbar instead.
     LaunchedEffect(sessionListState.error) {
         sessionListState.error?.let { sessionSnackbar.showSnackbar(it) }
     }
@@ -251,6 +253,9 @@ fun AdaptiveChatScreen(
                 onSkipQuestion = sessionListViewModel::rejectQuestion,
                 onCollapse = onCollapse,
                 onExpand = onExpand,
+                // Dismiss the menu first (closes the overlay drawer / collapses a non-persistent
+                // rail) like onSelectSession/onNewSession, so Back from Settings doesn't reopen it.
+                onOpenSettings = { onSelect(); onOpenSettings() },
                 progress = progress,
                 modifier = mod,
             )
@@ -397,6 +402,7 @@ internal fun NavRailPane(
     onSkipQuestion: (String) -> Unit,
     onCollapse: () -> Unit,
     onExpand: () -> Unit,
+    onOpenSettings: () -> Unit,
     progress: () -> Float,
     modifier: Modifier = Modifier,
 ) {
@@ -528,7 +534,21 @@ internal fun NavRailPane(
                 color = OnSurfaceFaint,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.graphicsLayer { alpha = progress() },
+                modifier = Modifier.weight(1f).graphicsLayer { alpha = progress() },
+            )
+            // Settings is reached from here: the rail is the app's home surface (there's no
+            // standalone session-list screen), so this gear is the path to Settings / Add-Server.
+            // Fades with the rail and is tappable only when open (like the +New button).
+            Icon(
+                Icons.Default.Settings,
+                contentDescription = "Settings",
+                tint = OnSurfaceVariant,
+                modifier = Modifier
+                    .graphicsLayer { alpha = progress() }
+                    .clip(CircleShape)
+                    .then(if (open) Modifier.clickable(onClick = onOpenSettings) else Modifier)
+                    .padding(5.dp)
+                    .size(18.dp),
             )
         }
     }

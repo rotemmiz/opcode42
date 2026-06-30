@@ -141,8 +141,8 @@ class ChatViewModel @Inject constructor(
 
     /**
      * Emits the real session id once a draft's first prompt has created the session, so the
-     * UI navigates from the draft route to the real session (replacing the draft in the
-     * backstack). A Channel gives true one-shot delivery (mirrors [events]).
+     * UI navigates from the draft route to the real session (pushing the chat on top of the
+     * home draft). A Channel gives true one-shot delivery (mirrors [events]).
      */
     private val _navigateToSession = Channel<String>(Channel.BUFFERED)
     val navigateToSession = _navigateToSession.receiveAsFlow()

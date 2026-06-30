@@ -82,8 +82,8 @@ fun ChatScreen(
     infoContent: (@Composable () -> Unit)? = null,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
-    // On a draft, the first prompt creates the real session; navigate to it (the nav graph
-    // replaces the draft in the backstack so Back doesn't return to an empty composer).
+    // On a draft, the first prompt creates the real session; navigate to it (the nav graph pushes
+    // the chat on top of the home draft, so Back returns to the home page).
     LaunchedEffect(viewModel) {
         viewModel.navigateToSession.collect { newId -> onNavigateToSession(newId) }
     }
@@ -236,7 +236,7 @@ fun ChatScreen(
                 ) {
                     // Leading icon opens the sessions menu on every form factor (overlay
                     // drawer on phones, inline rail on wider windows); system back returns
-                    // to the session-list home. A badge appears when a *background* session
+                    // to the home draft. A badge appears when a *background* session
                     // needs the user (pending permission/question).
                     IconButton(onClick = onOpenNavRail, modifier = Modifier.size(42.dp)) {
                         BadgedBox(
