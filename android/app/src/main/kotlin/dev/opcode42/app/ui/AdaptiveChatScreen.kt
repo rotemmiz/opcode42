@@ -1,5 +1,7 @@
 package dev.opcode42.app.ui
 
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
@@ -131,7 +133,11 @@ fun AdaptiveChatScreen(
     onNewSession: () -> Unit = {},
     onOpenTasksBoard: () -> Unit = {},
     chatViewModel: ChatViewModel = hiltViewModel(),
-    sessionListViewModel: SessionListViewModel = hiltViewModel(),
+    // The sessions rail is shared across chat destinations: scope its ViewModel to the
+    // Activity (not the per-session nav entry) so switching sessions doesn't tear down and
+    // reload the rail — otherwise the menu blanks out and repopulates on every switch.
+    sessionListViewModel: SessionListViewModel =
+        hiltViewModel(checkNotNull(LocalActivity.current) as ComponentActivity),
 ) {
     val sessionListState by sessionListViewModel.uiState.collectAsStateWithLifecycle()
     val chatUiState by chatViewModel.uiState.collectAsStateWithLifecycle()
