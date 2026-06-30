@@ -20,15 +20,22 @@ object PartSerializer : KSerializer<Part> {
         val sessionID = json["sessionID"]?.jsonPrimitive?.content ?: ""
         val messageID = json["messageID"]?.jsonPrimitive?.content ?: ""
         val format = decoder.json
+        // A malformed typed part (e.g. a `file` part missing the required `url`) must
+        // degrade to UnknownPart rather than throw — one bad part cannot be allowed to
+        // abort the whole message/session decode. REST + SSE callers already wrap this,
+        // but the model serializer should be the last line of defense on its own.
+        val fallback = UnknownPart(id, sessionID, messageID, type)
+        fun guard(decode: () -> Part): Part =
+            try { decode() } catch (_: SerializationException) { fallback }
         return when (type) {
-            "text" -> format.decodeFromJsonElement(TextPart.serializer(), json)
-            "reasoning" -> format.decodeFromJsonElement(ReasoningPart.serializer(), json)
-            "file" -> format.decodeFromJsonElement(FilePart.serializer(), json)
-            "tool" -> format.decodeFromJsonElement(ToolPartJson.serializer(), json).toPart()
-            "patch" -> format.decodeFromJsonElement(PatchPart.serializer(), json)
+            "text" -> guard { format.decodeFromJsonElement(TextPart.serializer(), json) }
+            "reasoning" -> guard { format.decodeFromJsonElement(ReasoningPart.serializer(), json) }
+            "file" -> guard { format.decodeFromJsonElement(FilePart.serializer(), json) }
+            "tool" -> guard { format.decodeFromJsonElement(ToolPartJson.serializer(), json).toPart() }
+            "patch" -> guard { format.decodeFromJsonElement(PatchPart.serializer(), json) }
             "step-start" -> StepStartPart(id, sessionID, messageID)
             "step-finish" -> StepFinishPart(id, sessionID, messageID)
-            else -> UnknownPart(id, sessionID, messageID, type)
+            else -> fallback
         }
     }
 

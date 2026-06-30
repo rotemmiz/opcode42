@@ -28,6 +28,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -404,13 +405,30 @@ private fun FilePartView(part: FilePart, modifier: Modifier = Modifier) {
         onClick = {},
         label = {
             Text(
-                text = part.filename ?: part.url,
+                text = fileChipLabel(part),
                 fontFamily = Opcode42Mono,
                 fontSize = 12.sp,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         },
         leadingIcon = { Icon(Icons.Default.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp)) },
         modifier = modifier.padding(horizontal = 14.dp, vertical = 2.dp),
     )
+}
+
+/**
+ * Short, safe chip label for a file part. NEVER returns a raw `data:` URL — a base64
+ * data URL can be many megabytes, and handing that to a Text node blows up text layout
+ * (the bug that OOM-killed the app). Prefer the filename; for a data URL fall back to the
+ * mime type (or "attachment"); for a real URL use the last path segment. Every branch
+ * is capped with `.take(120)` so nothing can ever reach layout at megabyte scale.
+ */
+internal fun fileChipLabel(part: FilePart): String {
+    part.filename?.takeIf { it.isNotBlank() }?.let { return it.take(120) }
+    val url = part.url
+    return when {
+        url.startsWith("data:", ignoreCase = true) -> part.mime.takeIf { it.isNotBlank() }?.take(120) ?: "attachment"
+        else -> url.substringAfterLast('/').takeIf { it.isNotBlank() }?.take(120) ?: "attachment"
+    }
 }
