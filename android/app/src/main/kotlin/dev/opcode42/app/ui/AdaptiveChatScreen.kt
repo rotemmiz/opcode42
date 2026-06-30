@@ -265,11 +265,18 @@ fun AdaptiveChatScreen(
             )
         }
 
-    val aggregatedDiffs = remember(chatUiState.diffs, chatUiState.session?.directory) {
+    val aggregatedDiffs = remember(
+        chatUiState.messages,
+        chatUiState.parts,
+        chatUiState.diffs,
+        chatUiState.session?.directory,
+    ) {
         val dir = chatUiState.session?.directory
-        chatUiState.diffs.values
-            .flatten()
-            // Relativize to the session's working dir first: server/VCS diffs carry no
+        // Mirror what the conversation shows: real snapshot diffs where loaded, else the
+        // synthetic diff rebuilt from edit-tool inputs — so an edit that's already visible
+        // in the stream (snapshot diff not yet/ever provided) still lands in CHANGES.
+        sessionFileDiffs(chatUiState.messages, chatUiState.parts, chatUiState.diffs)
+            // Relativize to the session's working dir first: edit/VCS paths carry no
             // relativity guarantee, so an absolute path would otherwise truncate to its
             // (useless) prefix under end-ellipsis — and relativizing also merges any
             // absolute/relative duplicates of the same file before grouping.
@@ -740,15 +747,36 @@ internal fun SessionInfoPanel(
                         modifier = Modifier.size(13.dp),
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = diff.file?.takeIf { it.isNotBlank() } ?: "unknown",
-                        fontFamily = Opcode42Mono,
-                        fontSize = 12.5.sp,
-                        color = if (active) Secondary else Tertiary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                    // Pin the filename and let only the directory prefix ellipsize: this
+                    // Compose BOM has no start/middle ellipsis, so a single full-path Text
+                    // would clip the filename (the useful tail) on a deep path.
+                    val path = diff.file?.takeIf { it.isNotBlank() } ?: "unknown"
+                    val cut = path.lastIndexOf('/')
+                    val pathColor = if (active) Secondary else Tertiary
+                    Row(
                         modifier = Modifier.weight(1f),
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (cut >= 0) {
+                            Text(
+                                text = path.substring(0, cut + 1),
+                                fontFamily = Opcode42Mono,
+                                fontSize = 12.5.sp,
+                                color = pathColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                        }
+                        Text(
+                            text = path.substring(cut + 1),
+                            fontFamily = Opcode42Mono,
+                            fontSize = 12.5.sp,
+                            color = pathColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Spacer(Modifier.width(6.dp))
                     // Always show both counts; a zero stays dim rather than vanishing,
                     // so the +adds / −dels columns line up down the list.
@@ -891,8 +919,11 @@ private fun InfoRow(key: String, value: String) {
  *  already is, or if the dir is unknown), so the filename — not a long absolute prefix —
  *  is what survives in the narrow CHANGES list. */
 private fun relativeToDir(file: String?, dir: String?): String? {
-    if (file == null || dir.isNullOrEmpty() || !file.startsWith(dir)) return file
-    return file.removePrefix(dir).removePrefix("/").ifEmpty { file }
+    if (file == null || dir.isNullOrEmpty()) return file
+    // Match on the path boundary so a sibling sharing a prefix (dir `/a/project`,
+    // file `/a/projectX/y`) isn't mistaken for a child.
+    val base = dir.removeSuffix("/")
+    return if (file.startsWith("$base/")) file.removePrefix("$base/") else file
 }
 
 private fun formatTokens(n: Long): String = when {

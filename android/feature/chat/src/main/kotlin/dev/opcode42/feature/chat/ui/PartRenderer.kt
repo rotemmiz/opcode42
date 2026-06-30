@@ -127,7 +127,7 @@ private fun ReasoningPartView(part: ReasoningPart, modifier: Modifier = Modifier
 // ─── Patch / Diff ─────────────────────────────────────────────────────────────
 
 /** Build a synthetic SnapshotFileDiff from an edit ToolPart's old/new strings. */
-private fun syntheticDiff(editPart: ToolPart, filePath: String): SnapshotFileDiff? {
+internal fun syntheticDiff(editPart: ToolPart, filePath: String): SnapshotFileDiff? {
     val input = editPart.state.inputObject() ?: return null
     // opencode sends camelCase: oldString / newString (snake_case as fallback)
     fun strFor(vararg keys: String) = keys.firstNotNullOfOrNull { key ->

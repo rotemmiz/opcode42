@@ -22,8 +22,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.opcode42.core.model.Message
 import dev.opcode42.core.model.Part
 import dev.opcode42.core.model.PatchPart
+import dev.opcode42.core.model.SnapshotFileDiff
 import dev.opcode42.core.model.ToolPart
 import dev.opcode42.core.model.ToolState
 import dev.opcode42.core.model.ToolStateCompleted
@@ -178,6 +180,43 @@ fun groupRenderItems(parts: List<Part>): List<RenderItem> {
     flush()
     return items
 }
+
+/**
+ * Every file diff for a session as the conversation renders it: the real snapshot diff
+ * where the diff API returned one for a message, otherwise the synthetic diff
+ * reconstructed from that message's edit-tool inputs (the same fallback the diff card
+ * uses). This lets the CHANGES pane mirror exactly what the stream shows — e.g. an edit
+ * you just made, before its snapshot diff has loaded, or when the backend never sends one.
+ *
+ * Parts are read the same way the stream reads them: live SSE parts for a message when
+ * present, else the REST parts embedded on the [Message] (a loaded historical session has
+ * an empty live map, so its edits live only on `message.parts`).
+ */
+fun sessionFileDiffs(
+    messages: List<Message>,
+    liveParts: Map<String, List<Part>>,
+    diffs: Map<String, List<SnapshotFileDiff>>,
+): List<SnapshotFileDiff> =
+    messages.flatMap { message ->
+        diffs[message.id]?.takeIf { it.isNotEmpty() }
+            ?: syntheticDiffsFor(liveParts[message.id] ?: message.parts)
+    }
+
+/**
+ * Per-message synthetic diffs, rebuilt straight from the edit ToolPart inputs.
+ * We deliberately don't key off [PatchPart.files]: SSE-delivered patches often arrive
+ * with an empty `files` list (the REST copy that fills it is merged only at chat-render
+ * time), so relying on it would leave the pane blank while the stream shows the diff.
+ */
+private fun syntheticDiffsFor(parts: List<Part>): List<SnapshotFileDiff> =
+    parts.filterIsInstance<ToolPart>()
+        .filter { it.tool.lowercase() in EDIT_TOOL_NAMES }
+        .mapNotNull { tp ->
+            val filePath = tp.inputString("file_path", "filePath", "path") ?: return@mapNotNull null
+            // syntheticDiff returns null until the edit has a newString, so an in-flight
+            // edit naturally contributes nothing — same gate the diff card relies on.
+            syntheticDiff(tp, filePath)
+        }
 
 private fun toolRowOf(part: ToolPart): ToolRow {
     val tool = part.tool.lowercase()
