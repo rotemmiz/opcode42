@@ -53,6 +53,12 @@ fun AsteriskMark(
      */
     strokeWidth: Float = 6f,
     spin: Boolean = false,
+    /**
+     * Loader "chase" mode: a bright highlight travels around the six arm-halves while the
+     * dual-arc spins inside. The geometry is the canonical mark (arms split at the hollow
+     * so each can light independently); only the brightness animates, not the shape.
+     */
+    chase: Boolean = false,
 ) {
     val heavy = strokeWidth > 7f
     val ringR = if (heavy) 15f else 12f
@@ -61,7 +67,7 @@ fun AsteriskMark(
     // The spinning ring's angle is held as State and read *inside* the draw lambda
     // (as late as possible), so an animation frame invalidates only the draw phase —
     // not composition. Several Spinners on screen at 60fps then cost only redraws.
-    val angleState: State<Float>? = if (spin) {
+    val angleState: State<Float>? = if (spin || chase) {
         val transition = rememberInfiniteTransition(label = "asterisk")
         transition.animateFloat(
             initialValue = 0f,
@@ -75,6 +81,21 @@ fun AsteriskMark(
     } else {
         null
     }
+    // The chase highlight sweeps the arms a touch faster than the arc rotates.
+    val chaseHead: State<Float>? = if (chase) {
+        val transition = rememberInfiniteTransition(label = "asterisk-chase")
+        transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1100, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "chaseHead",
+        )
+    } else {
+        null
+    }
 
     Canvas(modifier.size(size)) {
         val s = this.size.minDimension / 160f
@@ -82,18 +103,38 @@ fun AsteriskMark(
         val armStroke = Stroke(width = strokeWidth * s)
         val arcStroke = Stroke(width = arcStrokeWidth * s, cap = StrokeCap.Round)
 
-        // Three arms, with the core punched hollow (clip everything OUTSIDE the punch circle).
+        // Arms, with the core punched hollow (clip everything OUTSIDE the punch circle).
         val hole = Path().apply { addOval(Rect(center = center, radius = punchR * s)) }
-        clipPath(hole, clipOp = ClipOp.Difference) {
-            for (deg in listOf(0f, 60f, 120f)) {
-                rotate(deg, pivot = center) {
-                    drawRoundRect(
-                        color = color,
-                        topLeft = Offset(73f * s, 29f * s),
-                        size = Size(14f * s, 102f * s),
-                        cornerRadius = CornerRadius(7f * s, 7f * s),
-                        style = armStroke,
-                    )
+        if (chase) {
+            // Six half-arms (the canonical arms split at the hollow) so each can light in
+            // turn; the inner ends fall inside the punch, so this renders as the same mark.
+            val head = chaseHead?.value ?: 0f
+            for (i in 0 until 6) {
+                val ang = i * 60f
+                clipPath(hole, clipOp = ClipOp.Difference) {
+                    rotate(ang, pivot = center) {
+                        drawRoundRect(
+                            color = color.copy(alpha = chaseAlpha(ang, head)),
+                            topLeft = Offset(73f * s, 29f * s),
+                            size = Size(14f * s, 51f * s),
+                            cornerRadius = CornerRadius(7f * s, 7f * s),
+                            style = armStroke,
+                        )
+                    }
+                }
+            }
+        } else {
+            clipPath(hole, clipOp = ClipOp.Difference) {
+                for (deg in listOf(0f, 60f, 120f)) {
+                    rotate(deg, pivot = center) {
+                        drawRoundRect(
+                            color = color,
+                            topLeft = Offset(73f * s, 29f * s),
+                            size = Size(14f * s, 102f * s),
+                            cornerRadius = CornerRadius(7f * s, 7f * s),
+                            style = armStroke,
+                        )
+                    }
                 }
             }
         }
@@ -122,4 +163,14 @@ fun AsteriskMark(
             )
         }
     }
+}
+
+/**
+ * Chase brightness for an arm-half at [spokeDeg] given the rotating highlight [headDeg]:
+ * brightest where the head sits, easing down to a dim baseline around the ring.
+ */
+private fun chaseAlpha(spokeDeg: Float, headDeg: Float): Float {
+    val d = ((headDeg - spokeDeg) % 360f + 360f) % 360f
+    val frac = 1f - d / 360f
+    return 0.16f + 0.84f * frac * frac
 }

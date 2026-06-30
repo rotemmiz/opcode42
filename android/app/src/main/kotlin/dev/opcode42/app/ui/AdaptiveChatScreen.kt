@@ -19,11 +19,11 @@ import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Difference
-import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material3.*
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
@@ -59,6 +59,7 @@ import dev.opcode42.feature.chat.DRAFT_SESSION_ID
 import dev.opcode42.feature.chat.TodoItem
 import dev.opcode42.feature.chat.ui.*
 import dev.opcode42.feature.sessions.SessionFilter
+import dev.opcode42.feature.sessions.relativeTime
 import dev.opcode42.core.design.text.homeRelativeDir
 import dev.opcode42.feature.sessions.SessionListEvent
 import dev.opcode42.feature.sessions.SessionListUiState
@@ -305,6 +306,7 @@ fun AdaptiveChatScreen(
                 todos = chatUiState.todos,
                 diffs = aggregatedDiffs,
                 commands = chatCommands,
+                messageCount = chatUiState.messages.size,
                 modifier = Modifier.width(280.dp).fillMaxHeight(),
             )
         }
@@ -631,288 +633,400 @@ internal fun SessionInfoPanel(
     todos: List<TodoItem>,
     diffs: List<SnapshotFileDiff> = emptyList(),
     commands: List<CommandInfo> = emptyList(),
+    messageCount: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier
             .fillMaxSize()
-            .background(SurfaceContainerLowest)
+            .background(Surface)
             .verticalScroll(rememberScrollState()),
     ) {
-        // The model + agent-mode are already shown in the chat top bar, so the panel
-        // skips a redundant header and starts straight at the SESSION section.
-        Spacer(Modifier.height(8.dp))
-
+        // The model + agent-mode are also shown in the chat top bar; the panel repeats them
+        // here (the design's MODEL block) and starts straight at SESSION — no panel header.
         if (session != null) {
-            InfoSectionHeader("SESSION")
-            InfoRow("title", session.title ?: "Untitled")
-            InfoRow("id", session.id.take(8))
+            SbSection("SESSION") {
+                KV("title", session.title ?: "Untitled", mono = false)
+                KV("id", session.id.take(8))
+                val created = session.time?.created ?: 0L
+                if (created > 0L) {
+                    KV("started", startedLabel(created, messageCount))
+                }
+            }
         }
 
         if (modelID != null || providerID != null) {
-            InfoSectionHeader("MODEL")
-            providerID?.let { InfoRow("provider", it) }
-            modelID?.let { InfoRow("model", it) }
-            agentMode?.let { InfoRow("mode", it) }
+            SbSection("MODEL") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp),
+                ) {
+                    ModeChip(agentMode ?: "build")
+                    if (modelID != null) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = modelID,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = OnSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                providerID?.let { KV("provider", it.replaceFirstChar { c -> c.uppercase() }) }
+            }
         }
 
         if (tokens != null) {
             val used = tokens.contextFootprint
             val fraction = (used.toFloat() / 200_000L).coerceIn(0f, 1f)
-            InfoSectionHeader("CONTEXT")
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp),
-            ) {
-                Text(
-                    text = formatTokens(used),
-                    fontFamily = Opcode42Mono,
-                    fontSize = 12.5.sp,
-                    color = OnSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "/ 200K · ${(fraction * 100).toInt()}%",
-                    fontFamily = Opcode42Mono,
-                    fontSize = 12.5.sp,
-                    color = OnSurfaceFaint,
-                )
+            SbSection("CONTEXT") {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.weight(1f)) {
+                        Text(formatTokens(used), fontFamily = Opcode42Mono, fontSize = 12.5.sp, color = OnSurface)
+                        Text(" / 200K", fontFamily = Opcode42Mono, fontSize = 12.5.sp, color = OnSurfaceFaint)
+                    }
+                    Text(
+                        text = "${(fraction * 100).toInt()}%",
+                        fontFamily = Opcode42Mono,
+                        fontSize = 12.5.sp,
+                        color = Primary,
+                    )
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(SurfaceContainerHighest),
+                ) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(fraction).background(Primary))
+                }
+                val cost = session?.cost
+                if (cost != null && cost > 0.0) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 9.dp),
+                    ) {
+                        Text("$", fontFamily = Opcode42Mono, fontSize = 12.sp, color = OnSurfaceFaint)
+                        Spacer(Modifier.width(5.dp))
+                        Text("%.2f".format(cost), fontFamily = Opcode42Mono, fontSize = 12.sp, color = OnSurfaceVariant)
+                        Spacer(Modifier.width(5.dp))
+                        Text("this session", fontFamily = Opcode42Mono, fontSize = 12.sp, color = OnSurfaceFaint)
+                    }
+                }
             }
-            LinearProgressIndicator(
-                progress = { fraction },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 3.dp)
-                    .height(4.dp),
-                color = Primary,
-                trackColor = OutlineVariant,
-            )
         }
 
         if (diffs.isNotEmpty()) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-                    .padding(start = 10.dp, end = 10.dp, top = 7.dp, bottom = 2.dp),
+            SbSection(
+                title = "CHANGES",
+                count = "${diffs.size} ${if (diffs.size == 1) "file" else "files"}",
+                action = {
+                    Icon(Icons.Outlined.Difference, contentDescription = null, tint = LinkCyan, modifier = Modifier.size(14.dp))
+                },
             ) {
-                Text(
-                    text = "CHANGES",
-                    fontSize = 11.sp,
-                    letterSpacing = 0.6.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = HeaderPurple,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "${diffs.size} files",
-                    fontSize = 11.5.sp,
-                    color = OnSurfaceFaint,
-                    fontFamily = Opcode42Mono,
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(
-                    Icons.Outlined.Difference,
-                    contentDescription = null,
-                    tint = OnSurfaceFaint,
-                    modifier = Modifier.size(15.dp),
-                )
-            }
-            // Hoist the amber accent out of the per-row draw scope (it's a @Composable token).
-            val accent = Secondary
-            diffs.forEachIndexed { index, diff ->
-                // Accent the most-changed file (first — diffs are churn-sorted) with the
-                // amber active-row treatment shared with the sessions rail. Only when it
-                // stands out: skip a lone row, and a 0/0 (status-only) top row.
-                val active = index == 0 && diffs.size > 1 && (diff.additions + diff.deletions) > 0
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(
-                            if (active) {
-                                Modifier
-                                    .background(SecondaryContainer)
-                                    .drawBehind {
-                                        drawRect(accent, size = Size(2.5.dp.toPx(), size.height))
-                                    }
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .padding(horizontal = 10.dp, vertical = 2.dp),
-                ) {
-                    Icon(
-                        Icons.Outlined.InsertDriveFile,
-                        contentDescription = null,
-                        tint = if (active) Secondary else OnSurfaceFaint,
-                        modifier = Modifier.size(13.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    // Pin the filename and let only the directory prefix ellipsize: this
-                    // Compose BOM has no start/middle ellipsis, so a single full-path Text
-                    // would clip the filename (the useful tail) on a deep path.
-                    val path = diff.file?.takeIf { it.isNotBlank() } ?: "unknown"
-                    val cut = path.lastIndexOf('/')
-                    val pathColor = if (active) Secondary else Tertiary
+                // Hoist the amber accent out of the per-row draw scope (it's a @Composable token).
+                val accent = Secondary
+                diffs.forEachIndexed { index, diff ->
+                    // Accent the most-changed file (first — diffs are churn-sorted) with the
+                    // amber active-row treatment shared with the sessions rail. Only when it
+                    // stands out: skip a lone row, and a 0/0 (status-only) top row.
+                    val active = index == 0 && diffs.size > 1 && (diff.additions + diff.deletions) > 0
                     Row(
-                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(4.dp))
+                            .then(
+                                if (active) {
+                                    Modifier
+                                        .background(SecondaryContainer)
+                                        .drawBehind {
+                                            drawRect(accent, size = Size(2.5.dp.toPx(), size.height))
+                                        }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .padding(vertical = 2.dp),
                     ) {
-                        if (cut >= 0) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.InsertDriveFile,
+                            contentDescription = null,
+                            tint = if (active) Secondary else OnSurfaceFaint,
+                            modifier = Modifier.size(13.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        // Pin the filename and let only the directory prefix ellipsize: this
+                        // Compose BOM has no start/middle ellipsis, so a single full-path Text
+                        // would clip the filename (the useful tail) on a deep path.
+                        val path = diff.file?.takeIf { it.isNotBlank() } ?: "unknown"
+                        val cut = path.lastIndexOf('/')
+                        val pathColor = if (active) Secondary else Tertiary
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (cut >= 0) {
+                                Text(
+                                    text = path.substring(0, cut + 1),
+                                    fontFamily = Opcode42Mono,
+                                    fontSize = 12.5.sp,
+                                    color = pathColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                            }
                             Text(
-                                text = path.substring(0, cut + 1),
+                                text = path.substring(cut + 1),
                                 fontFamily = Opcode42Mono,
                                 fontSize = 12.5.sp,
                                 color = pathColor,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false),
                             )
                         }
+                        Spacer(Modifier.width(6.dp))
+                        // Always show both counts; a zero stays dim rather than vanishing,
+                        // so the +adds / −dels columns line up down the list.
                         Text(
-                            text = path.substring(cut + 1),
+                            text = "+${diff.additions}",
                             fontFamily = Opcode42Mono,
                             fontSize = 12.5.sp,
-                            color = pathColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            color = if (diff.additions > 0) Tertiary else OnSurfaceFaint,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "−${diff.deletions}",
+                            fontFamily = Opcode42Mono,
+                            fontSize = 12.5.sp,
+                            color = if (diff.deletions > 0) Error else OnSurfaceFaint,
                         )
                     }
-                    Spacer(Modifier.width(6.dp))
-                    // Always show both counts; a zero stays dim rather than vanishing,
-                    // so the +adds / −dels columns line up down the list.
-                    Text(
-                        text = "+${diff.additions}",
-                        fontFamily = Opcode42Mono,
-                        fontSize = 12.5.sp,
-                        color = if (diff.additions > 0) Tertiary else OnSurfaceFaint,
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = "-${diff.deletions}",
-                        fontFamily = Opcode42Mono,
-                        fontSize = 12.5.sp,
-                        color = if (diff.deletions > 0) Error else OnSurfaceFaint,
-                    )
                 }
             }
-            Spacer(Modifier.height(3.dp))
         }
 
         if (todos.isNotEmpty()) {
-            InfoSectionHeader("TODOS")
-            todos.forEach { todo ->
-                Row(
-                    verticalAlignment = Alignment.Top,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp),
-                ) {
-                    Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
-                        when (todo.status) {
-                            "completed" -> Icon(
-                                Icons.Default.Check,
-                                contentDescription = null,
-                                tint = Tertiary,
-                                modifier = Modifier.size(15.dp),
-                            )
-                            "in_progress" -> Spinner(size = 13.dp, color = Secondary)
-                            else -> Icon(
-                                Icons.Default.RadioButtonUnchecked,
-                                contentDescription = null,
-                                tint = OnSurfaceFaint,
-                                modifier = Modifier.size(12.dp),
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = todo.content,
-                        fontSize = 13.5.sp,
-                        color = if (todo.status == "completed") OnSurfaceFaint else OnSurfaceVariant,
-                        lineHeight = 18.sp,
-                    )
-                }
+            val activeCount = todos.count { it.status == "in_progress" }
+            SbSection(
+                title = "TODOS",
+                count = if (activeCount > 0) "$activeCount active" else null,
+                action = {
+                    Icon(Icons.Filled.Checklist, contentDescription = null, tint = LinkCyan, modifier = Modifier.size(14.dp))
+                },
+            ) {
+                todos.forEach { todo -> TodoRow(todo) }
             }
-            Spacer(Modifier.height(3.dp))
         }
 
         if (commands.isNotEmpty()) {
-            InfoSectionHeader("COMMANDS")
-            commands.forEach { cmd ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp),
-                ) {
-                    Text(
-                        text = "/${cmd.name}",
-                        fontFamily = Opcode42Mono,
-                        fontSize = 12.5.sp,
-                        color = LinkCyan,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.widthIn(max = 130.dp),
-                    )
-                    cmd.source?.takeIf { it == "mcp" || it == "skill" }?.let { src ->
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = src,
-                            fontFamily = Opcode42Mono,
-                            fontSize = 10.sp,
-                            color = if (src == "mcp") HeaderPurple else OnSurfaceFaint,
-                        )
-                    }
-                    cmd.description?.let { desc ->
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = desc,
-                            fontSize = 12.sp,
-                            color = OnSurfaceFaint,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
+            SbSection("COMMANDS") {
+                commands.forEach { cmd -> CommandRow(cmd) }
             }
-            Spacer(Modifier.height(3.dp))
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
     }
 }
 
+/**
+ * A bordered section block — the design's `SbSection`: a purple uppercase kicker, an
+ * optional mono count, an optional trailing cyan action glyph, then content, closed by a
+ * full-bleed hairline divider.
+ */
 @Composable
-private fun InfoSectionHeader(label: String) {
-    // Purple uppercase sans — the design's single section-header voice across the rail,
-    // the right info panel, and the phone list.
-    Text(
-        text = label,
-        modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 9.dp, bottom = 3.dp),
-        fontSize = 11.sp,
-        letterSpacing = 0.6.sp,
-        fontWeight = FontWeight.Bold,
-        color = HeaderPurple,
-    )
+private fun SbSection(
+    title: String,
+    count: String? = null,
+    action: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.6.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = HeaderPurple,
+                )
+                if (count != null) {
+                    Text(
+                        text = count,
+                        fontFamily = Opcode42Mono,
+                        fontSize = 10.5.sp,
+                        color = OnSurfaceFaint,
+                        modifier = Modifier.padding(start = 7.dp),
+                    )
+                }
+                if (action != null) {
+                    Spacer(Modifier.weight(1f))
+                    action()
+                }
+            }
+            content()
+        }
+        HorizontalDivider(color = Hairline, thickness = 1.dp)
+    }
 }
 
+/** Key→value row (design `KV`): sans key in a fixed gutter, mono-by-default value. */
 @Composable
-private fun InfoRow(key: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp)) {
-        Text(
-            text = key,
-            fontFamily = Opcode42Mono,
-            fontSize = 12.5.sp,
-            color = OnSurfaceFaint,
-            modifier = Modifier.width(64.dp),
-        )
+private fun KV(key: String, value: String, mono: Boolean = true) {
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = key, fontSize = 12.sp, color = OnSurfaceFaint, modifier = Modifier.width(64.dp))
         Text(
             text = value,
-            fontFamily = Opcode42Mono,
-            fontSize = 12.5.sp,
-            color = OnSurfaceVariant,
+            fontFamily = if (mono) Opcode42Mono else null,
+            fontSize = 13.sp,
+            color = OnSurface,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
+    }
+}
+
+/** The agent-mode pill ("Build") — the same chip the chat top bar uses. */
+@Composable
+private fun ModeChip(mode: String) {
+    Text(
+        text = mode.replaceFirstChar { it.uppercase() },
+        fontFamily = Opcode42Mono,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        color = OnPrimary,
+        modifier = Modifier
+            .clip(Opcode42Shapes.xs)
+            .background(Primary)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
+}
+
+/** A todo row (design `TodoRow`): status marker, text, and the chase loader while in progress. */
+@Composable
+private fun TodoRow(todo: TodoItem) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 30.dp),
+    ) {
+        TodoMarker(todo.status)
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = todo.content,
+            fontSize = 13.sp,
+            lineHeight = 17.sp,
+            fontWeight = if (todo.status == "in_progress") FontWeight.SemiBold else FontWeight.Normal,
+            color = when (todo.status) {
+                "in_progress" -> Secondary
+                "completed" -> OnSurfaceVariant
+                else -> OnSurface
+            },
+            modifier = Modifier.weight(1f),
+        )
+        // The brand chase loader, top-aligned; fades in/out with the in-progress state.
+        Spinner(
+            visible = todo.status == "in_progress",
+            modifier = Modifier.align(Alignment.Top).padding(start = 8.dp),
+            color = Secondary,
+        )
+    }
+}
+
+@Composable
+private fun TodoMarker(status: String) {
+    when (status) {
+        "completed" -> Box(
+            Modifier.size(16.dp).clip(CircleShape).background(Tertiary),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.Check, contentDescription = null, tint = OnPrimary, modifier = Modifier.size(11.dp))
+        }
+        "in_progress" -> Box(
+            Modifier.size(16.dp).clip(CircleShape).border(2.dp, Secondary, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.size(6.dp).clip(CircleShape).background(Secondary))
+        }
+        else -> Box(
+            Modifier
+                .size(16.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .border(2.dp, OnSurfaceGhost, RoundedCornerShape(4.dp)),
+        )
+    }
+}
+
+/** A slash-command row (design `Commands`): cyan name, optional source badge, description. */
+@Composable
+private fun CommandRow(cmd: CommandInfo) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 24.dp),
+    ) {
+        Text(
+            text = "/${cmd.name}",
+            fontFamily = Opcode42Mono,
+            fontSize = 12.5.sp,
+            color = LinkCyan,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(min = 78.dp, max = 130.dp),
+        )
+        cmd.source?.takeIf { it == "mcp" || it == "skill" }?.let { src ->
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = src,
+                fontFamily = Opcode42Mono,
+                fontSize = 10.sp,
+                color = if (src == "mcp") HeaderPurple else OnSurfaceFaint,
+            )
+        }
+        cmd.description?.let { desc ->
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = desc,
+                fontSize = 12.5.sp,
+                color = OnSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/** "9 min ago · 14 msgs" — the session's start age (reusing [relativeTime] past a week). */
+private fun startedLabel(createdMs: Long, msgs: Int): String {
+    val ago = verboseAgo(createdMs)
+    val msgPart = if (msgs > 0) "$msgs ${if (msgs == 1) "msg" else "msgs"}" else ""
+    return listOf(ago, msgPart).filter { it.isNotEmpty() }.joinToString(" · ")
+}
+
+private fun verboseAgo(epochMs: Long, now: Long = System.currentTimeMillis()): String {
+    if (epochMs <= 0L) return ""
+    val diff = now - epochMs
+    val mins = diff / 60_000
+    val hours = diff / 3_600_000
+    val days = diff / 86_400_000
+    return when {
+        diff < 60_000 -> "just now"
+        mins < 60 -> "$mins min ago"
+        hours < 24 -> "$hours ${if (hours == 1L) "hour" else "hours"} ago"
+        days < 7 -> "$days ${if (days == 1L) "day" else "days"} ago"
+        else -> relativeTime(epochMs)
     }
 }
 

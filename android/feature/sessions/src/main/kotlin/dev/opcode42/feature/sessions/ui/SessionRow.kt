@@ -71,7 +71,7 @@ import kotlin.math.roundToInt
 // The shared rail dimensions (RailOpenWidth / RailCollapsedWidth / RailAvatarSize / RailLeftInset)
 // live in :core:design so the host's Modifier.railWidth and this file agree on the morph endpoints.
 private val RailRowBand = 46.dp // constant row height across the open⇄collapsed morph
-private val SpinnerBaseDp = 16.dp // open loader size (item: increased from 13)
+private val SpinnerBaseDp = 18.dp // open loader size — matches the shared Spinner size
 private val SpinnerBadge = 18.dp // the collapsed loader's bordered backing disc
 // Busy-loader center, in row-start-relative dp, lerped by progress (1=open … 0=collapsed):
 private val SpinX1 = 200.dp // open: trailing-right of the 220dp row

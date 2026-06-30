@@ -133,18 +133,19 @@ fun SubAgentBlock(part: ToolPart, modifier: Modifier = Modifier) {
 @Composable
 private fun SubAgentStatus(part: ToolPart) {
     when (part.state) {
-        is ToolStateRunning -> Spinner(size = 13.dp, color = Secondary)
+        is ToolStateRunning -> Spinner(color = Secondary)
         is ToolStateCompleted -> Icon(
             Icons.Default.CheckCircle,
             contentDescription = "done",
             tint = Tertiary,
-            modifier = Modifier.size(15.dp),
+            // 18dp to match the running Spinner, so the slot doesn't resize when it finishes.
+            modifier = Modifier.size(18.dp),
         )
         is ToolStateError -> Icon(
             Icons.Default.Error,
             contentDescription = "error",
             tint = Error,
-            modifier = Modifier.size(15.dp),
+            modifier = Modifier.size(18.dp),
         )
         else -> Unit
     }

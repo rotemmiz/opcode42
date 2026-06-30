@@ -43,9 +43,8 @@ fun isSessionBusy(status: String?): Boolean = status != null && status != "idle"
  */
 @Composable
 fun SessionStatusSpinner(status: String?, modifier: Modifier = Modifier) {
-    if (isSessionBusy(status)) {
-        Spinner(modifier = modifier, size = 12.dp, color = Secondary)
-    }
+    // Always composed so it fades out (1→0) when the session goes idle, not just in.
+    Spinner(visible = isSessionBusy(status), modifier = modifier, color = Secondary)
 }
 
 /**

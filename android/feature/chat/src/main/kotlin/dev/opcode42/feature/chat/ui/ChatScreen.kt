@@ -261,10 +261,11 @@ fun ChatScreen(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false),
                             )
-                            if (uiState.sessionStatus == "busy") {
-                                Spacer(Modifier.width(8.dp))
-                                Spinner(size = 12.dp, color = Secondary)
-                            }
+                            Spinner(
+                                visible = uiState.sessionStatus == "busy",
+                                modifier = Modifier.padding(start = 8.dp),
+                                color = Secondary,
+                            )
                         }
                         uiState.session?.directory?.let { dir ->
                             HeaderSubtitle(directory = dir, branch = uiState.branch)
@@ -440,7 +441,6 @@ fun ChatScreen(
                     if (uiState.isLoading && uiState.messages.isEmpty() && uiState.optimisticMessages.isEmpty()) {
                         Spinner(
                             modifier = Modifier.align(Alignment.Center),
-                            size = 32.dp,
                             color = Secondary,
                         )
                     }
