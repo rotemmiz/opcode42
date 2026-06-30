@@ -210,13 +210,17 @@ fun sessionFileDiffs(
  */
 private fun syntheticDiffsFor(parts: List<Part>): List<SnapshotFileDiff> =
     parts.filterIsInstance<ToolPart>()
-        .filter { it.tool.lowercase() in EDIT_TOOL_NAMES }
+        // Only completed edits actually changed a file — a failed/in-flight edit still
+        // carries the proposed newString in its input, so gate on state to avoid phantoms.
+        .filter { it.tool.lowercase() in EDIT_TOOL_NAMES && it.state is ToolStateCompleted }
         .mapNotNull { tp ->
             val filePath = tp.inputString("file_path", "filePath", "path") ?: return@mapNotNull null
-            // syntheticDiff returns null until the edit has a newString, so an in-flight
-            // edit naturally contributes nothing — same gate the diff card relies on.
-            syntheticDiff(tp, filePath)
+            syntheticDiff(tp, filePath)?.let { filePath to it }
         }
+        // One diff per file: multiple edits to a file would otherwise sum into inflated
+        // churn downstream. Keep the first (mirrors the diff card's per-file fallback).
+        .distinctBy { it.first }
+        .map { it.second }
 
 private fun toolRowOf(part: ToolPart): ToolRow {
     val tool = part.tool.lowercase()
