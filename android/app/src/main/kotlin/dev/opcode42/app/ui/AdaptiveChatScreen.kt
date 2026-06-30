@@ -28,8 +28,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +45,7 @@ import dev.opcode42.core.model.Session
 import dev.opcode42.core.model.SnapshotFileDiff
 import dev.opcode42.core.model.TokenUsage
 import dev.opcode42.core.design.brand.Spinner
+import dev.opcode42.core.design.rail.*
 import dev.opcode42.core.design.theme.*
 import dev.opcode42.feature.chat.ChatViewModel
 import dev.opcode42.feature.chat.DRAFT_SESSION_ID
@@ -368,11 +367,11 @@ fun AdaptiveChatScreen(
 // ─── Rail width morph ──────────────────────────────────────────────────────────
 
 /**
- * Constrains the rail to `lerp(60dp, 220dp, progress())`, read in the layout phase so the
- * per-frame morph never recomposes. The chat pane (a `weight(1f)` sibling) reflows smoothly.
+ * Constrains the rail to `lerp(RailCollapsedWidth, RailOpenWidth, progress())`, read in the layout
+ * phase so the per-frame morph never recomposes. The chat pane (a `weight(1f)` sibling) reflows smoothly.
  */
 private fun Modifier.railWidth(progress: () -> Float): Modifier = layout { measurable, constraints ->
-    val w = lerp(60.dp, 220.dp, progress().coerceIn(0f, 1f)).roundToPx()
+    val w = lerp(RailCollapsedWidth, RailOpenWidth, progress().coerceIn(0f, 1f)).roundToPx()
     val placeable = measurable.measure(constraints.copy(minWidth = w, maxWidth = w))
     layout(w, placeable.height) { placeable.place(0, 0) }
 }
@@ -411,10 +410,13 @@ internal fun NavRailPane(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
+                    // Center the wordmark + New vertically in the 54dp header band so they sit on
+                    // the chevron's baseline (which is center-aligned) rather than hugging the top.
+                    .align(Alignment.CenterStart)
                     .fillMaxWidth()
                     // Front-load the fade (gone by progress≈0.4) so the wordmark + New never
                     // visibly squeeze as the rail narrows. End padding leaves room for the chevron.
-                    .graphicsLayer { alpha = ((progress() - 0.4f) * 2.5f).coerceIn(0f, 1f) }
+                    .graphicsLayer { alpha = ((progress() - 0.4f) / 0.4f).coerceIn(0f, 1f) }
                     .padding(start = 14.dp, end = 50.dp),
             ) {
                 Text(
@@ -498,34 +500,36 @@ internal fun NavRailPane(
             modifier = Modifier.weight(1f),
         )
 
-        if (activeDirectory != null) {
-            HorizontalDivider(color = Hairline, thickness = 1.dp)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-            ) {
-                Box(
-                    Modifier
-                        // Glide to the band center as the rail collapses (path fades, dot centers).
-                        .offset { IntOffset(androidx.compose.ui.util.lerp(17.dp.toPx(), 0f, progress()).roundToInt(), 0) }
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(Tertiary),
-                )
-                Spacer(Modifier.width(6.dp))
-                // `~`-relative display of the daemon-host path; fades out as the rail collapses.
-                Text(
-                    text = homeRelativeDir(activeDirectory),
-                    fontFamily = Opcode42Mono,
-                    fontSize = 11.sp,
-                    color = OnSurfaceFaint,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.graphicsLayer { alpha = progress() },
-                )
-            }
+        // Persistent footer: a green "connected" dot + the `~`-relative workdir. Always shown
+        // (even on a draft with no session yet) so the rail keeps its status line — falls back to
+        // a bare "~" when there's no active directory.
+        HorizontalDivider(color = Hairline, thickness = 1.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+            Box(
+                Modifier
+                    // Open (progress 1): flush left (offset 0) so the path follows it. Collapsed
+                    // (progress 0): offset 17dp → dot left edge ≈27, center 30 = the 60dp band's center.
+                    .offset { IntOffset(androidx.compose.ui.util.lerp(17.dp.toPx(), 0f, progress()).roundToInt(), 0) }
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(Tertiary),
+            )
+            Spacer(Modifier.width(6.dp))
+            // `~`-relative display of the daemon-host path; fades out as the rail collapses.
+            Text(
+                text = homeRelativeDir(activeDirectory).ifEmpty { "~" },
+                fontFamily = Opcode42Mono,
+                fontSize = 11.sp,
+                color = OnSurfaceFaint,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.graphicsLayer { alpha = progress() },
+            )
         }
     }
 }
@@ -541,35 +545,16 @@ private fun NavRow(
     onClick: () -> Unit,
 ) {
     val accent = Secondary
+    val container = SecondaryContainer // hoisted: a @Composable token can't be read in a draw lambda
     Box(
         Modifier
             .fillMaxWidth()
             .height(40.dp)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            // Active highlight — ONE shape that resizes from a full-width pill (open) into the
+            // centered square (collapsed); see railActiveHighlight. No cross-fade of two boxes.
+            .railActiveHighlight(active = active, progress = progress, container = container, accent = accent),
     ) {
-        // Active highlight morphs: a full-width pill when open (fades out) and a 38dp square at
-        // inset 11 — centered in the 60dp band — when collapsed (fades in).
-        if (active) {
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .padding(horizontal = 6.dp, vertical = 1.dp)
-                    .graphicsLayer { alpha = progress() }
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(SecondaryContainer)
-                    .drawBehind { drawRect(accent, size = Size(2.5.dp.toPx(), size.height)) },
-            )
-            Box(
-                Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 11.dp)
-                    .size(38.dp)
-                    .graphicsLayer { alpha = 1f - progress() }
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(SecondaryContainer)
-                    .drawBehind { drawRect(accent, size = Size(2.dp.toPx(), size.height)) },
-            )
-        }
         // Static at inset 22: a 16dp icon there spans 22–38, centered (30) in the 60dp band, so it
         // never moves as the rail retracts — only the label collapses away.
         Icon(

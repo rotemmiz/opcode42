@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.filled.Archive
@@ -34,10 +33,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -45,6 +46,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
 import dev.opcode42.core.design.brand.Spinner
+import dev.opcode42.core.design.rail.RailAvatarSize
+import dev.opcode42.core.design.rail.RailLeftInset
+import dev.opcode42.core.design.rail.RailOpenWidth
+import dev.opcode42.core.design.rail.railActiveHighlight
 import dev.opcode42.core.design.theme.Error
 import dev.opcode42.core.design.theme.Hairline
 import dev.opcode42.core.design.theme.OnSurface
@@ -63,9 +68,9 @@ import dev.opcode42.feature.sessions.relativeTime
 import kotlin.math.roundToInt
 
 // ─── Rail-morph geometry (compact) ─────────────────────────────────────────────
+// The shared rail dimensions (RailOpenWidth / RailCollapsedWidth / RailAvatarSize / RailLeftInset)
+// live in :core:design so the host's Modifier.railWidth and this file agree on the morph endpoints.
 private val RailRowBand = 46.dp // constant row height across the open⇄collapsed morph
-private val RailLeftInset = 11.dp // == (60 − 38)/2, so the avatar lands centered in the 60dp band
-private val AvatarSize = 38.dp
 private val SpinnerBaseDp = 16.dp // open loader size (item: increased from 13)
 private val SpinnerBadge = 18.dp // the collapsed loader's bordered backing disc
 // Busy-loader center, in row-start-relative dp, lerped by progress (1=open … 0=collapsed):
@@ -76,14 +81,37 @@ private val SpinY0 = 6.dp // collapsed: up at the avatar's top edge
 private const val SpinScale1 = 1.0f
 private const val SpinScale0 = 0.8f
 
+// Collapse hand-off windows (progress 1=open … 0=collapsed). The open title content fades OUT by
+// [MorphContentGone]; the collapsed letter/badge only fades IN below [MorphGlyphIn]. The gap
+// between them (MorphContentGone − MorphGlyphIn = 0.05) is a dead-band guaranteeing the two are
+// never visible at once — a resize hand-off, not a cross-fade. [MorphRamp] is each fade's width.
+private const val MorphContentGone = 0.25f
+private const val MorphGlyphIn = 0.2f
+private const val MorphRamp = 0.2f
+
+/**
+ * Lay the open row content out at `max(available, RailOpenWidth)` and let the parent's
+ * `clipToBounds` cut the overflow. In the inline rail this keeps the title at its open size so it
+ * clips off the right edge as the rail narrows (a resize, not a squeeze); in the wider overlay
+ * drawer (≥ open width) it simply fills the available width as before — no artificial 220dp cap.
+ * Falls back to the open width when the incoming width is unbounded (defensive — the rail is always
+ * width-bounded today).
+ */
+private fun Modifier.railContentWidth(): Modifier = layout { measurable, constraints ->
+    val w = if (constraints.hasBoundedWidth) maxOf(constraints.maxWidth, RailOpenWidth.roundToPx()) else RailOpenWidth.roundToPx()
+    val placeable = measurable.measure(constraints.copy(minWidth = w, maxWidth = w))
+    layout(w, placeable.height) { placeable.place(0, 0) }
+}
+
 /**
  * One rich session row shared by the full-screen list and the in-chat left rail.
  *
  * The full list (`compact=false`) leads with a status dot and a `dir · time` meta line and is
  * unaffected by [progress]. The narrow [compact] rail MORPHS between open (220dp) and collapsed
  * (60dp) driven by [progress] (`1f`=open … `0f`=collapsed): the title + status/`time · workdir`
- * meta fade out while a single-letter avatar fades in at the same vertical position, the active
- * amber tint crossfades, and the busy loader translates up + scales onto the avatar.
+ * meta clip off the right edge and fade out, then — after a dead-band so the two never overlap — a
+ * single-letter avatar fades in centered; the active amber highlight resizes from a full-row pill
+ * into the centered square, and the busy loader translates up + scales onto the avatar.
  *
  * [progress] is a provider read ONLY inside draw/layout lambdas, so the per-frame float never
  * recomposes the row. Both layouts keep the long-press menu (Rename/Fork/Archive/Delete) and the
@@ -201,46 +229,32 @@ private fun CompactRailRow(
 ) {
     // Flip the structural bits (drop the inline actions) once, at the midpoint — not per frame.
     val open by remember { derivedStateOf { progress() > 0.5f } }
+    val container = SecondaryContainer // hoisted: a @Composable token can't be read in a draw lambda
 
     Column(Modifier.fillMaxWidth()) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = RailRowBand)
-                .combinedClickable(onClick = onClick, onLongClick = onLongPress),
+                // Clip the open content (laid out at the full open width) to the live rail width, so
+                // the title resizes off the right edge as the rail narrows instead of overflowing.
+                .clipToBounds()
+                .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+                // Active highlight (drawn as the row background) — ONE shape that resizes from a
+                // full-row amber pill (open) into the centered square (collapsed); see
+                // railActiveHighlight. No cross-fade of two boxes.
+                .railActiveHighlight(active = isActive, progress = progress, container = container, accent = accent),
         ) {
-            // (1) Active pill — open state, full-row amber tint + left accent, fades OUT on collapse.
-            if (isActive) {
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .padding(horizontal = 6.dp, vertical = 1.dp)
-                        .graphicsLayer { alpha = progress() }
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(SecondaryContainer)
-                        .drawBehind { drawRect(accent, size = Size(2.5.dp.toPx(), size.height)) },
-                )
-            }
-            // (2) Letter — the COLLAPSED form of the row. The expanded view shows only the title
-            //     (no leading avatar to waste space); on collapse the title fades out (below) and
-            //     this single letter fades in, centered in the 60dp band (RailLeftInset == (60−38)/2).
-            //     Active rows get the amber square; idle rows are a bare letter.
+            // (1) Letter — the COLLAPSED glyph. The expanded view shows only the title (no leading
+            //     avatar to waste space); the letter is sequenced to fade IN only below [MorphGlyphIn],
+            //     AFTER the title has cleared — so the two never overlap (no mid-collapse double-image).
+            //     It lands centered in the 60dp band atop the contracted active square.
             Box(
                 Modifier
                     .align(Alignment.CenterStart)
                     .padding(start = RailLeftInset)
-                    .size(AvatarSize)
-                    .graphicsLayer { alpha = 1f - progress() }
-                    .clip(RoundedCornerShape(8.dp))
-                    .then(
-                        if (isActive) {
-                            Modifier
-                                .background(SecondaryContainer)
-                                .drawBehind { drawRect(accent, size = Size(2.dp.toPx(), size.height)) }
-                        } else {
-                            Modifier
-                        },
-                    ),
+                    .size(RailAvatarSize)
+                    .graphicsLayer { alpha = ((MorphGlyphIn - progress()) / MorphRamp).coerceIn(0f, 1f) },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -251,14 +265,16 @@ private fun CompactRailRow(
                     color = if (isActive) OnSurface else OnSurfaceVariant,
                 )
             }
-            // (3) Open content — title + status/`time · workdir` meta, using the full width from the
-            //     left (no avatar indent); it fades out on collapse as the letter fades in.
+            // (2) Open content — title + status/`time · workdir` meta, using the full width from the
+            //     left (no avatar indent). Held at the open width (railContentWidth) so it clips off
+            //     the right edge as the rail narrows (a resize, not a squeeze), then its last sliver
+            //     fades out by [MorphContentGone] — before the letter fades in — so they never overlap.
             Column(
                 Modifier
                     .align(Alignment.CenterStart)
-                    .fillMaxWidth()
+                    .railContentWidth()
                     .padding(start = 12.dp, end = if (busy) 30.dp else 12.dp)
-                    .graphicsLayer { alpha = progress() },
+                    .graphicsLayer { alpha = ((progress() - MorphContentGone) / MorphRamp).coerceIn(0f, 1f) },
             ) {
                 Text(
                     text = session.title?.takeIf { it.isNotBlank() } ?: "New session",
@@ -294,7 +310,7 @@ private fun CompactRailRow(
                     )
                 }
             }
-            // (4) Busy loader — a single spinner that translates up + scales from the open
+            // (3) Busy loader — a single spinner that translates up + scales from the open
             //     trailing-right onto the collapsed avatar, seating into a bordered badge.
             if (busy) {
                 Box(
@@ -308,7 +324,9 @@ private fun CompactRailRow(
                             )
                         }
                         .size(SpinnerBadge)
-                        .graphicsLayer { alpha = 1f - progress() }
+                        // Seat the backing disc in only at the collapse tail (matches the letter), so
+                        // it doesn't ghost behind the spinner through the middle of the morph.
+                        .graphicsLayer { alpha = ((MorphGlyphIn - progress()) / MorphRamp).coerceIn(0f, 1f) }
                         .clip(CircleShape)
                         .background(SurfaceContainerLow)
                         .border(1.dp, Hairline, CircleShape),
