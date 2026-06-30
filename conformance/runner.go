@@ -37,6 +37,9 @@ func runScenario(target, user, pass string, sc Scenario) result.Scenario {
 
 	c := NewClient(target, dir, paths...)
 	c.User, c.Pass = user, pass
+	// Delete the sessions this scenario created so they don't accumulate in the
+	// daemon's persistent store across runs (runs before the temp-dir RemoveAll).
+	defer c.Cleanup(paths...)
 	steps, runErr := sc.Run(c)
 	if runErr != nil {
 		// Record what we captured plus the error, so the diff surfaces a

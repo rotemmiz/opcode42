@@ -73,21 +73,26 @@ class SseLiveOpencodeTest {
 
                 val newId = createSession(client, base, directory)
                 println("[SseLiveOpencodeTest] created $newId on the daemon; waiting for it on the SSE stream…")
-
-                val arrived = withTimeoutOrNull(10_000) {
-                    while (store.state.value.sessions.none { it.id == newId }) delay(50)
-                    true
+                try {
+                    val arrived = withTimeoutOrNull(10_000) {
+                        while (store.state.value.sessions.none { it.id == newId }) delay(50)
+                        true
+                    }
+                    assertEquals(
+                        true,
+                        arrived,
+                        "session $newId created on the daemon never arrived in the store via /global/event — " +
+                            "the live-update path is broken (flush loop not draining).",
+                    )
+                    println(
+                        "[SseLiveOpencodeTest] PASS — store now has ${store.state.value.sessions.size} sessions; " +
+                            "live SSE update reached the store.",
+                    )
+                } finally {
+                    // Don't leave the session we created lingering on the live daemon (runs even
+                    // if the assertion above fails).
+                    deleteSession(client, base, newId, directory)
                 }
-                assertEquals(
-                    true,
-                    arrived,
-                    "session $newId created on the daemon never arrived in the store via /global/event — " +
-                        "the live-update path is broken (flush loop not draining).",
-                )
-                println(
-                    "[SseLiveOpencodeTest] PASS — store now has ${store.state.value.sessions.size} sessions; " +
-                        "live SSE update reached the store.",
-                )
             }
         } finally {
             manager.stop()
@@ -112,6 +117,18 @@ class SseLiveOpencodeTest {
             .build()
         val body = client.newCall(req).execute().use { it.body!!.string() }
         return Json.parseToJsonElement(body).jsonObject["id"]!!.jsonPrimitive.content
+    }
+
+    /** Best-effort deletes the session this test created so it doesn't linger on the live daemon. */
+    private fun deleteSession(client: OkHttpClient, base: String, id: String, directory: String) {
+        runCatching {
+            val req = Request.Builder()
+                .url("$base/session/$id")
+                .header("x-opencode-directory", directory)
+                .delete()
+                .build()
+            client.newCall(req).execute().use { }
+        }
     }
 
     private class LiveConnectionProvider(url: String) : ActiveConnectionProvider {

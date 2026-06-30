@@ -420,6 +420,9 @@ func runLiveScenario(target, user, pass string, sc LiveScenario) result.Scenario
 
 	c := NewLiveClient(target, dir, paths...)
 	c.User, c.Pass = user, pass
+	// Delete the sessions this scenario created so they don't accumulate in the
+	// daemon's persistent store across runs (runs before the temp-dir RemoveAll).
+	defer c.Cleanup(paths...)
 	steps, runErr := sc.Run(c)
 	if runErr != nil {
 		fmt.Fprintf(os.Stderr, "live scenario %s: %v\n", sc.Name, runErr)

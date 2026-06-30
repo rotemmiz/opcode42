@@ -176,6 +176,56 @@ func (c *Client) LastJSON(v any) error {
 	return json.Unmarshal(c.lastBody, v)
 }
 
+// Cleanup best-effort deletes the sessions this scenario created on the daemon:
+// every session whose stored directory matches the scenario's temp dir (or its
+// symlink-resolved form, passed as extraDirs). Without it, each conformance run
+// leaves a trail of empty "New session" rows in the daemon's global, persistent
+// session store — opencode resolves symlinks before storing `directory`, so the
+// resolved form must be included to match. Routing/auth mirror a normal request
+// (default ReqOpts → directory header + Basic auth). All errors are ignored:
+// cleanup must never fail or slow a conformance run, and a step is NOT recorded
+// (it would pollute the dual-run diff). It is unrecorded by construction here.
+func (c *Client) Cleanup(extraDirs ...string) {
+	want := map[string]bool{}
+	if c.Dir != "" {
+		want[c.Dir] = true
+	}
+	for _, d := range extraDirs {
+		if d != "" {
+			want[d] = true
+		}
+	}
+	req, err := c.buildRequest(context.Background(), http.MethodGet, "/session", ReqOpts{})
+	if err != nil {
+		return
+	}
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	var sessions []struct {
+		ID  string `json:"id"`
+		Dir string `json:"directory"`
+	}
+	if json.Unmarshal(body, &sessions) != nil {
+		return
+	}
+	for _, s := range sessions {
+		if s.ID == "" || !want[s.Dir] {
+			continue
+		}
+		dreq, err := c.buildRequest(context.Background(), http.MethodDelete, "/session/"+s.ID, ReqOpts{})
+		if err != nil {
+			continue
+		}
+		if dresp, derr := c.HTTP.Do(dreq); derr == nil {
+			_ = dresp.Body.Close()
+		}
+	}
+}
+
 // SSE connects to an SSE endpoint and captures up to maxEvents events (or until
 // wait elapses), returning a step whose SSE field holds the normalized events.
 func (c *Client) SSE(stepName, path string, wait time.Duration, maxEvents int) (result.Step, error) {
