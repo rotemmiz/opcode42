@@ -95,6 +95,17 @@ class Opcode42Client @Inject constructor(
             }
         }
 
+    /**
+     * GET /vcs?directory= — current VCS branch info for the directory (drives the header's
+     * branch chip). Both [VcsInfo] fields are optional, so a `{}` body maps to all-nulls. A
+     * backend without `/vcs` returns non-2xx, which throws and the caller (repository) swallows
+     * it — leaving the branch unshown.
+     */
+    suspend fun getVcsInfo(directory: String): VcsInfo =
+        transport.get("/vcs", directory = directory) { json ->
+            Opcode42Json.decodeFromJsonElement(VcsInfo.serializer(), json)
+        }
+
     /** GET /provider — providers and their models, for the model picker. */
     suspend fun listProviders(directory: String? = null): ProvidersResponse =
         transport.get("/provider", directory = directory) { json ->

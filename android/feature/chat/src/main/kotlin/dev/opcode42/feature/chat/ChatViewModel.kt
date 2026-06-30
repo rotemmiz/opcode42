@@ -44,6 +44,8 @@ data class ChatUiState(
     val agentMode: String? = null,
     val modelID: String? = null,
     val providerID: String? = null,
+    /** Current VCS branch of the session's directory, for the header subtitle; null = unknown/not a repo. */
+    val branch: String? = null,
     /** Live context-window occupancy: the most recent assistant turn's token usage
      *  (NOT the session's cumulative total, which grows unbounded across turns). */
     val contextTokens: TokenUsage? = null,
@@ -76,12 +78,15 @@ class ChatViewModel @Inject constructor(
     private val _isSending = MutableStateFlow(false)
     private val _isLoading = MutableStateFlow(false)
 
+    /** Current git branch of the session directory; fetched once when the directory is known. */
+    private val _branch = MutableStateFlow<String?>(null)
+
     /** One-shot events (snackbars). BUFFERED + trySend so emitting never suspends or blocks. */
     private val _events = Channel<ChatEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
 
     val uiState: StateFlow<ChatUiState> =
-        combine(chatRepo.observe(sessionId), _isSending, _isLoading) { snap, sending, loading ->
+        combine(chatRepo.observe(sessionId), _isSending, _isLoading, _branch) { snap, sending, loading, branch ->
             val messages = snap.messages
             // Status-strip context comes from the most recent assistant turn that
             // carries a model/agent (the live "what's running" state).
@@ -101,6 +106,7 @@ class ChatViewModel @Inject constructor(
                     ?: messages.lastOrNull { it.agent != null }?.agent,
                 modelID = lastModelled?.modelID,
                 providerID = lastModelled?.providerID,
+                branch = branch,
                 // Context = the latest assistant turn whose tokens are populated.
                 // The daemon emits a zero-valued `tokens` block at turn START (before
                 // counts are known), so we require a non-zero footprint — otherwise the
@@ -164,6 +170,15 @@ class ChatViewModel @Inject constructor(
             viewModelScope.launch {
                 val dir = uiState.first { it.session?.directory != null }.session?.directory
                 if (dir != null) chatRepo.subscribeDirectory(dir)
+            }
+            // Fetch the directory's VCS branch for the header subtitle (once dir is known).
+            // Best-effort: backends without /vcs (the Go daemon currently 501s) or non-repo
+            // directories leave the branch unshown.
+            viewModelScope.launch {
+                val dir = uiState.first { it.session?.directory != null }.session?.directory ?: return@launch
+                chatRepo.vcsInfo(dir).onSuccess { info ->
+                    _branch.value = info.branch?.takeIf { it.isNotBlank() }
+                }
             }
             // Reload messages after a reconnection (GlobalDisposed wipes state)
             viewModelScope.launch {
