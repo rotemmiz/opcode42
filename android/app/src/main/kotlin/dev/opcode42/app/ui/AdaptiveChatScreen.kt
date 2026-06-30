@@ -242,44 +242,73 @@ fun AdaptiveChatScreen(
             .sortedByDescending { it.additions + it.deletions }
     }
 
-    // Center pane: chat, plus the persistent right info panel when the layout calls for it.
-    val centerPane: @Composable (Modifier) -> Unit = { mod ->
-        Row(mod) {
-            // Box wrapper gives ChatScreen's Scaffold a bounded weight slot in the Row.
-            Box(Modifier.weight(1f)) {
-                ChatScreen(
-                    sessionId = sessionId,
-                    onNavigateBack = onNavigateBack,
-                    onOpenTerminal = onOpenTerminal,
-                    onNavigateToSession = onNavigateToSession,
-                    onNewSession = onNewSession,
-                    onOpenTasksBoard = onOpenTasksBoard,
-                    applySystemInsets = false,
-                    isMultiPane = !layout.singlePane,
-                    onOpenNavRail = toggleMenu,
-                    attentionBadge = needsAttentionElsewhere,
-                    showInfoToggle = layout.showRightPanel,
-                    infoPanelOpen = infoPanelOpen,
-                    onToggleInfoPanel = { infoPanelOpen = !infoPanelOpen },
-                    showTodoSheet = !rightPanelVisible,
-                    isDraft = sessionId == DRAFT_SESSION_ID,
-                    viewModel = chatViewModel,
-                )
-            }
-            if (rightPanelVisible) {
-                Box(Modifier.width(1.dp).fillMaxHeight().background(Hairline))
-                SessionInfoPanel(
-                    session = chatUiState.session,
-                    agentMode = chatUiState.agentMode,
-                    modelID = chatUiState.modelID,
-                    providerID = chatUiState.providerID,
-                    tokens = chatUiState.contextTokens,
-                    todos = chatUiState.todos,
-                    diffs = aggregatedDiffs,
-                    commands = chatCommands,
-                    modifier = Modifier.width(280.dp).fillMaxHeight(),
-                )
-            }
+    // The right context sidebar (shown when the info panel is on). Rendered as a slot
+    // inside ChatScreen in multi-pane so the top bar spans the full width above it.
+    val infoSlot: (@Composable () -> Unit)? = if (rightPanelVisible) {
+        {
+            SessionInfoPanel(
+                session = chatUiState.session,
+                agentMode = chatUiState.agentMode,
+                modelID = chatUiState.modelID,
+                providerID = chatUiState.providerID,
+                tokens = chatUiState.contextTokens,
+                todos = chatUiState.todos,
+                diffs = aggregatedDiffs,
+                commands = chatCommands,
+                modifier = Modifier.width(280.dp).fillMaxHeight(),
+            )
+        }
+    } else {
+        null
+    }
+
+    // The chat surface. In multi-pane it also hosts the [railContent] rail + [infoContent]
+    // sidebar so the top bar spans the full width above all three; single-pane = null slots.
+    val chat: @Composable (
+        railContent: (@Composable () -> Unit)?,
+        infoContent: (@Composable () -> Unit)?,
+    ) -> Unit = { railContent, infoContent ->
+        ChatScreen(
+            sessionId = sessionId,
+            onNavigateBack = onNavigateBack,
+            onOpenTerminal = onOpenTerminal,
+            onNavigateToSession = onNavigateToSession,
+            onNewSession = onNewSession,
+            onOpenTasksBoard = onOpenTasksBoard,
+            applySystemInsets = false,
+            isMultiPane = !layout.singlePane,
+            onOpenNavRail = toggleMenu,
+            attentionBadge = needsAttentionElsewhere,
+            showInfoToggle = layout.showRightPanel,
+            infoPanelOpen = infoPanelOpen,
+            onToggleInfoPanel = { infoPanelOpen = !infoPanelOpen },
+            showTodoSheet = !rightPanelVisible,
+            isDraft = sessionId == DRAFT_SESSION_ID,
+            railContent = railContent,
+            infoContent = infoContent,
+            viewModel = chatViewModel,
+        )
+    }
+
+    // The inline rail content (full 220dp rail or the 60dp collapsed icon band).
+    val railSlot: @Composable () -> Unit = {
+        if (railOpen) {
+            // Selecting a session keeps the persistent triptych rail open (only a
+            // manually-opened Medium rail collapses). The collapse chevron always closes.
+            railPane(
+                Modifier.width(220.dp).fillMaxHeight(),
+                { if (!layout.railPersistent) railOpen = false },
+                { railOpen = false },
+            )
+        } else {
+            CollapsedRail(
+                sessions = sessionListState.groups.flatMap { it.sessions },
+                statuses = sessionListState.statuses,
+                activeId = sessionId,
+                onExpand = { railOpen = true },
+                onNew = onNewSession,
+                onSelect = { id -> onNavigateToSession(id) },
+            )
         }
     }
 
@@ -290,7 +319,8 @@ fun AdaptiveChatScreen(
             .systemBarsPadding(),
     ) {
         when (layout.leftRailMode) {
-            // Compact width: the sessions menu floats over the chat as a scrim drawer.
+            // Compact width: single pane — the sessions menu floats over the chat as a
+            // scrim drawer; the chat hosts no panes (rail = drawer, no sidebar).
             LeftRailMode.Overlay -> ModalNavigationDrawer(
                 drawerState = drawerState,
                 drawerContent = {
@@ -300,34 +330,11 @@ fun AdaptiveChatScreen(
                     }
                 },
             ) {
-                centerPane(Modifier.fillMaxSize())
+                chat(null, null)
             }
-            // Wider windows: the menu pushes the chat aside (inline). Open = the full
-            // 220dp rail; collapsed = a narrow 60dp icon band (sessions + running status
-            // stay reachable) rather than vanishing entirely.
-            LeftRailMode.InlinePush -> Row(Modifier.fillMaxSize()) {
-                if (railOpen) {
-                    // Selecting a session keeps the persistent triptych rail open (only a
-                    // manually-opened Medium rail collapses); the chat content swaps in
-                    // place. The collapse chevron always closes the rail.
-                    railPane(
-                        Modifier.width(220.dp).fillMaxHeight(),
-                        { if (!layout.railPersistent) railOpen = false },
-                        { railOpen = false },
-                    )
-                } else {
-                    CollapsedRail(
-                        sessions = sessionListState.groups.flatMap { it.sessions },
-                        statuses = sessionListState.statuses,
-                        activeId = sessionId,
-                        onExpand = { railOpen = true },
-                        onNew = onNewSession,
-                        onSelect = { id -> onNavigateToSession(id) },
-                    )
-                }
-                Box(Modifier.width(1.dp).fillMaxHeight().background(Hairline))
-                centerPane(Modifier.weight(1f))
-            }
+            // Wider windows: the chat hosts the triptych — rail (full 220dp or the 60dp
+            // collapsed icon band) + sidebar — UNDER a single full-width top bar.
+            LeftRailMode.InlinePush -> chat(railSlot, infoSlot)
         }
 
         SnackbarHost(sessionSnackbar, Modifier.align(Alignment.BottomCenter))
