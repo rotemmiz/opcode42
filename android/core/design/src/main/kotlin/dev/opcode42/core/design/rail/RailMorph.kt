@@ -4,8 +4,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 
@@ -40,8 +43,10 @@ private val CollapsedAccent = 2.dp // accent thins into the square
 /**
  * Draws the active-row highlight as ONE shape that RESIZES with the rail (no cross-fade of two
  * boxes): a full-width rounded pill with a left accent bar when open, contracting into a fixed
- * [RailAvatarSize] square centered in the [RailCollapsedWidth] band when collapsed. Drawn in the
- * draw phase ([progress] is read here, never at composition) so the morph never recomposes.
+ * [RailAvatarSize] square centered in the [RailCollapsedWidth] band when collapsed. The accent bar
+ * is clipped to the pill so its LEFT corners follow the rounding (matching the right) rather than
+ * squaring it off. Drawn in the draw phase ([progress] is read here, never at composition) so the
+ * morph never recomposes.
  *
  * The collapsed square is a FIXED [RailAvatarSize] and stays vertically centered, so it never
  * distorts when the row grows taller than its band (e.g. a large accessibility font scale) — only
@@ -64,15 +69,23 @@ fun Modifier.railActiveHighlight(
     val rectH = lerp(RailAvatarSize.toPx(), size.height - OpenInsetY.toPx() * 2f, p)
     val top = (size.height - rectH) / 2f
     val r = lerp(CollapsedCorner.toPx(), OpenCorner.toPx(), p)
+    val width = size.width - insetX * 2f
     drawRoundRect(
         color = container,
         topLeft = Offset(insetX, top),
-        size = Size(size.width - insetX * 2f, rectH),
+        size = Size(width, rectH),
         cornerRadius = CornerRadius(r, r),
     )
-    drawRect(
-        accent,
-        topLeft = Offset(insetX, top),
-        size = Size(lerp(CollapsedAccent.toPx(), OpenAccent.toPx(), p), rectH),
-    )
+    // Clip the accent bar to the pill so its left corners round with the pill (they used to read
+    // sharp on the left while the right stayed round); the bar's right edge is interior, untouched.
+    val pill = Path().apply {
+        addRoundRect(RoundRect(insetX, top, insetX + width, top + rectH, CornerRadius(r, r)))
+    }
+    clipPath(pill) {
+        drawRect(
+            accent,
+            topLeft = Offset(insetX, top),
+            size = Size(lerp(CollapsedAccent.toPx(), OpenAccent.toPx(), p), rectH),
+        )
+    }
 }

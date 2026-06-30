@@ -81,13 +81,23 @@ private val SpinY0 = 6.dp // collapsed: up at the avatar's top edge
 private const val SpinScale1 = 1.0f
 private const val SpinScale0 = 0.8f
 
-// Collapse hand-off windows (progress 1=open … 0=collapsed). The open title content fades OUT by
-// [MorphContentGone]; the collapsed letter/badge only fades IN below [MorphGlyphIn]. The gap
-// between them (MorphContentGone − MorphGlyphIn = 0.05) is a dead-band guaranteeing the two are
-// never visible at once — a resize hand-off, not a cross-fade. [MorphRamp] is each fade's width.
-private const val MorphContentGone = 0.25f
+// Collapse hand-off windows (progress 1=open … 0=collapsed). The collapsed letter/badge fade IN
+// below [MorphGlyphIn] over [MorphRamp]. The open session name fades on its OWN, steeper+higher
+// window ([TitleGone]/[TitleRamp]) and clears well above the letter's window, so the two are never
+// visible at once — a resize hand-off, not a cross-fade.
 private const val MorphGlyphIn = 0.2f
 private const val MorphRamp = 0.2f
+
+// Session-name (open title + meta) fade. Gated into the NEAR-OPEN band so it's a pure in-place
+// fade, never a horizontal wipe: the name is held at the open width (railContentWidth) and the row
+// clips off its right edge as the rail narrows, so if it were still visible past ~full width that
+// clip would read as a left-translate. Fading it fully out within the top sliver of progress means
+// the rail is still essentially full-width the whole time the name is visible, so the clip never
+// reaches the text — it just dissolves. Same window both directions gives the asks for free: on
+// collapse it leaves the instant the rail leaves near-open ("disappears before"); on expand it
+// stays hidden until the rail is nearly open again (a "delay") then fades in.
+private const val TitleGone = 0.8f // alpha 0 at/below this progress (rail already near-open)
+private const val TitleRamp = 0.15f // fade width ⇒ fully visible at progress ≥ 0.95
 
 /**
  * Lay the open row content out at `max(available, RailOpenWidth)` and let the parent's
@@ -267,14 +277,15 @@ private fun CompactRailRow(
             }
             // (2) Open content — title + status/`time · workdir` meta, using the full width from the
             //     left (no avatar indent). Held at the open width (railContentWidth) so it clips off
-            //     the right edge as the rail narrows (a resize, not a squeeze), then its last sliver
-            //     fades out by [MorphContentGone] — before the letter fades in — so they never overlap.
+            //     the right edge as the rail narrows (a resize, not a squeeze). Its alpha rides the
+            //     high, steep [TitleGone]/[TitleRamp] window so the name only shows while the rail is
+            //     near-open and always clears before the collapsed letter fades in (no overlap).
             Column(
                 Modifier
                     .align(Alignment.CenterStart)
                     .railContentWidth()
-                    .padding(start = 12.dp, end = if (busy) 30.dp else 12.dp)
-                    .graphicsLayer { alpha = ((progress() - MorphContentGone) / MorphRamp).coerceIn(0f, 1f) },
+                    .padding(start = 16.dp, end = if (busy) 30.dp else 12.dp)
+                    .graphicsLayer { alpha = ((progress() - TitleGone) / TitleRamp).coerceIn(0f, 1f) },
             ) {
                 Text(
                     text = session.title?.takeIf { it.isNotBlank() } ?: "New session",
@@ -283,6 +294,8 @@ private fun CompactRailRow(
                     color = if (isActive) OnSurface else OnSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    // Optical nudge: title 1dp down, meta 1dp up — tightens the pair on the row.
+                    modifier = Modifier.offset(y = 1.dp),
                 )
                 val dir = session.directory?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
                 val rel = relativeTime(session.time?.updated ?: session.time?.created ?: 0L)
@@ -307,6 +320,7 @@ private fun CompactRailRow(
                         color = metaColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.offset(y = (-1).dp),
                     )
                 }
             }
