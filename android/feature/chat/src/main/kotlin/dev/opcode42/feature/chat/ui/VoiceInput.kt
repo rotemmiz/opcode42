@@ -3,6 +3,8 @@ package dev.opcode42.feature.chat.ui
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -11,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -20,16 +23,43 @@ import java.util.Locale
 
 private const val VOICE_TAG = "VoiceInput"
 
+// onRmsChanged reports loudness in dB over a loosely-defined range; these bounds
+// map it to 0..1. Tuned for typical phone mics — quiet room ≈ floor, normal
+// speech peaks near the ceiling.
+private const val RMS_FLOOR = -2f
+private const val RMS_CEIL = 10f
+
+// Envelope shaping on the raw RMS: jump up quickly (attack), ease down (release)
+// so the level "pops" on speech and settles smoothly — the UI springs over this.
+private const val AMP_ATTACK = 0.6f
+private const val AMP_RELEASE = 0.25f
+
+// Small gap before relaunching a session in continuous mode; avoids
+// ERROR_RECOGNIZER_BUSY from restarting too eagerly inside a callback.
+private const val RESTART_DELAY_MS = 120L
+
+// Errors that don't mean "give up" in continuous mode: NO_MATCH/SPEECH_TIMEOUT are
+// the normal end of a quiet utterance; RECOGNIZER_BUSY is a transient restart race
+// (the previous session hadn't fully torn down). All just trigger the next session
+// after the regap rather than silently dropping the user out of dictation.
+private val RECOVERABLE_ERRORS = setOf(
+    SpeechRecognizer.ERROR_NO_MATCH,
+    SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
+    SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
+)
+
 /**
- * Drives a single-utterance [SpeechRecognizer] session for the composer. The
- * recognizer is created lazily on first [start] and must only be touched from
- * the main thread — all `RecognitionListener` callbacks arrive there too, so the
- * Compose-observable [isListening] flips are safe to read during composition.
+ * Drives a *continuous* [SpeechRecognizer] session for the composer: it keeps
+ * listening across the natural utterance breaks that the platform recognizer
+ * imposes (each `startListening` ends on a pause) by relaunching itself until
+ * [stop]/[cancel]. Must only be touched from the main thread — all
+ * `RecognitionListener` callbacks arrive there too, so the Compose-observable
+ * [isListening]/[amplitude] reads are safe during composition.
  *
- * Partial transcripts stream out via `onPartial` as the user speaks; the
- * finalized utterance is delivered once via `onFinal`. The caller decides how to
- * merge these into the field (see [PromptInput], which anchors them to the text
- * present when listening began).
+ * Partial transcripts stream out via `onPartial` as the user speaks; each
+ * finalized utterance is delivered via `onFinal` (the caller commits it and the
+ * next utterance appends — see [PromptInput]). [amplitude] is a 0..1 loudness
+ * envelope for the mic animation.
  *
  * If a misbehaving provider never calls back after [start], [isListening] stays
  * true (the mic stays lit); a second tap routes to [stop] and recovers it.
@@ -43,13 +73,17 @@ class VoiceInputController internal constructor(
     /** Whether an on-device/cloud recognition provider exists. Cached at construction. */
     val isAvailable: Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
-    // Not session-scoped: onResults/onError flip this off unconditionally, so a
-    // stale callback from a just-stopped session can clear a freshly-started one's
-    // indicator. Narrow sub-second-double-tap edge; an epoch token would close it.
+    // Spans the whole continuous session (stays true across internal restarts);
+    // only stop()/cancel()/destroy()/a fatal error clear it.
     var isListening by mutableStateOf(false)
         private set
 
+    /** 0..1 loudness envelope updated ~10x/sec while listening; 0 when idle. */
+    var amplitude by mutableFloatStateOf(0f)
+        private set
+
     private var recognizer: SpeechRecognizer? = null
+    private val handler = Handler(Looper.getMainLooper())
 
     // SpeechRecognizer dispatches callbacks via a main-thread Handler, so a
     // partial/final result can already be queued when the user cancels. cancel()
@@ -57,7 +91,15 @@ class VoiceInputController internal constructor(
     // leaves it set because we still want the final result it triggers.
     private var acceptResults = true
 
+    private val restartRunnable = Runnable {
+        if (isListening && acceptResults) beginSession()
+    }
+
     private val listener = object : RecognitionListener {
+        override fun onRmsChanged(rmsdB: Float) {
+            amplitude = nextAmplitude(amplitude, normalizeRms(rmsdB))
+        }
+
         override fun onPartialResults(partialResults: Bundle?) {
             if (!acceptResults) return
             partialResults?.firstText()?.let(onPartial)
@@ -65,25 +107,40 @@ class VoiceInputController internal constructor(
 
         override fun onResults(results: Bundle?) {
             if (acceptResults) results?.firstText()?.let(onFinal)
-            isListening = false
+            amplitude = 0f
+            // Keep going: a finalized utterance just ends one session, not the mic.
+            if (isListening && acceptResults) scheduleRestart() else isListening = false
         }
 
         override fun onError(error: Int) {
-            Log.w(VOICE_TAG, "recognition error: $error")
-            isListening = false
+            amplitude = 0f
+            if (isListening && acceptResults && error in RECOVERABLE_ERRORS) {
+                scheduleRestart() // normal end-of-utterance pause; restart silently
+            } else {
+                if (error !in RECOVERABLE_ERRORS) Log.w(VOICE_TAG, "recognition error: $error")
+                isListening = false
+            }
+        }
+
+        override fun onEndOfSpeech() {
+            amplitude = 0f
         }
 
         override fun onReadyForSpeech(params: Bundle?) {}
         override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() {}
         override fun onEvent(eventType: Int, params: Bundle?) {}
     }
 
-    /** Begin a recognition session. No-op if already listening or unavailable. */
+    /** Begin a continuous session. No-op if already listening or unavailable. */
     fun start() {
         if (isListening || !isAvailable) return
+        acceptResults = true
+        isListening = true
+        beginSession()
+    }
+
+    private fun beginSession() {
         val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also {
             it.setRecognitionListener(listener)
             recognizer = it
@@ -94,35 +151,52 @@ class VoiceInputController internal constructor(
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
         }
-        acceptResults = true
-        isListening = true
         r.startListening(intent)
     }
 
-    /** End the current session, delivering whatever was captured via `onFinal`. */
-    fun stop() {
-        if (!isListening) return
-        // stopListening() flushes a final result through onResults; that callback
-        // clears isListening. Guard here in case the provider stays silent.
-        recognizer?.stopListening()
-        isListening = false
+    private fun scheduleRestart() {
+        handler.removeCallbacks(restartRunnable)
+        handler.postDelayed(restartRunnable, RESTART_DELAY_MS)
     }
 
-    /** Abort the session, discarding any pending result. Used when the field is sent. */
+    /** End the session, delivering the in-progress utterance via `onFinal`. */
+    fun stop() {
+        if (!isListening) return
+        isListening = false // set first so the resulting onResults won't restart
+        handler.removeCallbacks(restartRunnable)
+        amplitude = 0f
+        recognizer?.stopListening()
+    }
+
+    /** Abort the session, discarding any pending result. Used by send and cancel. */
     fun cancel() {
         if (!isListening) return
         acceptResults = false
-        recognizer?.cancel()
         isListening = false
+        handler.removeCallbacks(restartRunnable)
+        amplitude = 0f
+        recognizer?.cancel()
     }
 
     /** Release the underlying recognizer. Call once when the composable leaves. */
     fun destroy() {
         acceptResults = false
+        isListening = false
+        handler.removeCallbacks(restartRunnable)
+        amplitude = 0f
         recognizer?.destroy()
         recognizer = null
-        isListening = false
     }
+}
+
+/** Maps a raw `onRmsChanged` dB reading onto the 0..1 range used by the mic animation. */
+internal fun normalizeRms(rmsdB: Float): Float =
+    ((rmsdB - RMS_FLOOR) / (RMS_CEIL - RMS_FLOOR)).coerceIn(0f, 1f)
+
+/** One asymmetric-EMA step from [prev] toward [norm]: jump up fast (attack), ease down (release). */
+internal fun nextAmplitude(prev: Float, norm: Float): Float {
+    val k = if (norm > prev) AMP_ATTACK else AMP_RELEASE
+    return prev + (norm - prev) * k
 }
 
 private fun Bundle.firstText(): String? =
