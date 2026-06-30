@@ -38,11 +38,14 @@ private const val AMP_RELEASE = 0.25f
 // ERROR_RECOGNIZER_BUSY from restarting too eagerly inside a callback.
 private const val RESTART_DELAY_MS = 120L
 
-// Errors that just mean "a quiet stretch ended the utterance" — in continuous
-// mode we silently start the next session rather than surfacing them.
+// Errors that don't mean "give up" in continuous mode: NO_MATCH/SPEECH_TIMEOUT are
+// the normal end of a quiet utterance; RECOGNIZER_BUSY is a transient restart race
+// (the previous session hadn't fully torn down). All just trigger the next session
+// after the regap rather than silently dropping the user out of dictation.
 private val RECOVERABLE_ERRORS = setOf(
     SpeechRecognizer.ERROR_NO_MATCH,
     SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
+    SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
 )
 
 /**
@@ -94,9 +97,7 @@ class VoiceInputController internal constructor(
 
     private val listener = object : RecognitionListener {
         override fun onRmsChanged(rmsdB: Float) {
-            val norm = normalizeRms(rmsdB)
-            val k = if (norm > amplitude) AMP_ATTACK else AMP_RELEASE
-            amplitude += (norm - amplitude) * k
+            amplitude = nextAmplitude(amplitude, normalizeRms(rmsdB))
         }
 
         override fun onPartialResults(partialResults: Bundle?) {
@@ -191,6 +192,12 @@ class VoiceInputController internal constructor(
 /** Maps a raw `onRmsChanged` dB reading onto the 0..1 range used by the mic animation. */
 internal fun normalizeRms(rmsdB: Float): Float =
     ((rmsdB - RMS_FLOOR) / (RMS_CEIL - RMS_FLOOR)).coerceIn(0f, 1f)
+
+/** One asymmetric-EMA step from [prev] toward [norm]: jump up fast (attack), ease down (release). */
+internal fun nextAmplitude(prev: Float, norm: Float): Float {
+    val k = if (norm > prev) AMP_ATTACK else AMP_RELEASE
+    return prev + (norm - prev) * k
+}
 
 private fun Bundle.firstText(): String? =
     getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)

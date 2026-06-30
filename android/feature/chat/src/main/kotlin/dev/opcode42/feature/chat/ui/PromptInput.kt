@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -38,7 +37,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -171,8 +169,11 @@ fun PromptInput(
         baseText = text
         voice.start()
     }
-    // Stop listening and throw away everything dictated this session.
+    // Stop listening and throw away everything dictated this session. Guarded so a
+    // tap on the ✕ during its exit animation (after listening already ended) can't
+    // wipe a just-committed transcript.
     fun cancelDictation() {
+        if (!voice.isListening) return
         voice.cancel()
         text = preDictationText
         baseText = preDictationText
@@ -307,53 +308,9 @@ fun PromptInput(
                     }
                 }
 
-                // Mic: tap to start; while listening it is the stop-and-keep button,
-                // haloed by a circle that springs with the live voice amplitude.
-                // `pulse` eases over the ~10Hz amplitude envelope for a fluid feel;
-                // it is read inside graphicsLayer so frames update without recomposing.
-                val pulse by animateFloatAsState(
-                    targetValue = if (voice.isListening) voice.amplitude else 0f,
-                    // Envelope shaping lives in the controller (fast attack / slow
-                    // release); the spring just glides between frames. Lightly
-                    // under-damped for a touch of life without visible wobble.
-                    animationSpec = spring(
-                        dampingRatio = 0.8f,
-                        stiffness = Spring.StiffnessMediumLow,
-                    ),
-                    label = "micPulse",
-                )
-                Box(contentAlignment = Alignment.Center) {
-                    if (voice.isListening) {
-                        Box(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .graphicsLayer {
-                                    val s = 1f + pulse * 1.1f
-                                    scaleX = s
-                                    scaleY = s
-                                    alpha = 0.18f + pulse * 0.22f
-                                }
-                                .clip(CircleShape)
-                                .background(Error),
-                        )
-                    }
-                    IconButton(
-                        onClick = { toggleVoice() },
-                        enabled = enabled || voice.isListening,
-                        modifier = Modifier.size(44.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Mic,
-                            contentDescription = if (voice.isListening) "Stop dictation" else "Dictate",
-                            tint = when {
-                                voice.isListening -> Error
-                                enabled -> OnSurfaceVariant
-                                else -> OnSurfaceFaint
-                            },
-                            modifier = Modifier.size(19.dp),
-                        )
-                    }
-                }
+                // Reads voice.amplitude internally so only this node recomposes at
+                // the ~10Hz envelope rate, not the whole composer.
+                MicButton(voice = voice, enabled = enabled, onToggle = { toggleVoice() })
             }
 
             // Attach (add) icon — vertically centered by the Row
@@ -414,6 +371,62 @@ fun PromptInput(
                 }
             }
         }
+    }
+}
+
+/**
+ * Mic button. Tap to start; while listening it is the stop-and-keep button and
+ * draws an amplitude halo via [drawBehind] at the draw area's center, so the
+ * circle stays concentric with the icon regardless of layout. `pulse` springs
+ * over the controller's ~10Hz amplitude envelope; reading it inside drawBehind
+ * keeps the animation in the draw phase (no per-frame recomposition), and reading
+ * `voice` here confines the 10Hz invalidations to this node.
+ */
+@Composable
+private fun MicButton(
+    voice: VoiceInputController,
+    enabled: Boolean,
+    onToggle: () -> Unit,
+) {
+    val pulse by animateFloatAsState(
+        targetValue = if (voice.isListening) voice.amplitude else 0f,
+        // Envelope shaping lives in the controller (fast attack / slow release);
+        // the spring just glides between frames. Lightly under-damped for a touch
+        // of life without visible wobble.
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+        label = "micPulse",
+    )
+    // Read the themed color in composition; drawBehind runs in the draw phase where
+    // the @Composable color getter isn't callable.
+    val haloColor = Error
+    IconButton(
+        onClick = onToggle,
+        enabled = enabled || voice.isListening,
+        modifier = Modifier
+            .size(44.dp)
+            .drawBehind {
+                if (!voice.isListening) return@drawBehind
+                // Base radius 10dp, growing with amplitude; capped just inside the
+                // 44dp button so it never clips the edge.
+                val radius = (10.dp.toPx() * (1f + pulse * 1.1f)).coerceAtMost(21.dp.toPx())
+                drawCircle(
+                    color = haloColor,
+                    radius = radius,
+                    center = center,
+                    alpha = 0.18f + pulse * 0.22f,
+                )
+            },
+    ) {
+        Icon(
+            Icons.Default.Mic,
+            contentDescription = if (voice.isListening) "Stop dictation" else "Dictate",
+            tint = when {
+                voice.isListening -> Error
+                enabled -> OnSurfaceVariant
+                else -> OnSurfaceFaint
+            },
+            modifier = Modifier.size(19.dp),
+        )
     }
 }
 
