@@ -267,14 +267,7 @@ fun ChatScreen(
                             }
                         }
                         uiState.session?.directory?.let { dir ->
-                            Text(
-                                text = dir,
-                                fontFamily = Opcode42Mono,
-                                fontSize = 11.5.sp,
-                                color = OnSurfaceFaint,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            HeaderSubtitle(directory = dir, branch = uiState.branch)
                         }
                     }
                     if (!isDraft && isMultiPane) {

@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -47,13 +48,14 @@ import dev.opcode42.core.model.SnapshotFileDiff
 import dev.opcode42.core.model.TokenUsage
 import dev.opcode42.core.design.brand.Spinner
 import dev.opcode42.core.design.rail.*
+import dev.opcode42.core.design.text.StartEllipsisText
 import dev.opcode42.core.design.theme.*
 import dev.opcode42.feature.chat.ChatViewModel
 import dev.opcode42.feature.chat.DRAFT_SESSION_ID
 import dev.opcode42.feature.chat.TodoItem
 import dev.opcode42.feature.chat.ui.*
 import dev.opcode42.feature.sessions.SessionFilter
-import dev.opcode42.feature.sessions.homeRelativeDir
+import dev.opcode42.core.design.text.homeRelativeDir
 import dev.opcode42.feature.sessions.SessionListEvent
 import dev.opcode42.feature.sessions.SessionListUiState
 import dev.opcode42.feature.sessions.SessionListViewModel
@@ -526,15 +528,14 @@ internal fun NavRailPane(
                     .background(Tertiary),
             )
             Spacer(Modifier.width(6.dp))
-            // `~`-relative display of the daemon-host path; fades out as the rail collapses.
-            Text(
+            // `~`-relative daemon-host path; start-ellipsized so the leaf dir survives a narrow
+            // rail (…/git/opcode42). Fades out as the rail collapses.
+            StartEllipsisText(
                 text = homeRelativeDir(activeDirectory).ifEmpty { "~" },
-                fontFamily = Opcode42Mono,
-                fontSize = 11.sp,
-                color = OnSurfaceFaint,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).graphicsLayer { alpha = progress() },
+                style = TextStyle(fontFamily = Opcode42Mono, fontSize = 11.sp, color = OnSurfaceFaint),
+                modifier = Modifier
+                    .weight(1f)
+                    .graphicsLayer { alpha = progress() },
             )
             // Settings is reached from here: the rail is the app's home surface (there's no
             // standalone session-list screen), so this gear is the path to Settings / Add-Server.

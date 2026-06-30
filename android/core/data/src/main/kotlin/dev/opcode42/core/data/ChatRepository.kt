@@ -12,6 +12,7 @@ import dev.opcode42.core.model.ProvidersResponse
 import dev.opcode42.core.model.QuestionRequest
 import dev.opcode42.core.model.Session
 import dev.opcode42.core.model.SnapshotFileDiff
+import dev.opcode42.core.model.VcsInfo
 import dev.opcode42.core.network.SseManager
 import dev.opcode42.core.sdk.Opcode42Client
 import dev.opcode42.core.store.AppStore
@@ -68,6 +69,10 @@ interface ChatRepository {
     suspend fun loadDiff(sessionId: String, messageId: String, directory: String): Result<Unit>
 
     suspend fun searchFiles(query: String, directory: String?): Result<List<String>>
+
+    /** Current VCS branch info for [directory] — for the chat header. Failure (no `/vcs`) is a normal result. */
+    suspend fun vcsInfo(directory: String): Result<VcsInfo>
+
     suspend fun listCommands(directory: String?): Result<List<CommandInfo>>
     suspend fun listProviders(directory: String?): Result<ProvidersResponse>
     suspend fun listAgents(directory: String?): Result<List<AgentInfo>>
@@ -154,6 +159,9 @@ class DefaultChatRepository @Inject constructor(
 
     override suspend fun searchFiles(query: String, directory: String?): Result<List<String>> =
         resultOf { client.findFiles(query, directory) }
+
+    override suspend fun vcsInfo(directory: String): Result<VcsInfo> =
+        resultOf { client.getVcsInfo(directory) }
 
     override suspend fun listCommands(directory: String?): Result<List<CommandInfo>> =
         resultOf { client.listCommands(directory) }
