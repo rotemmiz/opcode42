@@ -1,5 +1,7 @@
 package dev.opcode42.feature.chat.ui
 
+import dev.opcode42.core.design.theme.*
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box

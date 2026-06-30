@@ -1,5 +1,7 @@
 package dev.opcode42.feature.chat.ui
 
+import dev.opcode42.core.design.theme.*
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode

@@ -9,27 +9,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import dev.opcode42.app.navigation.Opcode42NavGraph
-import dev.opcode42.feature.chat.ui.Opcode42Theme
+import dev.opcode42.core.design.theme.Opcode42Theme
 import dev.opcode42.feature.notifications.PushController
 import dev.opcode42.feature.notifications.PushDeepLink
-import dev.opcode42.feature.settings.AppPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    @Inject
-    lateinit var prefs: AppPreferences
-
     @Inject
     lateinit var pushController: PushController
 
@@ -54,8 +49,7 @@ class MainActivity : ComponentActivity() {
         emitDeepLink(intent)
         maybeRequestNotificationPermission()
         setContent {
-            val darkTheme by prefs.darkTheme.collectAsState(initial = true)
-            val scope = rememberCoroutineScope()
+            val darkTheme = isSystemInDarkTheme()
             val tap by deepLink.collectAsState()
             val consumedToken = remember { mutableStateOf(-1L) }
             // Surface the tap once (keyed by token, so a repeat push for the same
@@ -63,8 +57,6 @@ class MainActivity : ComponentActivity() {
             val pending = tap?.takeIf { it.token != consumedToken.value }
             Opcode42Theme(darkTheme = darkTheme) {
                 Opcode42NavGraph(
-                    isDarkTheme = darkTheme,
-                    onToggleTheme = { scope.launch { prefs.setDarkTheme(!darkTheme) } },
                     deepLinkSessionId = pending?.target?.sessionId,
                     deepLinkToken = pending?.token ?: -1L,
                     onDeepLinkConsumed = { consumedToken.value = pending?.token ?: -1L },

@@ -15,7 +15,6 @@ class CommandDispatchTest {
             ModelsCommand to "openModelPicker",
             AgentsCommand to "openModelPicker",
             TerminalCommand to "openTerminal",
-            ThemeCommand to "toggleTheme",
             InfoCommand to "openInfo",
             RenameCommand to "renameSession",
             ForkCommand to "forkSession",

@@ -63,24 +63,6 @@ fun SettingsScreen(
                 leadingContent = { Icon(Icons.Default.Add, contentDescription = null) },
                 modifier = Modifier.clickable(onClick = onAddServer),
             )
-
-            HorizontalDivider(thickness = 8.dp, color = MaterialTheme.colorScheme.surfaceContainerLow)
-
-            // ── Appearance ───────────────────────────────────────────────────
-            ListItem(
-                headlineContent = { Text("Appearance", style = MaterialTheme.typography.labelLarge) },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            )
-
-            ListItem(
-                headlineContent = { Text("Dark Theme") },
-                trailingContent = {
-                    Switch(
-                        checked = state.darkTheme,
-                        onCheckedChange = { viewModel.setDarkTheme(it) },
-                    )
-                },
-            )
         }
     }
 }

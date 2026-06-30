@@ -1,10 +1,65 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Opcode42 launcher mark — the G15²i two-tone dual-arc asterisk (white on the
+  charcoal background layer). Authored in the design's 160×160 space and scaled
+  0.5 into the 108 adaptive viewport (mark ≈ 47% of the tile, inside the safe
+  circle). Three outlined capsule arms at 0/60/120°, the core punched hollow via
+  an even-odd clip, and a dual-arc ring (solid ink + muted second arc). Strokes
+  are thickened vs the screen mark so the icon doesn't alias at small densities.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#6FA8DC"
-        android:pathData="M54,30 L74,54 L54,78 L34,54 Z" />
+
+    <!-- Arms, with the core punched out (clip to frame XOR centre circle). -->
+    <group
+        android:scaleX="0.55"
+        android:scaleY="0.55"
+        android:translateX="10"
+        android:translateY="10">
+        <clip-path
+            android:fillType="evenOdd"
+            android:pathData="M0,0 H160 V160 H0 Z M65,80 a15,15 0 1,0 30,0 a15,15 0 1,0 -30,0 Z" />
+        <group android:pivotX="80" android:pivotY="80" android:rotation="0">
+            <path
+                android:strokeColor="#F4F6F8"
+                android:strokeWidth="8"
+                android:strokeLineJoin="round"
+                android:pathData="M73,36 a7,7 0 0 1 14,0 L87,124 a7,7 0 0 1 -14,0 Z" />
+        </group>
+        <group android:pivotX="80" android:pivotY="80" android:rotation="60">
+            <path
+                android:strokeColor="#F4F6F8"
+                android:strokeWidth="8"
+                android:strokeLineJoin="round"
+                android:pathData="M73,36 a7,7 0 0 1 14,0 L87,124 a7,7 0 0 1 -14,0 Z" />
+        </group>
+        <group android:pivotX="80" android:pivotY="80" android:rotation="120">
+            <path
+                android:strokeColor="#F4F6F8"
+                android:strokeWidth="8"
+                android:strokeLineJoin="round"
+                android:pathData="M73,36 a7,7 0 0 1 14,0 L87,124 a7,7 0 0 1 -14,0 Z" />
+        </group>
+    </group>
+
+    <!-- Dual-arc ring in the hollow (not clipped): solid ink + muted second arc. -->
+    <group
+        android:scaleX="0.55"
+        android:scaleY="0.55"
+        android:translateX="10"
+        android:translateY="10">
+        <path
+            android:strokeColor="#F4F6F8"
+            android:strokeWidth="5"
+            android:strokeLineCap="round"
+            android:pathData="M80,68 A12,12 0 0 1 92,80" />
+        <path
+            android:strokeColor="#5B6168"
+            android:strokeWidth="5"
+            android:strokeLineCap="round"
+            android:pathData="M80,92 A12,12 0 0 1 68,80" />
+    </group>
 </vector>

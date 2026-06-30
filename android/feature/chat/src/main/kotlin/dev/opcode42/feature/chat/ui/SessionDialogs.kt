@@ -1,5 +1,7 @@
 package dev.opcode42.feature.chat.ui
 
+import dev.opcode42.core.design.theme.*
+
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog

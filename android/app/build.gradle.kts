@@ -37,6 +37,7 @@ dependencies {
     implementation(project(":core:network"))
     implementation(project(":core:store"))
     implementation(project(":core:sdk"))
+    implementation(project(":core:design"))
     implementation(project(":feature:connections"))
     implementation(project(":feature:sessions"))
     implementation(project(":feature:chat"))

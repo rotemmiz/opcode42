@@ -1,5 +1,7 @@
 package dev.opcode42.feature.chat.ui
 
+import dev.opcode42.core.design.theme.*
+
 import android.Manifest
 import android.content.pm.PackageManager
 import android.util.Base64

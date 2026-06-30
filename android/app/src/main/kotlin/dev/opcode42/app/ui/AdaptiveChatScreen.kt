@@ -32,6 +32,7 @@ import androidx.window.core.layout.WindowWidthSizeClass
 import dev.opcode42.core.model.Session
 import dev.opcode42.core.model.SnapshotFileDiff
 import dev.opcode42.core.model.TokenUsage
+import dev.opcode42.core.design.theme.*
 import dev.opcode42.feature.chat.ChatViewModel
 import dev.opcode42.feature.chat.DRAFT_SESSION_ID
 import dev.opcode42.feature.chat.TodoItem
@@ -97,8 +98,6 @@ internal fun chatLayoutFor(
 @Composable
 fun AdaptiveChatScreen(
     sessionId: String,
-    isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit,
     onNavigateBack: () -> Unit,
     onOpenTerminal: (String) -> Unit,
     onNavigateToSession: (String) -> Unit,
@@ -216,8 +215,6 @@ fun AdaptiveChatScreen(
                     onNavigateToSession = onNavigateToSession,
                     onNewSession = onNewSession,
                     onOpenTasksBoard = onOpenTasksBoard,
-                    isDarkTheme = isDarkTheme,
-                    onToggleTheme = onToggleTheme,
                     applySystemInsets = false,
                     isMultiPane = !layout.singlePane,
                     onOpenNavRail = toggleMenu,

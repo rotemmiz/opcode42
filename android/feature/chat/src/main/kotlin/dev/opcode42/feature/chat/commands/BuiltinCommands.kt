@@ -12,7 +12,6 @@ val builtinCommands: List<BuiltinCommand> = listOf(
     ModelsCommand,
     AgentsCommand,
     TerminalCommand,
-    ThemeCommand,
     InfoCommand,
     RenameCommand,
     ForkCommand,

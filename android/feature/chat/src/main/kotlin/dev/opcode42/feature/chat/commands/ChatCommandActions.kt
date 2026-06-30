@@ -19,7 +19,6 @@ interface ChatCommandActions {
     /** `/models` and `/agents` both open the combined model + agent picker. */
     fun openModelPicker()
     fun openTerminal()
-    fun toggleTheme()
     fun openInfo()
     fun renameSession()
     fun forkSession()

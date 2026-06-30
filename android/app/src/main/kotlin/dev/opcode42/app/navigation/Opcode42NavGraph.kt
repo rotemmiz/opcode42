@@ -37,8 +37,6 @@ sealed class Screen(val route: String) {
 
 @Composable
 fun Opcode42NavGraph(
-    isDarkTheme: Boolean = true,
-    onToggleTheme: () -> Unit = {},
     deepLinkSessionId: String? = null,
     deepLinkToken: Long = -1L,
     onDeepLinkConsumed: () -> Unit = {},
@@ -87,8 +85,6 @@ fun Opcode42NavGraph(
             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
             AdaptiveChatScreen(
                 sessionId = sessionId,
-                isDarkTheme = isDarkTheme,
-                onToggleTheme = onToggleTheme,
                 onNavigateBack = { navController.popBackStack() },
                 onOpenTerminal = { directory ->
                     navController.navigate(Screen.Terminal.route(directory))
@@ -120,8 +116,6 @@ fun Opcode42NavGraph(
         ) {
             AdaptiveChatScreen(
                 sessionId = DRAFT_SESSION_ID,
-                isDarkTheme = isDarkTheme,
-                onToggleTheme = onToggleTheme,
                 onNavigateBack = { navController.popBackStack() },
                 onOpenTerminal = { directory ->
                     navController.navigate(Screen.Terminal.route(directory))

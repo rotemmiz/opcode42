@@ -13,25 +13,21 @@ import javax.inject.Inject
 data class SettingsUiState(
     val connections: List<ServerConnection> = emptyList(),
     val activeKey: String? = null,
-    val darkTheme: Boolean = true,
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val connectionManager: ServerConnectionManager,
-    private val prefs: AppPreferences,
     private val pushController: PushController,
 ) : ViewModel() {
 
     val uiState: StateFlow<SettingsUiState> = combine(
         connectionManager.connections,
         connectionManager.activeServerConnectionFlow,
-        prefs.darkTheme,
-    ) { connections, active, darkTheme ->
+    ) { connections, active ->
         SettingsUiState(
             connections = connections,
             activeKey = active?.key(),
-            darkTheme = darkTheme,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
@@ -59,6 +55,4 @@ class SettingsViewModel @Inject constructor(
         // Register this device with the newly-active daemon.
         pushController.start()
     }
-
-    fun setDarkTheme(enabled: Boolean) = viewModelScope.launch { prefs.setDarkTheme(enabled) }
 }

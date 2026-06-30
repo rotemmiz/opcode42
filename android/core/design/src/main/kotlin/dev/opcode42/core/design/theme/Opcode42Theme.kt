@@ -1,4 +1,4 @@
-package dev.opcode42.feature.chat.ui
+package dev.opcode42.core.design.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -12,7 +12,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.opcode42.feature.chat.R
+import dev.opcode42.core.design.R
 
 /**
  * Roboto Mono — the design's typeface for all code/diff/tool/status/mono text.

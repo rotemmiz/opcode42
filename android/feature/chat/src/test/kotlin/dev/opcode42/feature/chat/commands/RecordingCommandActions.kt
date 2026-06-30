@@ -10,7 +10,6 @@ class RecordingCommandActions(
     override fun openSessions() { calls += "openSessions" }
     override fun openModelPicker() { calls += "openModelPicker" }
     override fun openTerminal() { calls += "openTerminal" }
-    override fun toggleTheme() { calls += "toggleTheme" }
     override fun openInfo() { calls += "openInfo" }
     override fun renameSession() { calls += "renameSession" }
     override fun forkSession() { calls += "forkSession" }

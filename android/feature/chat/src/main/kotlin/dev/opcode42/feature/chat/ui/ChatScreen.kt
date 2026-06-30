@@ -1,5 +1,7 @@
 package dev.opcode42.feature.chat.ui
 
+import dev.opcode42.core.design.theme.*
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,11 +11,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.Compress
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
@@ -60,8 +60,6 @@ fun ChatScreen(
     onNavigateToSession: (sessionId: String) -> Unit = {},
     onNewSession: () -> Unit = {},
     onOpenTasksBoard: () -> Unit = {},
-    isDarkTheme: Boolean = true,
-    onToggleTheme: () -> Unit = {},
     applySystemInsets: Boolean = true,
     isMultiPane: Boolean = false,
     onOpenNavRail: () -> Unit = {},
@@ -149,7 +147,6 @@ fun ChatScreen(
         override fun openSessions() = onOpenNavRail()
         override fun openModelPicker() { showModelPicker = true }
         override fun openTerminal() { sessionDirectory?.let { onOpenTerminal(it) } }
-        override fun toggleTheme() = onToggleTheme()
         override fun openInfo() { showInfoSheet = true }
         override fun renameSession() { showRenameDialog = true }
         override fun forkSession() = viewModel.forkSession { newId -> onNavigateToSession(newId) }
@@ -296,7 +293,6 @@ fun ChatScreen(
                         OverflowMenu(
                             expanded = showOverflow,
                             onDismiss = { showOverflow = false },
-                            isDarkTheme = isDarkTheme,
                             isShared = uiState.session?.share != null,
                             onRename = {
                                 showOverflow = false
@@ -321,10 +317,6 @@ fun ChatScreen(
                             onDelete = {
                                 showOverflow = false
                                 showDeleteConfirm = true
-                            },
-                            onToggleTheme = {
-                                showOverflow = false
-                                onToggleTheme()
                             },
                         )
                     }
@@ -544,7 +536,6 @@ fun ChatScreen(
 private fun OverflowMenu(
     expanded: Boolean,
     onDismiss: () -> Unit,
-    isDarkTheme: Boolean,
     isShared: Boolean,
     onRename: () -> Unit,
     onFork: () -> Unit,
@@ -552,7 +543,6 @@ private fun OverflowMenu(
     onShare: () -> Unit,
     onArchive: () -> Unit,
     onDelete: () -> Unit,
-    onToggleTheme: () -> Unit,
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -578,17 +568,6 @@ private fun OverflowMenu(
             text = { Text(if (isShared) "Sharing… (manage)" else "Share session", color = OnSurface) },
             leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = OnSurfaceVariant) },
             onClick = onShare,
-        )
-        DropdownMenuItem(
-            text = { Text(if (isDarkTheme) "Light theme" else "Dark theme", color = OnSurface) },
-            leadingIcon = {
-                Icon(
-                    if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                    contentDescription = null,
-                    tint = OnSurfaceVariant,
-                )
-            },
-            onClick = onToggleTheme,
         )
         HorizontalDivider(color = Hairline)
         DropdownMenuItem(

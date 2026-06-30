@@ -19,7 +19,7 @@ class BuiltinCommandsTest {
     fun registryExposesExpectedActions() {
         val names = builtinCommands.map { it.name }.toSet()
         val expected = setOf(
-            "new", "sessions", "models", "agents", "terminal", "theme", "info",
+            "new", "sessions", "models", "agents", "terminal", "info",
             "rename", "fork", "summarize", "share", "archive", "delete",
             "diff", "timeline", "variant", "stash",
         )
