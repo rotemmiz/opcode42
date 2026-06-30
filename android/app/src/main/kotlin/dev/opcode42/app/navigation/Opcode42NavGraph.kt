@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dev.opcode42.app.ui.AdaptiveChatScreen
+import dev.opcode42.feature.chat.DRAFT_SESSION_ID
 import dev.opcode42.feature.connections.ui.AddServerScreen
 import dev.opcode42.feature.chat.ui.TasksScreen
 import dev.opcode42.feature.sessions.ui.SessionListScreen
@@ -22,6 +23,8 @@ sealed class Screen(val route: String) {
     data object Chat : Screen("chat/{sessionId}") {
         fun route(sessionId: String) = "chat/$sessionId"
     }
+    /** Lazy "new session" draft — no server session is created until the first prompt is sent. */
+    data object NewChat : Screen("chat_new")
     data object Settings : Screen("settings")
     data object Terminal : Screen("terminal/{directory}") {
         fun route(directory: String) =
@@ -59,6 +62,9 @@ fun Opcode42NavGraph(
                 onSessionClick = { session ->
                     navController.navigate(Screen.Chat.route(session.id))
                 },
+                onNewSession = {
+                    navController.navigate(Screen.NewChat.route)
+                },
                 onAddServerClick = {
                     navController.navigate(Screen.AddServer.route)
                 },
@@ -90,9 +96,44 @@ fun Opcode42NavGraph(
                 onNavigateToSession = { newSessionId ->
                     navController.navigate(Screen.Chat.route(newSessionId))
                 },
+                onNewSession = {
+                    navController.navigate(Screen.NewChat.route)
+                },
                 onOpenTasksBoard = {
                     navController.navigate(Screen.Tasks.route(sessionId))
                 },
+            )
+        }
+
+        // Lazy "new session" draft: holds no server session. AdaptiveChatScreen runs in draft
+        // mode (sessionId == DRAFT_SESSION_ID, injected as a default arg so ChatViewModel's
+        // SavedStateHandle resolves to draft mode). The first prompt creates the real session
+        // and navigates here → Chat, popping the draft so Back never lands on an empty composer.
+        composable(
+            route = Screen.NewChat.route,
+            arguments = listOf(
+                navArgument("sessionId") {
+                    type = NavType.StringType
+                    defaultValue = DRAFT_SESSION_ID
+                },
+            ),
+        ) {
+            AdaptiveChatScreen(
+                sessionId = DRAFT_SESSION_ID,
+                isDarkTheme = isDarkTheme,
+                onToggleTheme = onToggleTheme,
+                onNavigateBack = { navController.popBackStack() },
+                onOpenTerminal = { directory ->
+                    navController.navigate(Screen.Terminal.route(directory))
+                },
+                onNavigateToSession = { newSessionId ->
+                    navController.navigate(Screen.Chat.route(newSessionId)) {
+                        popUpTo(Screen.NewChat.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+                onNewSession = { /* already on a fresh draft */ },
+                onOpenTasksBoard = { /* no tasks board until a session exists */ },
             )
         }
 

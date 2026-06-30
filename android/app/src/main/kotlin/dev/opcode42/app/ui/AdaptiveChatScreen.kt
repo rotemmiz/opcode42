@@ -33,6 +33,7 @@ import dev.opcode42.core.model.Session
 import dev.opcode42.core.model.SnapshotFileDiff
 import dev.opcode42.core.model.TokenUsage
 import dev.opcode42.feature.chat.ChatViewModel
+import dev.opcode42.feature.chat.DRAFT_SESSION_ID
 import dev.opcode42.feature.chat.TodoItem
 import dev.opcode42.feature.chat.ui.*
 import dev.opcode42.feature.sessions.SessionFilter
@@ -101,6 +102,7 @@ fun AdaptiveChatScreen(
     onNavigateBack: () -> Unit,
     onOpenTerminal: (String) -> Unit,
     onNavigateToSession: (String) -> Unit,
+    onNewSession: () -> Unit = {},
     onOpenTasksBoard: () -> Unit = {},
     chatViewModel: ChatViewModel = hiltViewModel(),
     sessionListViewModel: SessionListViewModel = hiltViewModel(),
@@ -174,7 +176,7 @@ fun AdaptiveChatScreen(
             onSelectSession = { id -> onDone(); onNavigateToSession(id) },
             onNewSession = {
                 onDone()
-                sessionListViewModel.createSession { session -> onNavigateToSession(session.id) }
+                onNewSession()
             },
             onQueryChange = sessionListViewModel::setQuery,
             onFilterChange = sessionListViewModel::setFilter,
@@ -212,11 +214,7 @@ fun AdaptiveChatScreen(
                     onNavigateBack = onNavigateBack,
                     onOpenTerminal = onOpenTerminal,
                     onNavigateToSession = onNavigateToSession,
-                    onNewSession = {
-                        sessionListViewModel.createSession { session ->
-                            onNavigateToSession(session.id)
-                        }
-                    },
+                    onNewSession = onNewSession,
                     onOpenTasksBoard = onOpenTasksBoard,
                     isDarkTheme = isDarkTheme,
                     onToggleTheme = onToggleTheme,
@@ -228,6 +226,7 @@ fun AdaptiveChatScreen(
                     infoPanelOpen = infoPanelOpen,
                     onToggleInfoPanel = { infoPanelOpen = !infoPanelOpen },
                     showTodoSheet = !rightPanelVisible,
+                    isDraft = sessionId == DRAFT_SESSION_ID,
                     viewModel = chatViewModel,
                 )
             }

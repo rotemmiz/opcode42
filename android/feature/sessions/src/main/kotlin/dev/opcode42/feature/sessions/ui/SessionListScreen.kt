@@ -46,12 +46,12 @@ import dev.opcode42.feature.sessions.SessionListViewModel
 @Composable
 fun SessionListScreen(
     onSessionClick: (Session) -> Unit,
+    onNewSession: () -> Unit,
     onAddServerClick: () -> Unit,
     onSettingsClick: () -> Unit,
     viewModel: SessionListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val isCreating by viewModel.isCreating.collectAsStateWithLifecycle()
 
     // Surface one-shot errors (a failed rename/archive/delete/create/reply) as a snackbar.
     val snackbarHostState = remember { SnackbarHostState() }
@@ -91,14 +91,9 @@ fun SessionListScreen(
         },
         floatingActionButton = {
             if (!uiState.showArchived) {
-                FloatingActionButton(
-                    onClick = { if (!isCreating) viewModel.createSession { onSessionClick(it) } },
-                ) {
-                    if (isCreating) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Default.Add, contentDescription = "New session")
-                    }
+                // Navigates to the lazy draft; the session is created only on first prompt.
+                FloatingActionButton(onClick = onNewSession) {
+                    Icon(Icons.Default.Add, contentDescription = "New session")
                 }
             }
         },
@@ -119,7 +114,7 @@ fun SessionListScreen(
             uiState.showArchived && uiState.archivedCount == 0 -> EmptyArchivedList(Modifier.padding(padding))
             !uiState.showArchived && uiState.allCount == 0 -> EmptySessionList(
                 onAddServer = onAddServerClick,
-                onNewSession = { viewModel.createSession { onSessionClick(it) } },
+                onNewSession = onNewSession,
             )
             else -> SessionBrowser(
                 uiState = uiState,

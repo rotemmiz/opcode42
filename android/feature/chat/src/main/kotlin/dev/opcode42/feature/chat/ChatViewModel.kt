@@ -51,6 +51,15 @@ data class ChatUiState(
     val isSending: Boolean = false,
 )
 
+/**
+ * Sentinel session id for the lazy "new session" draft. A draft holds no server session:
+ * we defer `POST /session` until the user actually sends the first prompt, so abandoned
+ * drafts never leave empty "New session" rows in the list. On first send the session is
+ * created, the prompt is posted to it, and navigation swaps the draft route for the real
+ * session (see [ChatViewModel.sendPrompt] and the nav graph's NewChat route).
+ */
+const val DRAFT_SESSION_ID = "new"
+
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -59,6 +68,9 @@ class ChatViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val sessionId: String = checkNotNull(savedStateHandle["sessionId"])
+
+    /** True for the lazy "new session" draft — no server session exists yet. */
+    private val isDraft: Boolean = sessionId == DRAFT_SESSION_ID
 
     // Transient UI flags not derived from the store — combined into uiState below.
     private val _isSending = MutableStateFlow(false)
@@ -127,11 +139,63 @@ class ChatViewModel @Inject constructor(
 
     fun selectAgent(name: String) { _selectedAgent.value = name }
 
+    /**
+     * Emits the real session id once a draft's first prompt has created the session, so the
+     * UI navigates from the draft route to the real session (replacing the draft in the
+     * backstack). A Channel gives true one-shot delivery (mirrors [events]).
+     */
+    private val _navigateToSession = Channel<String>(Channel.BUFFERED)
+    val navigateToSession = _navigateToSession.receiveAsFlow()
+
     init {
-        loadMessages()
-        // Load slash commands / providers / agents once the directory is known.
+        if (isDraft) {
+            // A draft has no server session yet: nothing to load, no SSE directory, no diffs.
+            // Load the pickers against the daemon default directory so a model/agent can be
+            // chosen before the first prompt creates the session.
+            loadPickers(null)
+        } else {
+            loadMessages()
+            // Load slash commands / providers / agents once the directory is known.
+            viewModelScope.launch {
+                val dir = uiState.first { it.session?.directory != null }.session?.directory
+                loadPickers(dir)
+            }
+            // Subscribe to per-directory SSE exactly once, when the session's directory is known
+            viewModelScope.launch {
+                val dir = uiState.first { it.session?.directory != null }.session?.directory
+                if (dir != null) chatRepo.subscribeDirectory(dir)
+            }
+            // Reload messages after a reconnection (GlobalDisposed wipes state)
+            viewModelScope.launch {
+                chatRepo.connectionState
+                    .distinctUntilChanged()
+                    .drop(1) // skip initial state; init already called loadMessages()
+                    .filter { it is ConnectionState.Connected }
+                    .collect { loadMessages() }
+            }
+            // C4 — Watch for new PatchParts and load diff content for each one not yet fetched.
+            // Parts are keyed by messageID (live SSE parts supersede REST-loaded parts). The repo's
+            // loadDiff is idempotent and fire-and-forget; we still pre-filter already-loaded diffs
+            // (from the snapshot) to avoid spawning no-op coroutines on every streaming delta.
+            viewModelScope.launch {
+                chatRepo.observe(sessionId).collect { snap ->
+                    val dir = snap.session?.directory ?: return@collect
+                    snap.messages.forEach { msg ->
+                        val parts = snap.parts[msg.id] ?: msg.parts
+                        parts.filterIsInstance<PatchPart>()
+                            .filter { it.messageID !in snap.diffs }
+                            .forEach { patch ->
+                                viewModelScope.launch { chatRepo.loadDiff(sessionId, patch.messageID, dir) }
+                            }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Load slash commands, providers, and agents for [dir] (null = daemon default). */
+    private fun loadPickers(dir: String?) {
         viewModelScope.launch {
-            val dir = uiState.first { it.session?.directory != null }.session?.directory
             chatRepo.listCommands(dir)
                 .onSuccess { _commands.value = it }
                 .onFailure { android.util.Log.w("ChatVM", "listCommands failed", it) }
@@ -147,36 +211,6 @@ class ChatViewModel @Inject constructor(
             chatRepo.listAgents(dir)
                 .onSuccess { agents -> _agents.value = agents.filter { it.isPrimary } }
                 .onFailure { android.util.Log.w("ChatVM", "listAgents failed", it) }
-        }
-        // Subscribe to per-directory SSE exactly once, when the session's directory is known
-        viewModelScope.launch {
-            val dir = uiState.first { it.session?.directory != null }.session?.directory
-            if (dir != null) chatRepo.subscribeDirectory(dir)
-        }
-        // Reload messages after a reconnection (GlobalDisposed wipes state)
-        viewModelScope.launch {
-            chatRepo.connectionState
-                .distinctUntilChanged()
-                .drop(1) // skip initial state; init already called loadMessages()
-                .filter { it is ConnectionState.Connected }
-                .collect { loadMessages() }
-        }
-        // C4 — Watch for new PatchParts and load diff content for each one not yet fetched.
-        // Parts are keyed by messageID (live SSE parts supersede REST-loaded parts). The repo's
-        // loadDiff is idempotent and fire-and-forget; we still pre-filter already-loaded diffs
-        // (from the snapshot) to avoid spawning no-op coroutines on every streaming delta.
-        viewModelScope.launch {
-            chatRepo.observe(sessionId).collect { snap ->
-                val dir = snap.session?.directory ?: return@collect
-                snap.messages.forEach { msg ->
-                    val parts = snap.parts[msg.id] ?: msg.parts
-                    parts.filterIsInstance<PatchPart>()
-                        .filter { it.messageID !in snap.diffs }
-                        .forEach { patch ->
-                            viewModelScope.launch { chatRepo.loadDiff(sessionId, patch.messageID, dir) }
-                        }
-                }
-            }
         }
     }
 
@@ -198,13 +232,33 @@ class ChatViewModel @Inject constructor(
         _events.trySend(ChatEvent.ShowError(cause.toUserMessage()))
     }
 
-    /** A7/C5 — Optimistic prompt submit with optional file attachments */
+    /**
+     * A7/C5 — Optimistic prompt submit with optional file attachments. On a draft this is the
+     * lazy-creation point: create the session first, post the prompt to it, then signal
+     * navigation to the real session — so an abandoned draft never persists an empty session.
+     */
     fun sendPrompt(text: String, attachments: List<FilePartInput> = emptyList()) {
         viewModelScope.launch {
+            // Idempotency: ignore a second send while one is in flight, so a double-tap on a
+            // draft can't create two sessions (the second would be an orphaned empty one).
+            if (_isSending.value) return@launch
             _isSending.value = true
             try {
-                chatRepo.send(sessionId, text, directory, attachments, _selectedModel.value, _selectedAgent.value)
-                    .onFailure { emitError("send", it) }
+                if (isDraft) {
+                    val created = sessionRepo.create(directory = null).getOrElse {
+                        emitError("create session", it)
+                        return@launch
+                    }
+                    // Pre-subscribe so the first streaming events aren't missed in the gap before
+                    // the real session's ChatViewModel mounts (subscribeDirectory is idempotent).
+                    created.directory?.let { chatRepo.subscribeDirectory(it) }
+                    chatRepo.send(created.id, text, created.directory, attachments, _selectedModel.value, _selectedAgent.value)
+                        .onFailure { emitError("send", it) }
+                    _navigateToSession.trySend(created.id)
+                } else {
+                    chatRepo.send(sessionId, text, directory, attachments, _selectedModel.value, _selectedAgent.value)
+                        .onFailure { emitError("send", it) }
+                }
             } finally {
                 _isSending.value = false
             }
@@ -304,6 +358,9 @@ class ChatViewModel @Inject constructor(
 
     /** Stop a running agent turn (composer stop button, shown while the session is busy). */
     fun abort() {
+        // A draft has no server session to abort; the Stop button can briefly show while the
+        // first prompt is creating the session, so ignore it rather than POST abort("new").
+        if (isDraft) return
         viewModelScope.launch {
             sessionRepo.abort(sessionId, directory)
                 .onFailure { emitError("abort", it) }

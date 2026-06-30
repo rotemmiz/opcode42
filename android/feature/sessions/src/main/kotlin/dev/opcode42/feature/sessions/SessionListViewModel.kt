@@ -15,7 +15,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -184,9 +183,6 @@ class SessionListViewModel @Inject constructor(
         }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SessionListUiState())
 
-    private val _isCreating = MutableStateFlow(false)
-    val isCreating: StateFlow<Boolean> = _isCreating.asStateFlow()
-
     private fun emitError(action: String, cause: Throwable) {
         android.util.Log.w("SessionListVM", "$action failed", cause)
         _events.trySend(SessionListEvent.ShowError(cause.toUserMessage()))
@@ -289,19 +285,6 @@ class SessionListViewModel @Inject constructor(
     fun rejectQuestion(requestId: String) {
         viewModelScope.launch {
             sessionRepo.rejectQuestion(requestId).onFailure { emitError("reject", it) }
-        }
-    }
-
-    fun createSession(directory: String? = null, onCreated: (Session) -> Unit) {
-        viewModelScope.launch {
-            _isCreating.value = true
-            try {
-                sessionRepo.create(directory)
-                    .onSuccess { onCreated(it) }
-                    .onFailure { emitError("create session", it) }
-            } finally {
-                _isCreating.value = false
-            }
         }
     }
 }

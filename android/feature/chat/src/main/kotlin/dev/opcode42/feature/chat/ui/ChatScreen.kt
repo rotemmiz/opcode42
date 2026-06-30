@@ -70,8 +70,16 @@ fun ChatScreen(
     infoPanelOpen: Boolean = true,
     onToggleInfoPanel: () -> Unit = {},
     showTodoSheet: Boolean = true,
+    /** True for the lazy "new session" draft — no server session exists yet. */
+    isDraft: Boolean = false,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
+    // On a draft, the first prompt creates the real session; navigate to it (the nav graph
+    // replaces the draft in the backstack so Back doesn't return to an empty composer).
+    LaunchedEffect(viewModel) {
+        viewModel.navigateToSession.collect { newId -> onNavigateToSession(newId) }
+    }
+
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val commands by viewModel.commands.collectAsStateWithLifecycle()
     val providers by viewModel.providers.collectAsStateWithLifecycle()
@@ -209,7 +217,7 @@ fun ChatScreen(
                     Column(modifier = Modifier.weight(1f).padding(horizontal = 4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = uiState.session?.title ?: "Session",
+                                text = if (isDraft) "New session" else uiState.session?.title ?: "Session",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = OnSurface,
@@ -237,7 +245,7 @@ fun ChatScreen(
                             )
                         }
                     }
-                    if (isMultiPane) {
+                    if (!isDraft && isMultiPane) {
                         // Mode badge + model — right panel shows full session info so only compact version here.
                         Text(
                             text = (displayAgent ?: "build").replaceFirstChar { it.uppercase() },
@@ -275,12 +283,13 @@ fun ChatScreen(
                         } else {
                             Spacer(Modifier.width(2.dp))
                         }
-                    } else {
+                    } else if (!isDraft) {
                         IconButton(onClick = { showInfoSheet = true }, modifier = Modifier.size(42.dp)) {
                             Icon(Icons.Default.Info, contentDescription = "Session info", tint = OnSurfaceVariant, modifier = Modifier.size(20.dp))
                         }
                     }
-                    Box {
+                    // No overflow actions on a draft — there's no session to rename/fork/share/delete yet.
+                    if (!isDraft) Box {
                         IconButton(onClick = { showOverflow = true }, modifier = Modifier.size(42.dp)) {
                             Icon(Icons.Default.MoreVert, contentDescription = "More", tint = OnSurfaceVariant, modifier = Modifier.size(20.dp))
                         }
@@ -415,6 +424,16 @@ fun ChatScreen(
             // Initial message load: entering a session before anything has streamed in.
             if (uiState.isLoading && uiState.messages.isEmpty() && uiState.optimisticMessages.isEmpty()) {
                 CircularProgressIndicator(Modifier.align(Alignment.Center))
+            }
+
+            // Draft placeholder: empty composer-only screen until the first prompt creates the session.
+            if (isDraft && uiState.messages.isEmpty() && uiState.optimisticMessages.isEmpty()) {
+                Text(
+                    text = "Type a message to start a new session.",
+                    fontSize = 13.sp,
+                    color = OnSurfaceFaint,
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                )
             }
 
             // Todos dock — only in single/medium pane; moves to info panel in expanded.
