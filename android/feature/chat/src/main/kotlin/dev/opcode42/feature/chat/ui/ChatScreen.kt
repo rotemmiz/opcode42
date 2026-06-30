@@ -73,6 +73,14 @@ fun ChatScreen(
     showTodoSheet: Boolean = true,
     /** True for the lazy "new session" draft — no server session exists yet. */
     isDraft: Boolean = false,
+    /**
+     * Multi-pane host slots: when [railContent] is non-null the chat hosts the whole
+     * triptych itself — the rail + (optional) [infoContent] sidebar render inside the
+     * Scaffold content, below the top bar, so the top bar spans the full width. The
+     * composer then lives under the stream column (not the Scaffold bottom bar).
+     */
+    railContent: (@Composable () -> Unit)? = null,
+    infoContent: (@Composable () -> Unit)? = null,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     // On a draft, the first prompt creates the real session; navigate to it (the nav graph
@@ -173,6 +181,46 @@ fun ChatScreen(
     }
     val displayModel = displayModelRef?.modelID
     val displayProvider = displayModelRef?.providerID
+
+    // The composer (phone status strip + prompt input). Hosted in the Scaffold bottom
+    // bar single-pane; in multi-pane it moves under the stream column so the top bar
+    // can span the full width across rail · stream · sidebar.
+    val composerBar: @Composable () -> Unit = {
+        Column(
+            Modifier
+                .background(Surface)
+                .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
+        ) {
+            if (!isMultiPane) {
+                HorizontalDivider(color = Hairline)
+                StatusStrip(
+                    mode = displayAgent,
+                    model = displayModel,
+                    provider = displayProvider,
+                    tokens = uiState.session?.tokens,
+                    onClick = if (providers.isNotEmpty() || agents.isNotEmpty()) {
+                        { showModelPicker = true }
+                    } else null,
+                )
+            }
+            HorizontalDivider(color = Hairline)
+            PromptInput(
+                onSend = { text, attachments -> viewModel.sendPrompt(text, attachments) },
+                enabled = pendingPermission == null && pendingQuestion == null,
+                // isSending bridges the gap before the server flips status to "busy".
+                busy = uiState.sessionStatus == "busy" || uiState.isSending,
+                onStop = { viewModel.abort() },
+                paletteEntries = paletteEntries,
+                onSearchFiles = { query -> viewModel.searchFiles(query) },
+                onPickEntry = { entry ->
+                    when (entry) {
+                        is PaletteEntry.Builtin -> entry.command.execute(commandActions)
+                        is PaletteEntry.Daemon -> viewModel.runCommand(entry.name, "")
+                    }
+                },
+            )
+        }
+    }
 
     Scaffold(
         containerColor = Surface,
@@ -333,53 +381,24 @@ fun ChatScreen(
                 HorizontalDivider(color = Hairline, thickness = 1.dp)
             }
         },
-        bottomBar = {
-            // Surface fills behind the system bars; content is inset above the
-            // gesture-nav bar (and the IME when open) so it isn't clipped on
-            // rounded / gesture-nav screens.
-            Column(
-                Modifier
-                    .background(Surface)
-                    .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
-            ) {
-                // Multi-pane carries the mode + model in the top bar (top-right), so the
-                // composer's status strip is phone-only — no redundant bar above the box.
-                if (!isMultiPane) {
-                    HorizontalDivider(color = Hairline)
-                    StatusStrip(
-                        mode = displayAgent,
-                        model = displayModel,
-                        provider = displayProvider,
-                        tokens = uiState.session?.tokens,
-                        onClick = if (providers.isNotEmpty() || agents.isNotEmpty()) {
-                            { showModelPicker = true }
-                        } else null,
-                    )
-                }
-                HorizontalDivider(color = Hairline)
-                PromptInput(
-                    onSend = { text, attachments -> viewModel.sendPrompt(text, attachments) },
-                    enabled = pendingPermission == null && pendingQuestion == null,
-                    // isSending bridges the gap before the server flips status to "busy".
-                    busy = uiState.sessionStatus == "busy" || uiState.isSending,
-                    onStop = { viewModel.abort() },
-                    paletteEntries = paletteEntries,
-                    onSearchFiles = { query -> viewModel.searchFiles(query) },
-                    onPickEntry = { entry ->
-                        when (entry) {
-                            is PaletteEntry.Builtin -> entry.command.execute(commandActions)
-                            is PaletteEntry.Daemon -> viewModel.runCommand(entry.name, "")
-                        }
-                    },
-                )
-            }
-        },
+        // Single-pane: the composer is the Scaffold bottom bar (full window width).
+        // Multi-pane: the chat hosts the panes, so the composer moves under the stream
+        // column (see content below) and the top bar spans the full width.
+        bottomBar = { if (railContent == null) composerBar() },
     ) { padding ->
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
         ) {
+            // Multi-pane host: rail · (stream + composer) · sidebar, all UNDER the
+            // full-width top bar. Single-pane: this Row holds just the stream column.
+            railContent?.let {
+                it()
+                Box(Modifier.width(1.dp).fillMaxHeight().background(Hairline))
+            }
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
                 state = listState,
                 reverseLayout = true, // newest at the bottom (index 0); see sticky-scroll note above
@@ -457,6 +476,16 @@ fun ChatScreen(
                     todos = uiState.todos,
                     onOpenTasksBoard = onOpenTasksBoard,
                 )
+            }
+                }
+                // Multi-pane: composer sits under the stream column (not the bottom bar).
+                if (railContent != null) composerBar()
+            }
+            if (railContent != null) {
+                infoContent?.let {
+                    Box(Modifier.width(1.dp).fillMaxHeight().background(Hairline))
+                    it()
+                }
             }
         }
 
