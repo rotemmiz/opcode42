@@ -45,6 +45,7 @@ import dev.opcode42.feature.sessions.SessionListEvent
 import dev.opcode42.feature.sessions.SessionListUiState
 import dev.opcode42.feature.sessions.SessionListViewModel
 import dev.opcode42.feature.sessions.ui.SessionBrowser
+import dev.opcode42.feature.sessions.ui.isSessionBusy
 import kotlinx.coroutines.launch
 
 /** How the collapsible left sessions menu is presented. Closed by default in both modes. */
@@ -306,16 +307,14 @@ fun AdaptiveChatScreen(
             // stay reachable) rather than vanishing entirely.
             LeftRailMode.InlinePush -> Row(Modifier.fillMaxSize()) {
                 if (railOpen) {
-                    Row(Modifier.fillMaxHeight()) {
-                        // Selecting a session keeps the persistent triptych rail open (only a
-                        // manually-opened Medium rail collapses); the chat content swaps in
-                        // place. The collapse chevron always closes the rail.
-                        railPane(
-                            Modifier.width(220.dp).fillMaxHeight(),
-                            { if (!layout.railPersistent) railOpen = false },
-                            { railOpen = false },
-                        )
-                    }
+                    // Selecting a session keeps the persistent triptych rail open (only a
+                    // manually-opened Medium rail collapses); the chat content swaps in
+                    // place. The collapse chevron always closes the rail.
+                    railPane(
+                        Modifier.width(220.dp).fillMaxHeight(),
+                        { if (!layout.railPersistent) railOpen = false },
+                        { railOpen = false },
+                    )
                 } else {
                     CollapsedRail(
                         sessions = sessionListState.groups.flatMap { it.sessions },
@@ -371,7 +370,7 @@ private fun CollapsedRail(
         ) {
             sessions.forEach { s ->
                 val active = s.id == activeId
-                val busy = statuses[s.id].let { it != null && it != "idle" }
+                val busy = isSessionBusy(statuses[s.id])
                 Box(contentAlignment = Alignment.Center) {
                     Box(
                         Modifier
@@ -392,7 +391,7 @@ private fun CollapsedRail(
                         Spinner(
                             modifier = Modifier.align(Alignment.BottomEnd),
                             size = 13.dp,
-                            color = Secondary,
+                            color = if (active) OnSecondary else Secondary,
                         )
                     }
                 }
@@ -701,6 +700,7 @@ internal fun SessionInfoPanel(
                         color = LinkCyan,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 130.dp),
                     )
                     cmd.source?.takeIf { it == "mcp" || it == "skill" }?.let { src ->
                         Spacer(Modifier.width(6.dp))

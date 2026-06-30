@@ -5,6 +5,7 @@ import dev.opcode42.core.design.brand.AsteriskMark
 import dev.opcode42.core.design.brand.Spinner
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -230,29 +231,47 @@ fun ChatScreen(
                         }
                     }
                     if (!isDraft && isMultiPane) {
-                        // Mode badge + model — right panel shows full session info so only compact version here.
-                        Text(
-                            text = (displayAgent ?: "build").replaceFirstChar { it.uppercase() },
-                            fontFamily = Opcode42Mono,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = OnPrimary,
-                            modifier = Modifier
-                                .clip(Opcode42Shapes.xs)
-                                .background(Primary)
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
-                        if (displayModel != null) {
-                            Spacer(Modifier.width(6.dp))
+                        // Mode badge + model — tap opens the model/agent picker (the
+                        // multi-pane equivalent of the phone status strip's tap target).
+                        val openPicker: (() -> Unit)? =
+                            if (providers.isNotEmpty() || agents.isNotEmpty()) {
+                                { showModelPicker = true }
+                            } else {
+                                null
+                            }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = (
+                                if (openPicker != null) {
+                                    Modifier.clip(Opcode42Shapes.sm).clickable(onClick = openPicker)
+                                } else {
+                                    Modifier
+                                }
+                                ).padding(horizontal = 2.dp),
+                        ) {
                             Text(
-                                text = displayModel,
+                                text = (displayAgent ?: "build").replaceFirstChar { it.uppercase() },
                                 fontFamily = Opcode42Mono,
                                 fontSize = 11.sp,
-                                color = OnSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.widthIn(max = 100.dp),
+                                fontWeight = FontWeight.Bold,
+                                color = OnPrimary,
+                                modifier = Modifier
+                                    .clip(Opcode42Shapes.xs)
+                                    .background(Primary)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
                             )
+                            if (displayModel != null) {
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = displayModel,
+                                    fontFamily = Opcode42Mono,
+                                    fontSize = 11.sp,
+                                    color = OnSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 100.dp),
+                                )
+                            }
                         }
                         if (showInfoToggle) {
                             // Collapse/expand the right session-info panel (on by default).
