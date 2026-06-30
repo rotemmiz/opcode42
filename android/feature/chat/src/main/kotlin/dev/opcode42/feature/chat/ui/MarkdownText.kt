@@ -1,6 +1,8 @@
 package dev.opcode42.feature.chat.ui
 
 import dev.opcode42.core.design.theme.*
+import dev.opcode42.core.design.text.SyntaxColors
+import dev.opcode42.core.design.text.highlightCode
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -247,6 +250,10 @@ private fun HeaderBlock(block: MdBlock.Header) {
 
 @Composable
 private fun CodeBlockView(block: MdBlock.CodeBlock) {
+    val syntax = SyntaxColors.fromTheme()
+    val highlighted = remember(block.lines, syntax) {
+        highlightCode(block.lines.joinToString("\n"), syntax)
+    }
     Box(
         modifier = Modifier
             .padding(horizontal = 14.dp, vertical = 3.dp)
@@ -255,7 +262,7 @@ private fun CodeBlockView(block: MdBlock.CodeBlock) {
             .border(1.dp, Hairline, Opcode42Shapes.xs),
     ) {
         Text(
-            text = block.lines.joinToString("\n"),
+            text = highlighted,
             fontFamily = Opcode42Mono,
             fontSize = 12.sp,
             lineHeight = 18.sp,
