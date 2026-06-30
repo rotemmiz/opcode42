@@ -81,23 +81,35 @@ private fun ReasoningPartView(part: ReasoningPart, modifier: Modifier = Modifier
         }
     }
 
-    // Minimal mono line per design (`+ Thought: 740ms`); tap to reveal the
-    // full reasoning. No chevron — the line itself is the affordance.
-    Text(
-        text = buildAnnotatedString {
-            withStyle(SpanStyle(color = Secondary, fontFamily = Opcode42Mono)) {
-                append(if (duration != null) "+ Thought:" else "+ Thought")
-            }
-            duration?.let {
-                append(" ")
-                withStyle(SpanStyle(color = OnSurfaceFaint, fontFamily = Opcode42Mono)) { append(it) }
-            }
-        },
-        fontSize = 13.sp,
+    // Sans thought line with the amber spark glyph (mobile.md §1's "spark glyph +
+    // Thought for …", rendered here in seconds, e.g. "Thought for 0.74s"); tap to
+    // reveal the full reasoning. No chevron — the line itself is the affordance.
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .clickable { expanded = !expanded }
-            .padding(horizontal = 14.dp, vertical = 2.dp),
-    )
+            .padding(horizontal = 14.dp, vertical = 3.dp),
+    ) {
+        Icon(
+            Icons.Default.AutoAwesome,
+            contentDescription = null,
+            tint = Secondary,
+            modifier = Modifier.size(13.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = buildAnnotatedString {
+                withStyle(SpanStyle(color = Secondary)) {
+                    append(if (duration != null) "Thought for" else "Thinking…")
+                }
+                duration?.let {
+                    append(" ")
+                    withStyle(SpanStyle(color = OnSurfaceFaint)) { append(it) }
+                }
+            },
+            fontSize = 13.sp,
+        )
+    }
 
     if (expanded) {
         Text(

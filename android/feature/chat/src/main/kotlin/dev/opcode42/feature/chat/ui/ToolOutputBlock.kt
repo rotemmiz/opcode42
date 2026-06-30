@@ -1,6 +1,8 @@
 package dev.opcode42.feature.chat.ui
 
 import dev.opcode42.core.design.theme.*
+import dev.opcode42.core.design.text.SyntaxColors
+import dev.opcode42.core.design.text.highlightCode
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -143,8 +146,14 @@ fun ToolOutputBlock(part: ToolPart, modifier: Modifier = Modifier) {
                     .background(SurfaceContainerLowest)
                     .horizontalScroll(rememberScrollState()),
             ) {
+                // Written file content is code → syntax-highlight it; bash stdout/stderr
+                // stays plain (it's terminal output, not source).
+                val syntax = SyntaxColors.fromTheme()
+                val rendered = remember(shown, syntax) {
+                    if (!isBash && !isError) highlightCode(shown, syntax) else AnnotatedString(shown)
+                }
                 Text(
-                    text = shown,
+                    text = rendered,
                     fontFamily = Opcode42Mono,
                     fontSize = 12.sp,
                     lineHeight = 18.sp,
