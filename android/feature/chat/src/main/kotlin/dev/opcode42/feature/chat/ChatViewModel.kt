@@ -141,11 +141,11 @@ class ChatViewModel @Inject constructor(
 
     /**
      * Emits the real session id once a draft's first prompt has created the session, so the
-     * UI can navigate from the draft route to the real session (replacing the draft in the
-     * backstack). Buffered so the emit isn't lost if no collector is momentarily attached.
+     * UI navigates from the draft route to the real session (replacing the draft in the
+     * backstack). A Channel gives true one-shot delivery (mirrors [events]).
      */
-    private val _navigateToSession = MutableSharedFlow<String>(extraBufferCapacity = 1)
-    val navigateToSession: SharedFlow<String> = _navigateToSession.asSharedFlow()
+    private val _navigateToSession = Channel<String>(Channel.BUFFERED)
+    val navigateToSession = _navigateToSession.receiveAsFlow()
 
     init {
         if (isDraft) {
@@ -239,6 +239,9 @@ class ChatViewModel @Inject constructor(
      */
     fun sendPrompt(text: String, attachments: List<FilePartInput> = emptyList()) {
         viewModelScope.launch {
+            // Idempotency: ignore a second send while one is in flight, so a double-tap on a
+            // draft can't create two sessions (the second would be an orphaned empty one).
+            if (_isSending.value) return@launch
             _isSending.value = true
             try {
                 if (isDraft) {
@@ -251,7 +254,7 @@ class ChatViewModel @Inject constructor(
                     created.directory?.let { chatRepo.subscribeDirectory(it) }
                     chatRepo.send(created.id, text, created.directory, attachments, _selectedModel.value, _selectedAgent.value)
                         .onFailure { emitError("send", it) }
-                    _navigateToSession.tryEmit(created.id)
+                    _navigateToSession.trySend(created.id)
                 } else {
                     chatRepo.send(sessionId, text, directory, attachments, _selectedModel.value, _selectedAgent.value)
                         .onFailure { emitError("send", it) }
@@ -355,6 +358,9 @@ class ChatViewModel @Inject constructor(
 
     /** Stop a running agent turn (composer stop button, shown while the session is busy). */
     fun abort() {
+        // A draft has no server session to abort; the Stop button can briefly show while the
+        // first prompt is creating the session, so ignore it rather than POST abort("new").
+        if (isDraft) return
         viewModelScope.launch {
             sessionRepo.abort(sessionId, directory)
                 .onFailure { emitError("abort", it) }
