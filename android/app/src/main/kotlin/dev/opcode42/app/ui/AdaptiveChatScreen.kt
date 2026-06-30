@@ -242,7 +242,6 @@ fun AdaptiveChatScreen(
             .sortedByDescending { it.additions + it.deletions }
     }
 
-    // Center pane: chat, plus the persistent right info panel when the layout calls for it.
     // The right context sidebar (shown when the info panel is on). Rendered as a slot
     // inside ChatScreen in multi-pane so the top bar spans the full width above it.
     val infoSlot: (@Composable () -> Unit)? = if (rightPanelVisible) {

@@ -399,84 +399,85 @@ fun ChatScreen(
             }
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
-            LazyColumn(
-                state = listState,
-                reverseLayout = true, // newest at the bottom (index 0); see sticky-scroll note above
-                contentPadding = PaddingValues(top = 6.dp, bottom = 64.dp), // 6+8 ≈ 14dp top gutter; clear the sheet peek
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth()
-                    .widthIn(max = 720.dp) // tablet: cap + center the stream
-                    .align(Alignment.TopCenter)
-                    .nestedScroll(autoScrollConnection),
-                // NOTE: no imeNestedScroll() — on a reverseLayout list it applies an
-                // inverted IME offset for one frame on every scroll, so the stream visibly
-                // jumps and snaps back as you scroll. The bottomBar's
-                // windowInsetsPadding(WindowInsets.ime…) keeps the composer above the
-                // keyboard; the list just needs to scroll normally.
-            ) {
-                // reverseLayout: emit newest-first so the freshest content is index 0 (bottom).
-                // Optimistic (just-sent, unconfirmed) messages are the newest, then the server
-                // messages newest→oldest above them.
-                items(uiState.optimisticMessages.asReversed(), key = { "opt:${it.id}" }) { opt ->
-                    OptimisticMessageBlock(opt)
-                }
-                items(uiState.messages.asReversed(), key = { it.id }) { message ->
-                    // SSE live parts supersede REST-loaded parts when present, but
-                    // PatchParts from SSE may lack the `files` list that the REST
-                    // endpoint includes — fall back to the REST-loaded part in that case.
-                    val liveParts = uiState.parts[message.id]
-                    val effectiveParts: List<Part> = remember(liveParts, message.parts) {
-                        if (liveParts == null) {
-                            message.parts
-                        } else {
-                            val byId = message.parts.associateBy { it.id }
-                            liveParts.map { lp ->
-                                if (lp is PatchPart && lp.files.isEmpty()) byId[lp.id] ?: lp
-                                else lp
+                    LazyColumn(
+                        state = listState,
+                        reverseLayout = true, // newest at the bottom (index 0); see sticky-scroll note above
+                        contentPadding = PaddingValues(top = 6.dp, bottom = 64.dp), // 6+8 ≈ 14dp top gutter; clear the sheet peek
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth()
+                            .widthIn(max = 720.dp) // tablet: cap + center the stream
+                            .align(Alignment.TopCenter)
+                            .nestedScroll(autoScrollConnection),
+                        // NOTE: no imeNestedScroll() — on a reverseLayout list it applies an
+                        // inverted IME offset for one frame on every scroll, so the stream visibly
+                        // jumps and snaps back as you scroll. The composer's own
+                        // windowInsetsPadding(WindowInsets.ime…) keeps it above the keyboard — it's
+                        // the Scaffold bottom bar single-pane, an in-content sibling multi-pane —
+                        // so the list just needs to scroll normally.
+                    ) {
+                        // reverseLayout: emit newest-first so the freshest content is index 0 (bottom).
+                        // Optimistic (just-sent, unconfirmed) messages are the newest, then the server
+                        // messages newest→oldest above them.
+                        items(uiState.optimisticMessages.asReversed(), key = { "opt:${it.id}" }) { opt ->
+                            OptimisticMessageBlock(opt)
+                        }
+                        items(uiState.messages.asReversed(), key = { it.id }) { message ->
+                            // SSE live parts supersede REST-loaded parts when present, but
+                            // PatchParts from SSE may lack the `files` list that the REST
+                            // endpoint includes — fall back to the REST-loaded part in that case.
+                            val liveParts = uiState.parts[message.id]
+                            val effectiveParts: List<Part> = remember(liveParts, message.parts) {
+                                if (liveParts == null) {
+                                    message.parts
+                                } else {
+                                    val byId = message.parts.associateBy { it.id }
+                                    liveParts.map { lp ->
+                                        if (lp is PatchPart && lp.files.isEmpty()) byId[lp.id] ?: lp
+                                        else lp
+                                    }
+                                }
                             }
+                            MessageBlock(
+                                message = message,
+                                parts = effectiveParts,
+                                diffs = uiState.diffs,
+                            )
                         }
                     }
-                    MessageBlock(
-                        message = message,
-                        parts = effectiveParts,
-                        diffs = uiState.diffs,
-                    )
-                }
-            }
 
-            // Initial message load: entering a session before anything has streamed in.
-            if (uiState.isLoading && uiState.messages.isEmpty() && uiState.optimisticMessages.isEmpty()) {
-                Spinner(
-                    modifier = Modifier.align(Alignment.Center),
-                    size = 32.dp,
-                    color = Secondary,
-                )
-            }
+                    // Initial message load: entering a session before anything has streamed in.
+                    if (uiState.isLoading && uiState.messages.isEmpty() && uiState.optimisticMessages.isEmpty()) {
+                        Spinner(
+                            modifier = Modifier.align(Alignment.Center),
+                            size = 32.dp,
+                            color = Secondary,
+                        )
+                    }
 
-            // New-session splash: the dual-arc mark + prompt until the first message lands.
-            if (isDraft && !uiState.isLoading && uiState.messages.isEmpty() && uiState.optimisticMessages.isEmpty()) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                ) {
-                    AsteriskMark(size = 132.dp, color = OnSurface)
-                    Spacer(Modifier.height(22.dp))
-                    Text(
-                        text = "What should we build?",
-                        fontSize = 14.sp,
-                        color = OnSurfaceVariant,
-                    )
-                }
-            }
+                    // New-session splash: the dual-arc mark + prompt until the first message lands.
+                    if (isDraft && !uiState.isLoading && uiState.messages.isEmpty() && uiState.optimisticMessages.isEmpty()) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                        ) {
+                            AsteriskMark(size = 132.dp, color = OnSurface)
+                            Spacer(Modifier.height(22.dp))
+                            Text(
+                                text = "What should we build?",
+                                fontSize = 14.sp,
+                                color = OnSurfaceVariant,
+                            )
+                        }
+                    }
 
-            // Todos dock — only in single/medium pane; moves to info panel in expanded.
-            if (showTodoSheet) {
-                TodoSheet(
-                    todos = uiState.todos,
-                    onOpenTasksBoard = onOpenTasksBoard,
-                )
-            }
+                    // Todos dock — only in single/medium pane; moves to info panel in expanded.
+                    if (showTodoSheet) {
+                        TodoSheet(
+                            todos = uiState.todos,
+                            onOpenTasksBoard = onOpenTasksBoard,
+                        )
+                    }
                 }
                 // Multi-pane: composer sits under the stream column (not the bottom bar).
                 if (railContent != null) composerBar()
