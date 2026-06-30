@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Difference
+import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material3.*
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
@@ -29,6 +31,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
@@ -683,47 +687,77 @@ internal fun SessionInfoPanel(
                     letterSpacing = 0.6.sp,
                     fontWeight = FontWeight.Bold,
                     color = HeaderPurple,
-                    modifier = Modifier.weight(1f),
                 )
+                Spacer(Modifier.width(6.dp))
                 Text(
                     text = "${diffs.size} files",
                     fontSize = 11.5.sp,
                     color = OnSurfaceFaint,
                     fontFamily = Opcode42Mono,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    Icons.Outlined.Difference,
+                    contentDescription = null,
+                    tint = OnSurfaceFaint,
+                    modifier = Modifier.size(15.dp),
                 )
             }
-            diffs.forEach { diff ->
+            // Hoist the amber accent out of the per-row draw scope (it's a @Composable token).
+            val accent = Secondary
+            diffs.forEachIndexed { index, diff ->
+                // The most-changed file (first — diffs are churn-sorted) is the focal edit:
+                // flag it with the amber active-row treatment shared with the sessions rail.
+                val active = index == 0
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (active) {
+                                Modifier
+                                    .background(SecondaryContainer)
+                                    .drawBehind {
+                                        drawRect(accent, size = Size(2.5.dp.toPx(), size.height))
+                                    }
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .padding(horizontal = 10.dp, vertical = 2.dp),
                 ) {
+                    Icon(
+                        Icons.Outlined.InsertDriveFile,
+                        contentDescription = null,
+                        tint = if (active) Secondary else OnSurfaceFaint,
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
                     Text(
-                        text = diff.file?.substringAfterLast('/') ?: "unknown",
+                        text = diff.file ?: "unknown",
                         fontFamily = Opcode42Mono,
                         fontSize = 12.5.sp,
-                        color = OnSurfaceVariant,
+                        color = if (active) Secondary else Tertiary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(6.dp))
-                    if (diff.additions > 0) {
-                        Text(
-                            text = "+${diff.additions}",
-                            fontFamily = Opcode42Mono,
-                            fontSize = 12.5.sp,
-                            color = Tertiary,
-                        )
-                        Spacer(Modifier.width(3.dp))
-                    }
-                    if (diff.deletions > 0) {
-                        Text(
-                            text = "-${diff.deletions}",
-                            fontFamily = Opcode42Mono,
-                            fontSize = 12.5.sp,
-                            color = Error,
-                        )
-                    }
+                    // Always show both counts; a zero stays dim rather than vanishing,
+                    // so the +adds / −dels columns line up down the list.
+                    Text(
+                        text = "+${diff.additions}",
+                        fontFamily = Opcode42Mono,
+                        fontSize = 12.5.sp,
+                        color = if (diff.additions > 0) Tertiary else OnSurfaceFaint,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "-${diff.deletions}",
+                        fontFamily = Opcode42Mono,
+                        fontSize = 12.5.sp,
+                        color = if (diff.deletions > 0) Error else OnSurfaceFaint,
+                    )
                 }
             }
             Spacer(Modifier.height(3.dp))
