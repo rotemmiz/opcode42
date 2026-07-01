@@ -427,7 +427,7 @@ fun ChatScreen(
                 // isLoading=true — seeding it visible would skip the debounce and flash). Only the
                 // draft/idle prompt seeds visible, so its logo shows with no first-frame blank.
                 var splashVisible by remember { mutableStateOf(isDraft) }
-                var splashShownAt by remember { mutableStateOf(0L) }
+                var splashShownAt by remember { mutableLongStateOf(0L) }
                 LaunchedEffect(wantSplash) {
                     if (wantSplash) {
                         if (!splashVisible) {

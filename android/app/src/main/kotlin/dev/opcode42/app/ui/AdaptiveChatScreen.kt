@@ -548,7 +548,8 @@ internal fun NavRailPane(
             // Active server host:port; start-ellipsized so the port survives a narrow rail
             // (…example.com:4096). Fades out as the rail collapses.
             StartEllipsisText(
-                text = uiState.serverLabel ?: "No server",
+                // orEmpty+ifEmpty: also fall back when a degenerate URL (e.g. "http://") derives a blank label.
+                text = uiState.serverLabel.orEmpty().ifEmpty { "No server" },
                 style = TextStyle(fontFamily = Opcode42Mono, fontSize = 11.sp, color = OnSurfaceFaint),
                 modifier = Modifier
                     .weight(1f)
