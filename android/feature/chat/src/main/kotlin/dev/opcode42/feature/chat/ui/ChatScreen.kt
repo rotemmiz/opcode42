@@ -142,7 +142,7 @@ fun ChatScreen(
     val sessionDirectory = uiState.session?.directory
     var showInfoSheet by remember { mutableStateOf(false) }
     var showOverflow by remember { mutableStateOf(false) }
-    var showModelPicker by remember { mutableStateOf(false) }
+    var pickerTarget by remember { mutableStateOf<PickerTarget?>(null) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -155,7 +155,8 @@ fun ChatScreen(
         override val hasDirectory: Boolean get() = sessionDirectory != null
         override fun newSession() = onNewSession()
         override fun openSessions() = onOpenNavRail()
-        override fun openModelPicker() { showModelPicker = true }
+        override fun openModelPicker() { pickerTarget = PickerTarget.MODEL }
+        override fun openAgentPicker() { pickerTarget = PickerTarget.AGENT }
         override fun openTerminal() { sessionDirectory?.let { onOpenTerminal(it) } }
         override fun openInfo() { showInfoSheet = true }
         override fun renameSession() { showRenameDialog = true }
@@ -197,8 +198,11 @@ fun ChatScreen(
                     model = displayModel,
                     provider = displayProvider,
                     tokens = uiState.session?.tokens,
-                    onClick = if (providers.isNotEmpty() || agents.isNotEmpty()) {
-                        { showModelPicker = true }
+                    onClick = if (providers.isNotEmpty()) {
+                        { pickerTarget = PickerTarget.MODEL }
+                    } else null,
+                    onModeClick = if (agents.isNotEmpty()) {
+                        { pickerTarget = PickerTarget.AGENT }
                     } else null,
                 )
             }
@@ -272,23 +276,16 @@ fun ChatScreen(
                         }
                     }
                     if (!isDraft && isMultiPane) {
-                        // Mode badge + model — tap opens the model/agent picker (the
-                        // multi-pane equivalent of the phone status strip's tap target).
-                        val openPicker: (() -> Unit)? =
-                            if (providers.isNotEmpty() || agents.isNotEmpty()) {
-                                { showModelPicker = true }
-                            } else {
-                                null
-                            }
+                        // Mode badge + model — the multi-pane equivalent of the phone
+                        // status strip. The mode chip opens the agent picker; the model
+                        // name opens the model picker (matching the two split sheets).
+                        val openAgent: (() -> Unit)? =
+                            if (agents.isNotEmpty()) { { pickerTarget = PickerTarget.AGENT } } else null
+                        val openModel: (() -> Unit)? =
+                            if (providers.isNotEmpty()) { { pickerTarget = PickerTarget.MODEL } } else null
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = (
-                                if (openPicker != null) {
-                                    Modifier.clip(Opcode42Shapes.sm).clickable(onClick = openPicker)
-                                } else {
-                                    Modifier
-                                }
-                                ).padding(horizontal = 2.dp),
+                            modifier = Modifier.padding(horizontal = 2.dp),
                         ) {
                             Text(
                                 text = (displayAgent ?: "build").replaceFirstChar { it.uppercase() },
@@ -299,6 +296,13 @@ fun ChatScreen(
                                 modifier = Modifier
                                     .clip(Opcode42Shapes.xs)
                                     .background(Primary)
+                                    .then(
+                                        if (openAgent != null) {
+                                            Modifier.clickable(onClick = openAgent)
+                                        } else {
+                                            Modifier
+                                        },
+                                    )
                                     .padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                             if (displayModel != null) {
@@ -310,7 +314,17 @@ fun ChatScreen(
                                     color = OnSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.widthIn(max = 100.dp),
+                                    modifier = Modifier
+                                        .then(
+                                            if (openModel != null) {
+                                                Modifier
+                                                    .clip(Opcode42Shapes.xs)
+                                                    .clickable(onClick = openModel)
+                                            } else {
+                                                Modifier
+                                            },
+                                        )
+                                        .widthIn(max = 100.dp),
                                 )
                             }
                         }
@@ -555,22 +569,26 @@ fun ChatScreen(
             )
         }
 
-        if (showModelPicker) {
-            ModelPickerSheet(
+        when (pickerTarget) {
+            PickerTarget.MODEL -> ModelPickerSheet(
                 providers = providers,
-                agents = agents,
                 selectedModel = displayModelRef,
-                selectedAgent = displayAgent,
                 onSelectModel = { ref ->
                     viewModel.selectModel(ref)
-                    showModelPicker = false
+                    pickerTarget = null
                 },
+                onDismiss = { pickerTarget = null },
+            )
+            PickerTarget.AGENT -> AgentPickerSheet(
+                agents = agents,
+                selectedAgent = displayAgent,
                 onSelectAgent = { name ->
                     viewModel.selectAgent(name)
-                    showModelPicker = false
+                    pickerTarget = null
                 },
-                onDismiss = { showModelPicker = false },
+                onDismiss = { pickerTarget = null },
             )
+            null -> Unit
         }
     }
 }

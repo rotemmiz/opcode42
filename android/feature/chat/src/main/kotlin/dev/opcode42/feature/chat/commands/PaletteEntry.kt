@@ -18,6 +18,9 @@ sealed interface PaletteEntry {
     /** Optional trailing badge: "soon" for unbuilt built-ins, "mcp"/"skill" for daemon sources. */
     val badge: String?
 
+    /** True when picking this entry opens a further picker — the palette shows a chevron. */
+    val hasSubmenu: Boolean
+
     /**
      * Stable, collision-free list key. A built-in and a daemon command may share a [name]
      * (e.g. a user-defined `/diff`); namespacing the key keeps `LazyColumn` keys unique.
@@ -31,6 +34,7 @@ sealed interface PaletteEntry {
         override val name: String get() = command.name
         override val description: String? get() = command.description
         override val badge: String? get() = if (enabled) null else "soon"
+        override val hasSubmenu: Boolean get() = command.opensSubmenu
         override val key: String get() = "builtin:$name"
     }
 
@@ -39,6 +43,7 @@ sealed interface PaletteEntry {
         override val description: String? get() = info.description
         override val enabled: Boolean get() = true
         override val badge: String? get() = info.source?.takeIf { it == "mcp" || it == "skill" }
+        override val hasSubmenu: Boolean get() = false
         override val key: String get() = "daemon:$name"
     }
 }

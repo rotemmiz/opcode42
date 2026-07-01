@@ -13,7 +13,7 @@ class CommandDispatchTest {
             NewSessionCommand to "newSession",
             SessionsCommand to "openSessions",
             ModelsCommand to "openModelPicker",
-            AgentsCommand to "openModelPicker",
+            AgentsCommand to "openAgentPicker",
             TerminalCommand to "openTerminal",
             InfoCommand to "openInfo",
             RenameCommand to "renameSession",

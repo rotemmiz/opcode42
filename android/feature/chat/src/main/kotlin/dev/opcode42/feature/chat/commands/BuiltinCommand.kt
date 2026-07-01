@@ -20,6 +20,12 @@ interface BuiltinCommand {
     val implemented: Boolean get() = true
 
     /**
+     * True when picking this command opens a further picker (a sub-sheet) rather
+     * than acting immediately — the palette renders a trailing chevron for these.
+     */
+    val opensSubmenu: Boolean get() = false
+
+    /**
      * Runtime gate for implemented commands (e.g. `/terminal` needs a directory). An
      * implemented command that is not currently available is hidden from the palette.
      */

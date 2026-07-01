@@ -20,16 +20,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
+import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,9 +40,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -214,6 +219,7 @@ fun PromptInput(
         when {
             filteredCommands.isNotEmpty() -> CommandPanel(
                 entries = filteredCommands,
+                query = slashQuery ?: "",
                 onPick = { entry ->
                     onPickEntry(entry)
                     text = ""
@@ -221,6 +227,7 @@ fun PromptInput(
             )
             mentionQuery != null && fileResults.isNotEmpty() -> MentionPanel(
                 files = fileResults,
+                query = mentionQuery,
                 onPick = { path ->
                     val start = mentionMatch!!.range.first + (mentionMatch.value.length - mentionMatch.value.trimStart().length)
                     text = text.substring(0, start) + "@" + path + " "
@@ -434,67 +441,125 @@ private fun MicButton(
 /**
  * Slash-command suggestions list, anchored above the field. Merges built-in client
  * actions (first) with daemon commands; disabled entries (not-yet-built built-ins)
- * render greyed with a "soon" badge and are not selectable.
+ * render greyed with a "soon" badge and are not selectable. The top match is the
+ * amber focal row; commands that open a further picker show a trailing chevron.
  */
 @Composable
-private fun CommandPanel(entries: List<PaletteEntry>, onPick: (PaletteEntry) -> Unit) {
-    SuggestionPanel {
+private fun CommandPanel(entries: List<PaletteEntry>, query: String, onPick: (PaletteEntry) -> Unit) {
+    SuggestionPanel(
+        header = {
+            PanelHeader(
+                leadingIcon = Icons.Default.Search,
+                query = "/$query",
+                trailingLabel = pluralize(entries.size, "command"),
+            )
+        },
+    ) {
         LazyColumn {
             itemsIndexed(entries, key = { _, e -> e.key }) { index, entry ->
-                if (index > 0) HorizontalDivider(color = Hairline)
+                val focal = index == 0 && entry.enabled
                 val rowModifier = Modifier
                     .fillMaxWidth()
                     .then(if (entry.enabled) Modifier.clickable { onPick(entry) } else Modifier)
+                    .focalRow(active = focal)
                     .heightIn(min = 48.dp)
                     .padding(horizontal = 14.dp, vertical = 8.dp)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = rowModifier,
                 ) {
                     Text(
                         text = "/${entry.name}",
                         fontFamily = Opcode42Mono,
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (entry.enabled) Secondary else OnSurfaceFaint,
+                        fontWeight = if (focal) FontWeight.Bold else FontWeight.Medium,
+                        color = when {
+                            !entry.enabled -> OnSurfaceFaint
+                            focal -> OnSurface
+                            else -> LinkCyan
+                        },
                     )
-                    entry.description?.let {
+                    val desc = entry.description
+                    if (desc != null) {
                         Text(
-                            text = it,
+                            text = desc,
                             fontSize = 13.sp,
                             color = if (entry.enabled) OnSurfaceVariant else OnSurfaceFaint,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
+                    } else {
+                        Spacer(Modifier.weight(1f))
                     }
-                    entry.badge?.let { SourcePill(it) }
+                    val badge = entry.badge
+                    when {
+                        entry.hasSubmenu -> Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = OnSurfaceFaint,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        badge != null -> SourcePill(badge)
+                    }
                 }
             }
         }
     }
 }
 
-/** @-mention file suggestions list, anchored above the field. */
+/**
+ * @-mention file suggestions, anchored above the field. Each row shows a file glyph,
+ * the filename (green), and its parent directory (dim); the top match is the amber
+ * focal row.
+ */
 @Composable
-private fun MentionPanel(files: List<String>, onPick: (String) -> Unit) {
-    SuggestionPanel {
+private fun MentionPanel(files: List<String>, query: String, onPick: (String) -> Unit) {
+    SuggestionPanel(
+        header = {
+            PanelHeader(
+                leadingIcon = Icons.Default.AlternateEmail,
+                query = "@$query",
+                trailingLabel = "files",
+            )
+        },
+    ) {
         LazyColumn {
-            items(files, key = { it }) { path ->
+            itemsIndexed(files, key = { _, path -> path }) { index, path ->
+                val name = path.substringAfterLast('/')
+                val parent = path.substringBeforeLast('/', "")
+                val dir = if (parent.isEmpty()) "./" else "$parent/"
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onPick(path) }
+                        .focalRow(active = index == 0)
                         .heightIn(min = 44.dp)
                         .padding(horizontal = 14.dp, vertical = 6.dp),
                 ) {
+                    Icon(
+                        Icons.AutoMirrored.Outlined.InsertDriveFile,
+                        contentDescription = null,
+                        tint = OnSurfaceFaint,
+                        modifier = Modifier.size(15.dp),
+                    )
                     Text(
-                        text = path,
+                        text = name,
                         fontFamily = Opcode42Mono,
                         fontSize = 13.sp,
-                        color = LinkCyan,
+                        fontWeight = if (index == 0) FontWeight.Bold else FontWeight.Normal,
+                        color = if (index == 0) OnSurface else Tertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = dir,
+                        fontFamily = Opcode42Mono,
+                        fontSize = 12.sp,
+                        color = OnSurfaceFaint,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -504,20 +569,71 @@ private fun MentionPanel(files: List<String>, onPick: (String) -> Unit) {
     }
 }
 
+/**
+ * The floating suggestion surface above the composer: an elevated, rounded panel
+ * with a header ([header]) over a divider, then the scrolling [content].
+ */
 @Composable
-private fun SuggestionPanel(content: @Composable () -> Unit) {
-    Box(
+private fun SuggestionPanel(
+    header: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = 240.dp)
-            .padding(bottom = 6.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .padding(bottom = 8.dp)
+            .shadow(16.dp, shape, clip = false)
+            .clip(shape)
             .background(SurfaceContainerHigh)
-            .border(1.dp, Hairline, RoundedCornerShape(8.dp)),
+            .border(1.dp, Hairline, shape),
     ) {
-        content()
+        header()
+        HorizontalDivider(color = Hairline)
+        Box(modifier = Modifier.heightIn(max = 280.dp)) {
+            content()
+        }
     }
 }
+
+/** Header row shared by the slash/@ panels: leading glyph, the live query, a kicker. */
+@Composable
+private fun PanelHeader(leadingIcon: ImageVector, query: String, trailingLabel: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Icon(
+            leadingIcon,
+            contentDescription = null,
+            tint = OnSurfaceFaint,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = query,
+            fontFamily = Opcode42Mono,
+            fontSize = 13.5.sp,
+            color = OnSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = trailingLabel,
+            fontFamily = Opcode42Mono,
+            fontSize = 12.sp,
+            color = OnSurfaceFaint,
+        )
+    }
+}
+
+/** "1 command" / "8 commands". */
+private fun pluralize(count: Int, noun: String): String =
+    if (count == 1) "1 $noun" else "$count ${noun}s"
 
 @Composable
 private fun SourcePill(source: String) {

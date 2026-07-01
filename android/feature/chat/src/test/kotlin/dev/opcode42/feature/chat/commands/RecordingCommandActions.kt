@@ -9,6 +9,7 @@ class RecordingCommandActions(
     override fun newSession() { calls += "newSession" }
     override fun openSessions() { calls += "openSessions" }
     override fun openModelPicker() { calls += "openModelPicker" }
+    override fun openAgentPicker() { calls += "openAgentPicker" }
     override fun openTerminal() { calls += "openTerminal" }
     override fun openInfo() { calls += "openInfo" }
     override fun renameSession() { calls += "renameSession" }

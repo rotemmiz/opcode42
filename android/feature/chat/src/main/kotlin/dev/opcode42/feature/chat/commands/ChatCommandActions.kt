@@ -16,8 +16,10 @@ interface ChatCommandActions {
     fun newSession()
     /** Multi-pane: open the nav rail; compact: navigate back to the session list. */
     fun openSessions()
-    /** `/models` and `/agents` both open the combined model + agent picker. */
+    /** `/models` opens the model picker (provider-grouped). */
     fun openModelPicker()
+    /** `/agents` opens the agent-mode picker. */
+    fun openAgentPicker()
     fun openTerminal()
     fun openInfo()
     fun renameSession()

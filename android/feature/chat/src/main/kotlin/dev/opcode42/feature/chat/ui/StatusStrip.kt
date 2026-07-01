@@ -35,6 +35,7 @@ fun StatusStrip(
     tokens: TokenUsage?,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    onModeClick: (() -> Unit)? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -46,7 +47,7 @@ fun StatusStrip(
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 12.dp),
     ) {
-        // mode chip — blue fill, 700, 4dp radius
+        // mode chip — blue fill, 700, 4dp radius. Its own tap opens the agent picker.
         Text(
             text = (mode ?: "build").replaceFirstChar { it.uppercase() },
             fontFamily = Opcode42Mono,
@@ -56,6 +57,7 @@ fun StatusStrip(
             modifier = Modifier
                 .clip(Opcode42Shapes.xs)
                 .background(Primary)
+                .then(if (onModeClick != null) Modifier.clickable(onClick = onModeClick) else Modifier)
                 .padding(horizontal = 8.dp, vertical = 1.dp),
         )
         if (model != null) {

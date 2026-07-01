@@ -4,5 +4,6 @@ package dev.opcode42.feature.chat.commands
 object ModelsCommand : BuiltinCommand {
     override val name = "models"
     override val description = "Switch model"
+    override val opensSubmenu = true
     override fun execute(actions: ChatCommandActions) = actions.openModelPicker()
 }
