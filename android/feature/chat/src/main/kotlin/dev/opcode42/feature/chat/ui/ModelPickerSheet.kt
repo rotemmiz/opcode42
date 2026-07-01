@@ -378,16 +378,21 @@ private fun agentDotColor(name: String): Color = when (name.lowercase()) {
 }
 
 /**
- * A model's context window as a compact descriptor (200000 → "200K", 1_000_000 → "1M").
- * Returns null when the daemon didn't report a limit, so the row simply omits it — we
- * never fabricate a size the daemon didn't send.
+ * A model's context window as a compact descriptor (200000 → "200K", 1_500_000 → "1.5M").
+ * Rounds to the nearest unit (K/M) rather than truncating, so a 1.5M-token window doesn't
+ * read as "1M". Returns null when the daemon didn't report a limit, so the row simply omits
+ * it — we never fabricate a size the daemon didn't send. Distinct from [formatTokenCount],
+ * which always prints a decimal ("200.0K") — model sizes read cleaner as whole units.
  */
 private fun formatContextWindow(context: Double): String? {
     val n = context.toLong()
     return when {
         n <= 0 -> null
-        n >= 1_000_000 -> "${n / 1_000_000}M"
-        n >= 1_000 -> "${n / 1_000}K"
+        n >= 1_000_000 -> {
+            val tenths = (n + 50_000) / 100_000 // round to nearest 0.1M
+            if (tenths % 10 == 0L) "${tenths / 10}M" else "${tenths / 10}.${tenths % 10}M"
+        }
+        n >= 1_000 -> "${(n + 500) / 1_000}K" // round to nearest K
         else -> n.toString()
     }
 }

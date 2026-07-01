@@ -34,8 +34,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
@@ -61,6 +59,7 @@ import dev.opcode42.core.design.theme.Primary
 import dev.opcode42.core.design.theme.Secondary
 import dev.opcode42.core.design.theme.SecondaryContainer
 import dev.opcode42.core.design.theme.SurfaceContainerLow
+import dev.opcode42.core.design.theme.focalRow
 import dev.opcode42.core.model.PermissionRequest
 import dev.opcode42.core.model.QuestionRequest
 import dev.opcode42.core.model.Session
@@ -178,7 +177,6 @@ internal fun SessionRow(
                 isActive = isActive,
                 busy = busy,
                 needsInput = needsInput,
-                accent = accent,
                 onClick = onClick,
                 onLongPress = { showMenu = true },
                 pendingPermission = pendingPermission,
@@ -391,7 +389,6 @@ private fun FullListRow(
     isActive: Boolean,
     busy: Boolean,
     needsInput: Boolean,
-    accent: Color,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     pendingPermission: PermissionRequest?,
@@ -404,16 +401,9 @@ private fun FullListRow(
     Column(
         Modifier
             .fillMaxWidth()
-            // Active row: amber selection tint + a 2.5dp amber accent rail down the left.
-            .then(
-                if (isActive) {
-                    Modifier
-                        .background(SecondaryContainer)
-                        .drawBehind { drawRect(accent, size = Size(2.5.dp.toPx(), size.height)) }
-                } else {
-                    Modifier
-                },
-            ),
+            // Active row: amber selection tint + a 2.5dp amber accent rail down the left
+            // (the shared focal-row style, also used by the composer sheets).
+            .focalRow(active = isActive),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
