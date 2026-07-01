@@ -92,6 +92,24 @@ class SseWireParsingTest {
     }
 
     @Test
+    fun `message_part_updated degrades a malformed part to UnknownPart`() {
+        // A `file` part missing its required `url`/`mime` must not blow up the whole event:
+        // both the REST mapper and this SSE parser decode through the shared PartSerializer,
+        // which guards malformed typed parts down to UnknownPart (was previously divergent).
+        val raw = sse(
+            "message.part.updated",
+            """{"sessionID":"ses_1",
+               "part":{"id":"prt_x","sessionID":"ses_1","messageID":"msg_1","type":"file"}}""",
+        )
+        val ev = parser.parse(raw)
+        assertTrue(ev is AppEvent.PartUpdated)
+        val part = (ev as AppEvent.PartUpdated).part
+        assertTrue(part is dev.opcode42.core.model.UnknownPart)
+        assertEquals("prt_x", part.id)
+        assertEquals("file", part.type)
+    }
+
+    @Test
     fun `message_part_delta reads partID not id`() {
         // Opcode42: properties = {sessionID, messageID, partID, field, delta}
         val raw = sse(

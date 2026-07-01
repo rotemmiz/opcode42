@@ -87,28 +87,13 @@ class SseEventParser {
         AppEvent.Unknown(raw)
     }
 
-    private fun parseMessage(json: JsonObject): Message {
-        val role = json["role"]?.jsonPrimitive?.content ?: "assistant"
-        return when (role) {
-            "user" -> Opcode42Json.decodeFromJsonElement(UserMessage.serializer(), json).toMessage()
-            else -> Opcode42Json.decodeFromJsonElement(AssistantMessage.serializer(), json).toMessage()
-        }
-    }
+    // The role/type discriminator dispatch lives once, in the model's MessageSerializer /
+    // PartSerializer (registered on Opcode42Json). Both the REST mapper and this SSE parser
+    // decode through them so the two wire paths can never drift — and both inherit
+    // PartSerializer's "malformed part degrades to UnknownPart" guard.
+    private fun parseMessage(json: JsonObject): Message =
+        Opcode42Json.decodeFromJsonElement(MessageSerializer, json)
 
-    private fun parsePart(json: JsonObject): Part {
-        val type = json["type"]?.jsonPrimitive?.content ?: "unknown"
-        val id = json["id"]?.jsonPrimitive?.content ?: ""
-        val sessionID = json["sessionID"]?.jsonPrimitive?.content ?: ""
-        val messageID = json["messageID"]?.jsonPrimitive?.content ?: ""
-        return when (type) {
-            "text" -> Opcode42Json.decodeFromJsonElement(TextPart.serializer(), json)
-            "reasoning" -> Opcode42Json.decodeFromJsonElement(ReasoningPart.serializer(), json)
-            "file" -> Opcode42Json.decodeFromJsonElement(FilePart.serializer(), json)
-            "tool" -> Opcode42Json.decodeFromJsonElement(ToolPart.serializer(), json)
-            "patch" -> Opcode42Json.decodeFromJsonElement(PatchPart.serializer(), json)
-            "step-start" -> StepStartPart(id, sessionID, messageID)
-            "step-finish" -> StepFinishPart(id, sessionID, messageID)
-            else -> UnknownPart(id, sessionID, messageID, type)
-        }
-    }
+    private fun parsePart(json: JsonObject): Part =
+        Opcode42Json.decodeFromJsonElement(PartSerializer, json)
 }
