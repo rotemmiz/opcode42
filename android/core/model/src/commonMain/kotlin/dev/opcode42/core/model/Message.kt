@@ -7,7 +7,9 @@ import kotlinx.serialization.json.JsonObject
 @Serializable
 data class UserMessage(
     val id: String,
-    val sessionID: String,
+    // Defaulted so a message element lacking sessionID decodes (the REST mapper then substitutes
+    // the caller's fallback session id); the wire normally always includes it.
+    val sessionID: String = "",
     val role: String = "user",
     val time: MessageTime = MessageTime(0),
     val parts: List<@Contextual Part> = emptyList(),
@@ -20,7 +22,7 @@ data class UserMessage(
 @Serializable
 data class AssistantMessage(
     val id: String,
-    val sessionID: String,
+    val sessionID: String = "",
     val role: String = "assistant",
     val time: MessageTime = MessageTime(0),
     val parts: List<@Contextual Part> = emptyList(),

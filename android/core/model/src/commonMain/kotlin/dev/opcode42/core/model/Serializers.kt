@@ -97,28 +97,6 @@ private data class ToolPartJson(
     fun toPart() = ToolPart(id, sessionID, messageID, type, callID, tool, state)
 }
 
-// Make UserMessage.parts and AssistantMessage.parts deserialize correctly via PartSerializer
-@kotlinx.serialization.Serializable
-private data class UserMessageJson(
-    val id: String,
-    val sessionID: String,
-    val role: String = "user",
-    val time: MessageTime = MessageTime(0),
-    @kotlinx.serialization.Serializable(with = PartListSerializer::class)
-    val parts: List<Part> = emptyList(),
-    val format: String? = null,
-    val agent: String? = null,
-    val model: MessageModel? = null,
-    val system: String? = null,
-)
-
-object PartListSerializer : KSerializer<List<Part>> {
-    private val delegateSerializer = kotlinx.serialization.builtins.ListSerializer(PartSerializer)
-    override val descriptor = delegateSerializer.descriptor
-    override fun deserialize(decoder: Decoder) = delegateSerializer.deserialize(decoder)
-    override fun serialize(encoder: Encoder, value: List<Part>) = delegateSerializer.serialize(encoder, value)
-}
-
 val Opcode42Json = Json {
     ignoreUnknownKeys = true
     isLenient = true
