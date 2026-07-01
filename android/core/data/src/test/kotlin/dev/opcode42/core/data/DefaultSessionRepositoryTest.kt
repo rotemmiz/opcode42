@@ -34,7 +34,7 @@ class DefaultSessionRepositoryTest {
             override val baseUrl = server.url("/").toString().trimEnd('/')
         }
         store = AppStore()
-        repo = DefaultSessionRepository(Opcode42Client(HttpTransport(OkHttpClient(), baseUrl)), store)
+        repo = DefaultSessionRepository(Opcode42Client(HttpTransport(OkHttpClient(), OkHttpClient(), baseUrl)), store)
     }
 
     @After fun tearDown() { server.shutdown() }

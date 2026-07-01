@@ -18,6 +18,7 @@ import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 import kotlin.math.min
 
@@ -41,7 +42,7 @@ private const val RECONNECT_DELAY_MAX_MS = 30_000L
  */
 @Singleton
 class SseManager @Inject constructor(
-    private val client: OkHttpClient,
+    @Named(NetworkModule.STREAMING_CLIENT) private val client: OkHttpClient,
     private val connectionProvider: ActiveConnectionProvider,
     private val store: AppStore,
     private val eventParser: SseEventParser,
@@ -264,7 +265,9 @@ class SseManager @Inject constructor(
         val latestByKey = linkedMapOf<String, SseEvent>()
         val updatedPartIds = mutableSetOf<String>()
 
-        for (event in batch) {
+        // Use the loop index for the disambiguating suffix rather than batch.indexOf(event),
+        // which is an O(n) scan per event → O(n²) per flush frame.
+        for ((index, event) in batch.withIndex()) {
             when (event.type) {
                 "session.status" -> {
                     val key = "session.status:" + (event.properties["sessionID"]?.jsonPrimitive?.content ?: "")
@@ -286,10 +289,10 @@ class SseManager @Inject constructor(
                     // properties = {sessionID, messageID, partID, field, delta}.
                     val partId = event.properties["partID"]?.jsonPrimitive?.content ?: ""
                     if (partId !in updatedPartIds) {
-                        latestByKey["delta:$partId:${batch.indexOf(event)}"] = event
+                        latestByKey["delta:$partId:$index"] = event
                     }
                 }
-                else -> latestByKey["${event.type}:${batch.indexOf(event)}"] = event
+                else -> latestByKey["${event.type}:$index"] = event
             }
         }
         return latestByKey.values.toList()

@@ -53,8 +53,10 @@ class SseEventParser {
             // EventMessagePartRemoved.properties = {sessionID, messageID, partID}.
             "message.part.removed" ->
                 AppEvent.PartRemoved(
-                    p["partID"]?.jsonPrimitive?.content
-                        ?: p["id"]?.jsonPrimitive?.content ?: "")
+                    partId = p["partID"]?.jsonPrimitive?.content
+                        ?: p["id"]?.jsonPrimitive?.content ?: "",
+                    messageId = p["messageID"]?.jsonPrimitive?.content ?: "",
+                )
             // EventMessagePartDelta.properties = {sessionID, messageID, partID, field, delta}.
             "message.part.delta" ->
                 AppEvent.PartDelta(

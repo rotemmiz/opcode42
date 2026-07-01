@@ -87,4 +87,58 @@ class StoreReducerTest {
         val next = reduce(state, AppEvent.PartUpdated(updated))
         assertEquals("updated", (next.parts["m1"]?.first() as? TextPart)?.text)
     }
+
+    // ─── PartDelta / PartRemoved — indexed by carried messageId ─────────────────
+
+    @Test
+    fun partDelta_appendsToTargetPart_viaCarriedMessageId() {
+        val state = AppState(parts = mapOf("m1" to listOf(textPart("p1"))))
+        val next = reduce(state, AppEvent.PartDelta(partId = "p1", messageId = "m1", delta = " world"))
+        assertEquals("hello world", (next.parts["m1"]?.first() as? TextPart)?.text)
+    }
+
+    @Test
+    fun partDelta_onlyMutatesTargetMessageBucket() {
+        // Two message buckets; a delta for m2/p2 must leave m1 untouched (by identity).
+        val m1Parts = listOf(textPart("p1", msgID = "m1"))
+        val state = AppState(parts = mapOf("m1" to m1Parts, "m2" to listOf(textPart("p2", msgID = "m2"))))
+        val next = reduce(state, AppEvent.PartDelta(partId = "p2", messageId = "m2", delta = "!"))
+        assertSame(m1Parts, next.parts["m1"])
+        assertEquals("hello!", (next.parts["m2"]?.first() as? TextPart)?.text)
+    }
+
+    @Test
+    fun partDelta_fallsBackToScan_whenMessageIdBlank() {
+        val state = AppState(parts = mapOf("m1" to listOf(textPart("p1"))))
+        val next = reduce(state, AppEvent.PartDelta(partId = "p1", messageId = "", delta = "!"))
+        assertEquals("hello!", (next.parts["m1"]?.first() as? TextPart)?.text)
+    }
+
+    @Test
+    fun partDelta_unknownPart_isNoOp() {
+        val state = AppState(parts = mapOf("m1" to listOf(textPart("p1"))))
+        val next = reduce(state, AppEvent.PartDelta(partId = "ghost", messageId = "mX", delta = "!"))
+        assertSame(state, next)
+    }
+
+    @Test
+    fun partRemoved_dropsPart_viaCarriedMessageId() {
+        val state = AppState(parts = mapOf("m1" to listOf(textPart("p1"), textPart("p2"))))
+        val next = reduce(state, AppEvent.PartRemoved(partId = "p1", messageId = "m1"))
+        assertEquals(listOf(textPart("p2")), next.parts["m1"])
+    }
+
+    @Test
+    fun partRemoved_fallsBackToScan_whenMessageIdBlank() {
+        val state = AppState(parts = mapOf("m1" to listOf(textPart("p1"), textPart("p2"))))
+        val next = reduce(state, AppEvent.PartRemoved(partId = "p1", messageId = ""))
+        assertEquals(listOf(textPart("p2")), next.parts["m1"])
+    }
+
+    @Test
+    fun messageRemoved_dropsMessage_viaCarriedSessionId() {
+        val state = AppState(messages = mapOf("s1" to listOf(msg("m1"), msg("m2"))))
+        val next = reduce(state, AppEvent.MessageRemoved(sessionId = "s1", messageId = "m1"))
+        assertEquals(listOf(msg("m2")), next.messages["s1"])
+    }
 }

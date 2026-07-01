@@ -15,6 +15,7 @@ import okhttp3.WebSocketListener
 import java.io.IOException
 import java.net.URLEncoder
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 
 private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
@@ -42,6 +43,9 @@ interface BaseUrlProvider {
 @Singleton
 class HttpTransport @Inject constructor(
     private val httpClient: OkHttpClient,
+    // Long-lived PTY WebSocket must not inherit the REST client's finite read timeout, or an
+    // idle shell would drop after ~30s. Name must match NetworkModule.STREAMING_CLIENT.
+    @Named("streaming") private val streamingClient: OkHttpClient,
     private val baseUrlProvider: BaseUrlProvider,
 ) {
     val baseUrl: String? get() = baseUrlProvider.baseUrl
@@ -54,7 +58,7 @@ class HttpTransport @Inject constructor(
     }
 
     fun webSocket(request: Request, listener: WebSocketListener): WebSocket =
-        httpClient.newWebSocket(request, listener)
+        streamingClient.newWebSocket(request, listener)
 
     // ─── Core call/execute ──────────────────────────────────────────────────────
 
@@ -151,7 +155,15 @@ class HttpTransport @Inject constructor(
     }
 
     companion object {
-        /** URL-encodes a path/query/header component (UTF-8). */
-        fun enc(value: String): String = URLEncoder.encode(value, "UTF-8")
+        /**
+         * Encodes a path/query/header component with `encodeURIComponent` semantics (UTF-8).
+         *
+         * `URLEncoder.encode` emits space as `+`, but the daemon decodes the
+         * `X-Opencode-Directory` header with Go's `url.PathUnescape`, which decodes `%xx` yet
+         * leaves `+` literal (server/directory.go) — so a directory path containing a space would
+         * route to the wrong instance (`/a b` → `/a+b`). Emitting `%20` instead round-trips
+         * through both `PathUnescape` (the header) and `QueryUnescape` (the `?directory=` query).
+         */
+        fun enc(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
     }
 }

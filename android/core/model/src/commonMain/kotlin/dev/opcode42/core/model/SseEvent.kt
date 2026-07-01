@@ -30,7 +30,9 @@ sealed class AppEvent {
 
     /** Part */
     data class PartUpdated(val part: Part) : AppEvent()
-    data class PartRemoved(val partId: String) : AppEvent()
+    // messageId lets the reducer index straight into the message-keyed parts map instead of
+    // scanning every message; it may be blank on legacy/partial wire events (reducer falls back).
+    data class PartRemoved(val partId: String, val messageId: String) : AppEvent()
     data class PartDelta(val partId: String, val messageId: String, val delta: String) : AppEvent()
 
     /** Permission / question */

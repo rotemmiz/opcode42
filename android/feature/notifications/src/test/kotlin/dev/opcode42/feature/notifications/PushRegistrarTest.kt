@@ -40,7 +40,7 @@ class PushRegistrarTest {
         prefs = FakeIdentityStore(deviceId = "device-123")
         tokenProvider = FakeTokenProvider(token = "tok-A")
         baseUrl = MutableBaseUrl(server.url("/").toString().trimEnd('/'))
-        val client = Opcode42Client(HttpTransport(OkHttpClient(), baseUrl))
+        val client = Opcode42Client(HttpTransport(OkHttpClient(), OkHttpClient(), baseUrl))
         registrar = PushRegistrar(client, prefs, tokenProvider, baseUrl)
     }
 
@@ -159,7 +159,7 @@ class PushRegistrarTest {
         // Direct client check: session_filter is omitted by default and encoded as
         // a JSON array when present (matches pushRegisterInput.session_filter).
         server.enqueue(MockResponse().setBody("true"))
-        val client = Opcode42Client(HttpTransport(OkHttpClient(), baseUrl))
+        val client = Opcode42Client(HttpTransport(OkHttpClient(), OkHttpClient(), baseUrl))
 
         client.registerPush(
             deviceId = "d",

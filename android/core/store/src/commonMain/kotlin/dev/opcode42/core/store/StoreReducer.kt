@@ -46,8 +46,9 @@ fun reduce(state: AppState, event: AppEvent): AppState = when (event) {
         )
     }
     is AppEvent.MessageRemoved -> {
-        val sessionID = state.messages.entries
-            .firstOrNull { (_, msgs) -> msgs.any { it.id == event.messageId } }?.key
+        // The event carries sessionID — index straight in; scan only if it's blank (legacy wire).
+        val sessionID = event.sessionId.takeIf { state.messages.containsKey(it) }
+            ?: state.messages.entries.firstOrNull { (_, msgs) -> msgs.any { it.id == event.messageId } }?.key
             ?: return state
         state.copy(
             messages = state.messages + (sessionID to
@@ -62,24 +63,23 @@ fun reduce(state: AppState, event: AppEvent): AppState = when (event) {
         )
     }
     is AppEvent.PartRemoved -> {
-        val entry = state.parts.entries
-            .firstOrNull { (_, parts) -> parts.any { it.id == event.partId } }
-            ?: return state
+        val messageID = state.messageIdForPart(event.messageId, event.partId) ?: return state
         state.copy(
-            parts = state.parts + (entry.key to entry.value.filter { it.id != event.partId })
+            parts = state.parts + (messageID to
+                (state.parts[messageID] ?: emptyList()).filter { it.id != event.partId })
         )
     }
     is AppEvent.PartDelta -> {
-        // Append delta text to the TextPart identified by partId
-        val entry = state.parts.entries
-            .firstOrNull { (_, parts) -> parts.any { it.id == event.partId } }
-            ?: return state
-        val updated = entry.value.map { part ->
+        // Append delta text to the TextPart identified by partId. This is the hottest event on
+        // the stream, so index straight into the message-keyed parts bucket via the carried
+        // messageId; the full scan is a fallback only when messageId is blank/unknown.
+        val messageID = state.messageIdForPart(event.messageId, event.partId) ?: return state
+        val updated = (state.parts[messageID] ?: emptyList()).map { part ->
             if (part.id == event.partId && part is TextPart)
                 part.copy(text = part.text + event.delta)
             else part
         }
-        state.copy(parts = state.parts + (entry.key to updated))
+        state.copy(parts = state.parts + (messageID to updated))
     }
 
     is AppEvent.PermissionAsked -> {
@@ -117,6 +117,15 @@ fun reduce(state: AppState, event: AppEvent): AppState = when (event) {
 
     is AppEvent.Unknown -> state
 }
+
+/**
+ * Resolve the message bucket holding [partId]. Prefers the [messageId] carried on the event —
+ * an O(1) map lookup — and only falls back to an O(total-parts) scan when that id is blank or
+ * the bucket doesn't exist yet (e.g. a delta racing ahead of its `message.part.updated`).
+ */
+private fun AppState.messageIdForPart(messageId: String, partId: String): String? =
+    messageId.takeIf { parts.containsKey(it) }
+        ?: parts.entries.firstOrNull { (_, ps) -> ps.any { it.id == partId } }?.key
 
 // ─── Sorted list helpers ───────────────────────────────────────────────────────
 

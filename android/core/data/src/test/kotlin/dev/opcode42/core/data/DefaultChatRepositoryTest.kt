@@ -44,7 +44,7 @@ class DefaultChatRepositoryTest {
             override val baseUrl = server.url("/").toString().trimEnd('/')
         }
         store = AppStore()
-        val client = Opcode42Client(HttpTransport(OkHttpClient(), baseUrl))
+        val client = Opcode42Client(HttpTransport(OkHttpClient(), OkHttpClient(), baseUrl))
         val sse = SseManager(OkHttpClient(), NoConnection(), store, SseEventParser())
         repo = DefaultChatRepository(client, store, sse)
     }
