@@ -1,5 +1,6 @@
 package dev.opcode42.feature.chat.ui
 
+import dev.opcode42.core.design.format.formatCompactCount
 import dev.opcode42.core.design.theme.*
 
 import androidx.compose.foundation.layout.Arrangement
@@ -55,14 +56,14 @@ fun SessionInfoSheet(session: Session, onDismiss: () -> Unit) {
             SectionLabel("USAGE")
             val tokens = session.tokens
             if (tokens != null) {
-                InfoRow("Input", formatTokenCount(tokens.input))
-                InfoRow("Output", formatTokenCount(tokens.output))
-                if (tokens.reasoning > 0) InfoRow("Reasoning", formatTokenCount(tokens.reasoning))
+                InfoRow("Input", formatCompactCount(tokens.input))
+                InfoRow("Output", formatCompactCount(tokens.output))
+                if (tokens.reasoning > 0) InfoRow("Reasoning", formatCompactCount(tokens.reasoning))
                 val cacheTotal = tokens.cache.read + tokens.cache.write
-                if (cacheTotal > 0) InfoRow("Cache", formatTokenCount(cacheTotal))
+                if (cacheTotal > 0) InfoRow("Cache", formatCompactCount(cacheTotal))
                 HorizontalDivider(color = Hairline, modifier = Modifier.padding(vertical = 6.dp))
                 val total = tokens.input + tokens.output + tokens.reasoning + cacheTotal
-                InfoRow("Total tokens", formatTokenCount(total), emphasize = true)
+                InfoRow("Total tokens", formatCompactCount(total), emphasize = true)
             } else {
                 Text("No usage recorded yet.", fontSize = 13.sp, color = OnSurfaceFaint)
             }

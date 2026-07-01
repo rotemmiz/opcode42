@@ -1,5 +1,6 @@
 package dev.opcode42.feature.chat.ui
 
+import dev.opcode42.core.design.format.formatCompactCount
 import dev.opcode42.core.design.theme.*
 
 import androidx.compose.foundation.background
@@ -88,7 +89,7 @@ fun StatusStrip(
             val total = it.input + it.output + it.reasoning + it.cache.read + it.cache.write
             if (total > 0) {
                 Text(
-                    text = formatTokenCount(total),
+                    text = formatCompactCount(total),
                     fontFamily = Opcode42Mono,
                     fontSize = 12.sp,
                     color = OnSurfaceFaint,
@@ -96,11 +97,4 @@ fun StatusStrip(
             }
         }
     }
-}
-
-/** Formats a token total compactly: 1234 → "1.2K", 2_400_000 → "2.4M". */
-internal fun formatTokenCount(count: Double): String = when {
-    count >= 1_000_000 -> String.format(java.util.Locale.US, "%.1fM", count / 1_000_000)
-    count >= 1_000 -> String.format(java.util.Locale.US, "%.1fK", count / 1_000)
-    else -> count.toInt().toString()
 }

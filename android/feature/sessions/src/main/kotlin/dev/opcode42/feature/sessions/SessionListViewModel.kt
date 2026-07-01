@@ -199,10 +199,6 @@ class SessionListViewModel @Inject constructor(
         }
     }
 
-    fun toggleShowArchived() {
-        _showArchived.value = !_showArchived.value
-    }
-
     fun setQuery(query: String) {
         _query.value = query
     }

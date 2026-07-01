@@ -51,6 +51,7 @@ import dev.opcode42.core.model.Session
 import dev.opcode42.core.model.SnapshotFileDiff
 import dev.opcode42.core.model.TokenUsage
 import dev.opcode42.core.design.brand.Spinner
+import dev.opcode42.core.design.format.formatCompactCount
 import dev.opcode42.core.design.rail.*
 import dev.opcode42.core.design.text.StartEllipsisText
 import dev.opcode42.core.design.theme.*
@@ -694,9 +695,9 @@ internal fun SessionInfoPanel(
             SbSection("CONTEXT") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Row(Modifier.weight(1f)) {
-                        Text(formatTokens(used), fontFamily = Opcode42Mono, fontSize = 12.5.sp, color = OnSurface)
+                        Text(formatCompactCount(used), fontFamily = Opcode42Mono, fontSize = 12.5.sp, color = OnSurface)
                         if (limit != null) {
-                            Text(" / ${formatTokens(limit.toLong())}", fontFamily = Opcode42Mono, fontSize = 12.5.sp, color = OnSurfaceFaint)
+                            Text(" / ${formatCompactCount(limit.toLong())}", fontFamily = Opcode42Mono, fontSize = 12.5.sp, color = OnSurfaceFaint)
                         }
                     }
                     if (ratio != null) {
@@ -1039,8 +1040,3 @@ private fun relativeToDir(file: String?, dir: String?): String? {
     return if (file.startsWith("$base/")) file.removePrefix("$base/") else file
 }
 
-private fun formatTokens(n: Long): String = when {
-    n >= 1_000_000 -> "%.1fM".format(n / 1_000_000.0)
-    n >= 1_000 -> "%.1fK".format(n / 1_000.0)
-    else -> n.toString()
-}

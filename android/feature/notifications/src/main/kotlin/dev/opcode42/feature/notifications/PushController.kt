@@ -14,7 +14,7 @@ import javax.inject.Singleton
 
 /**
  * App-facing entry point for push. The app calls [start] once on launch and
- * [logout] on sign-out/teardown. Everything is gated on Firebase being configured
+ * [logoutAndAwait] on sign-out/teardown. Everything is gated on Firebase being configured
  * for this build ([PushConfig]) so the no-google-services build is a clean no-op.
  */
 @Singleton
@@ -40,11 +40,6 @@ class PushController @Inject constructor(
         }
         setMessagingServiceEnabled(true)
         scope.launch { registrar.sync() }
-    }
-
-    /** Unregisters from the daemon (fire-and-forget). Call on logout / server removal. */
-    fun logout() {
-        scope.launch { registrar.unregister() }
     }
 
     /**

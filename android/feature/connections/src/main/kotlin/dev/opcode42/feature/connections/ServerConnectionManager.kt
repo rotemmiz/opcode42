@@ -67,9 +67,6 @@ class ServerConnectionManager @Inject constructor(
     override val baseUrl: String?
         get() = _active.value?.http?.url
 
-    val activeDirectory: String?
-        get() = (_active.value as? ServerConnection.Http)?.directory
-
     private fun ServerConnection.toConfig() = ServerConnectionConfig(
         url = http.url,
         http = HttpConfig(url = http.url, username = http.username, password = http.password),

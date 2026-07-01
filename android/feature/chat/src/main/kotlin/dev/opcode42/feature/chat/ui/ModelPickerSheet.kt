@@ -381,7 +381,7 @@ private fun agentDotColor(name: String): Color = when (name.lowercase()) {
  * A model's context window as a compact descriptor (200000 → "200K", 1_500_000 → "1.5M").
  * Rounds to the nearest unit (K/M) rather than truncating, so a 1.5M-token window doesn't
  * read as "1M". Returns null when the daemon didn't report a limit, so the row simply omits
- * it — we never fabricate a size the daemon didn't send. Distinct from [formatTokenCount],
+ * it — we never fabricate a size the daemon didn't send. Distinct from `formatCompactCount`,
  * which always prints a decimal ("200.0K") — model sizes read cleaner as whole units.
  */
 private fun formatContextWindow(context: Double): String? {
