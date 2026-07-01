@@ -11,16 +11,19 @@ lifecycle = "2.9.0"
 navigation-compose = "2.9.0"
 security-crypto = "1.1.0-alpha06"
 datastore = "1.1.2"
-coil = "2.7.0"
 firebase-bom = "33.10.0"
+android-core-ktx = "1.16.0"
+activity-compose = "1.10.1"
+junit = "4.13.2"
+android-test-junit = "1.2.1"
 
 [libraries]
 # Core Android
-android-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.16.0" }
+android-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "android-core-ktx" }
 android-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
 android-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 android-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }
-activity-compose = { group = "androidx.activity", name = "activity-compose", version = "1.10.1" }
+activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
 
 # Compose
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
@@ -61,9 +64,6 @@ security-crypto = { group = "androidx.security", name = "security-crypto", versi
 # DataStore
 datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 
-# Image loading
-coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
-
 # Firebase Cloud Messaging (push notifications, plan 13 §13.8).
 # We deliberately do NOT use the com.google.gms:google-services Gradle plugin:
 # it requires a checked-in google-services.json at build time, which we do not
@@ -73,12 +73,10 @@ firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.r
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 
 # Testing
-junit = { group = "junit", name = "junit", version = "4.13.2" }
-kotest-runner = { group = "io.kotest", name = "kotest-runner-junit5", version = "5.9.1" }
-kotest-assertions = { group = "io.kotest", name = "kotest-assertions-core", version = "5.9.1" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
-android-test-junit = { group = "androidx.test.ext", name = "junit", version = "1.2.1" }
+android-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "android-test-junit" }
 compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 
