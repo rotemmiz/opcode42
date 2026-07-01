@@ -15,7 +15,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -51,7 +53,11 @@ class ServerConnectionManager @Inject constructor(
     /** Internal flow typed to ServerConnection — used by ConnectionsViewModel for UI. */
     val activeServerConnectionFlow: StateFlow<ServerConnection?> = _active.asStateFlow()
 
-    private val _scope = CoroutineScope(SupervisorJob())
+    // limitedParallelism(1): a single-thread confinement so the fire-and-forget persist()/setActive()
+    // writes still apply() in call order (a multi-threaded IO pool could reorder two rapid mutations
+    // and leave stale data on disk until the next write).
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val _scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
 
     init {
         load()
@@ -97,17 +103,25 @@ class ServerConnectionManager @Inject constructor(
 
     fun setActive(key: String) {
         _active.value = _connections.value.firstOrNull { it.key() == key }
-        prefs.edit().putString(KEY_ACTIVE, key).apply()
+        // Disk write off the main thread; the in-memory _active is already updated for the UI.
+        _scope.launch { prefs.edit().putString(KEY_ACTIVE, key).apply() }
     }
 
     // ─── Persistence ──────────────────────────────────────────────────────────
 
     private fun persist() {
+        // Snapshot state on the caller's thread, then do the JSON encode + EncryptedSharedPreferences
+        // AES write on IO — those are synchronous crypto/serialization that must not run on main
+        // (persist() is invoked from ConnectionsViewModel's UI callbacks). The in-memory flows are
+        // already updated, so the UI doesn't wait on the disk write.
         val list = _connections.value.filterIsInstance<ServerConnection.Http>().map { it.toPersisted() }
-        prefs.edit()
-            .putString(KEY_CONNECTIONS, Json.encodeToString(list))
-            .putString(KEY_ACTIVE, _active.value?.key())
-            .apply()
+        val activeKey = _active.value?.key()
+        _scope.launch {
+            prefs.edit()
+                .putString(KEY_CONNECTIONS, Json.encodeToString(list))
+                .putString(KEY_ACTIVE, activeKey)
+                .apply()
+        }
     }
 
     private fun load() {
