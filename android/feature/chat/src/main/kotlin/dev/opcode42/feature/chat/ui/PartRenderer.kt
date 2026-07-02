@@ -5,18 +5,13 @@ import dev.opcode42.core.design.theme.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -287,8 +282,12 @@ private fun PatchPartView(
 
 // ─── Unified Diff ─────────────────────────────────────────────────────────────
 
-private val DiffAddBg = Color(0x228CC265)
-private val DiffRemoveBg = Color(0x22E0606E)
+// Whole added/removed lines get a subtle tint; the specific words the intra-line
+// word diff flagged as changed get the stronger highlight layered on top.
+private val DiffAddBg = Color(0x2E8CC265)
+private val DiffRemoveBg = Color(0x2EE0606E)
+private val DiffAddWordBg = Color(0x808CC265)
+private val DiffRemoveWordBg = Color(0x80E0606E)
 private val DiffHunkBg = Color(0x1AB08CD4)
 
 /** Cap on rendered diff lines — these render eagerly (no nested LazyColumn is
@@ -305,40 +304,114 @@ private fun isDiffNoise(line: String): Boolean =
         line.startsWith("similarity index") || line.startsWith("rename ") ||
         line.startsWith("copy ") || line.startsWith("\\ No newline")
 
+/** Cap so a pathological pair can't blow up the O(n·m) word-diff LCS; over the
+ *  cap we skip word highlighting and the line just shows the subtle line tint. */
+private const val MAX_WORD_DIFF_TOKENS = 400
+private val WORD = Regex("""\S+""")
+
+/**
+ * Per-line char ranges (into the prefix-stripped body) that the intra-line word
+ * diff flagged as changed, so only the words that actually differ get the strong
+ * highlight. Only paired `-`/`+` replacement lines get ranges; pure adds/removes
+ * (e.g. a brand-new file) stay at the subtle line tint.
+ */
+private fun computeWordHighlights(lines: List<String>): List<List<IntRange>> {
+    val out = MutableList(lines.size) { emptyList<IntRange>() }
+    fun isRemove(l: String) = l.startsWith("-") && !l.startsWith("---")
+    fun isAdd(l: String) = l.startsWith("+") && !l.startsWith("+++")
+    var i = 0
+    while (i < lines.size) {
+        if (!isRemove(lines[i])) { i++; continue }
+        val remStart = i
+        while (i < lines.size && isRemove(lines[i])) i++
+        val remEnd = i
+        if (i >= lines.size || !isAdd(lines[i])) continue
+        val addStart = i
+        while (i < lines.size && isAdd(lines[i])) i++
+        val addEnd = i
+        // Pair replaced lines by index; ragged remainders keep the subtle tint.
+        for (k in 0 until minOf(remEnd - remStart, addEnd - addStart)) {
+            val (rem, add) = wordDiff(lines[remStart + k].drop(1), lines[addStart + k].drop(1))
+            out[remStart + k] = rem
+            out[addStart + k] = add
+        }
+    }
+    return out
+}
+
+/** Word-level diff of two line bodies → the changed-word char ranges in each. */
+private fun wordDiff(old: String, new: String): Pair<List<IntRange>, List<IntRange>> {
+    val oldWords = WORD.findAll(old).toList()
+    val newWords = WORD.findAll(new).toList()
+    val n = oldWords.size
+    val m = newWords.size
+    if (n == 0 || m == 0 || n > MAX_WORD_DIFF_TOKENS || m > MAX_WORD_DIFF_TOKENS) {
+        return emptyList<IntRange>() to emptyList()
+    }
+    // LCS over word text; tokens outside the LCS are the changes.
+    val dp = Array(n + 1) { IntArray(m + 1) }
+    for (a in n - 1 downTo 0) for (b in m - 1 downTo 0) {
+        dp[a][b] = if (oldWords[a].value == newWords[b].value) dp[a + 1][b + 1] + 1
+        else maxOf(dp[a + 1][b], dp[a][b + 1])
+    }
+    val oldChanged = BooleanArray(n) { true }
+    val newChanged = BooleanArray(m) { true }
+    var a = 0
+    var b = 0
+    while (a < n && b < m) {
+        when {
+            oldWords[a].value == newWords[b].value -> { oldChanged[a] = false; newChanged[b] = false; a++; b++ }
+            dp[a + 1][b] >= dp[a][b + 1] -> a++
+            else -> b++
+        }
+    }
+    return mergeChangedWords(oldWords, oldChanged) to mergeChangedWords(newWords, newChanged)
+}
+
+/** Merge runs of adjacent changed words into single ranges (bridging the spaces
+ *  between them) so a changed phrase reads as one continuous highlight. */
+private fun mergeChangedWords(words: List<MatchResult>, changed: BooleanArray): List<IntRange> {
+    val ranges = mutableListOf<IntRange>()
+    var k = 0
+    while (k < words.size) {
+        if (!changed[k]) { k++; continue }
+        val start = words[k].range.first
+        var end = words[k].range.last
+        while (k + 1 < words.size && changed[k + 1]) { k++; end = words[k].range.last }
+        ranges.add(start..end)
+        k++
+    }
+    return ranges
+}
+
 @Composable
 fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier) {
     // Strip git-diff cruft so the body reads like the design's unified diff.
     // Keyed on `diffs` so it doesn't re-run on every recomposition.
     val perFile = remember(diffs) { diffs.map { it.patch?.lines().orEmpty().filterNot(::isDiffNoise) } }
     val totalLines = remember(perFile) { perFile.sumOf { it.size } }
+    // Intra-line word highlights, computed once per diff (not per recomposition/scroll).
+    val highlightsPerFile = remember(perFile) { perFile.map(::computeWordHighlights) }
     var budget = MAX_DIFF_LINES
-    // Track viewport width via onSizeChanged (a layout side-effect) instead of
-    // BoxWithConstraints (SubcomposeLayout). SubcomposeLayout inside LazyColumn
-    // items triggers a parent re-layout pass when items scroll into view, which
-    // was causing the TodoSheet to flicker as it remeasured.
-    var viewportWidthPx by remember { mutableIntStateOf(0) }
-    val density = androidx.compose.ui.platform.LocalDensity.current
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(SurfaceContainerLowest)
-            .onSizeChanged { viewportWidthPx = it.width },
+            .background(SurfaceContainerLowest),
     ) {
-        val viewportWidthDp = with(density) { viewportWidthPx.toDp() }
-        diffs.zip(perFile).forEach { (diff, lines) ->
-            if (budget <= 0 || lines.isEmpty()) return@forEach
+        perFile.forEachIndexed { fileIdx, lines ->
+            if (budget <= 0 || lines.isEmpty()) return@forEachIndexed
             val shown = lines.take(budget)
             budget -= shown.size
-            // Keyed by file path so scroll position is stable when files reorder mid-stream.
-            val scrollState = remember(diff.file) { ScrollState(0) }
-            Box(modifier = Modifier.horizontalScroll(scrollState)) {
-                Column(
-                    modifier = Modifier
-                        .widthIn(min = viewportWidthDp)
-                        .width(IntrinsicSize.Max)
-                        .padding(vertical = 8.dp),
-                ) {
-                    shown.forEach { line -> DiffLine(line) }
+            val fileHighlights = highlightsPerFile[fileIdx]
+            // Lines soft-wrap to the viewport width so long edits stay fully
+            // visible — no horizontal scroll, nothing clipped off the right edge.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+            ) {
+                shown.forEachIndexed { idx, line ->
+                    DiffLine(line, fileHighlights.getOrElse(idx) { emptyList() })
                 }
             }
         }
@@ -355,27 +428,29 @@ fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun DiffLine(line: String) {
+private fun DiffLine(line: String, highlights: List<IntRange> = emptyList()) {
     val bg: Color
     val sign: String
     val signColor: Color
     val textColor: Color
     val body: String
+    val wordBg: Color?
     when {
-        line.startsWith("+++") -> { bg = Color.Transparent; sign = ""; signColor = Color.Transparent; textColor = LinkCyan; body = line }
-        line.startsWith("---") -> { bg = Color.Transparent; sign = ""; signColor = Color.Transparent; textColor = Error; body = line }
-        line.startsWith("@@")  -> { bg = DiffHunkBg;        sign = ""; signColor = Color.Transparent; textColor = HeaderPurple; body = line }
+        line.startsWith("+++") -> { bg = Color.Transparent; sign = ""; signColor = Color.Transparent; textColor = LinkCyan; body = line; wordBg = null }
+        line.startsWith("---") -> { bg = Color.Transparent; sign = ""; signColor = Color.Transparent; textColor = Error; body = line; wordBg = null }
+        line.startsWith("@@")  -> { bg = DiffHunkBg;        sign = ""; signColor = Color.Transparent; textColor = HeaderPurple; body = line; wordBg = null }
         line.startsWith("Index:") || line.startsWith("===") ->
-                                   { bg = Color.Transparent; sign = ""; signColor = Color.Transparent; textColor = OnSurfaceFaint; body = line }
-        line.startsWith("+")   -> { bg = DiffAddBg;    sign = "+"; signColor = Tertiary;       textColor = OnSurface;       body = line.drop(1) }
-        line.startsWith("-")   -> { bg = DiffRemoveBg; sign = "−"; signColor = Error;           textColor = OnSurface;       body = line.drop(1) }
-        else                   -> { bg = Color.Transparent; sign = " "; signColor = Color.Transparent; textColor = OnSurfaceVariant; body = line.removePrefix(" ") }
+                                   { bg = Color.Transparent; sign = ""; signColor = Color.Transparent; textColor = OnSurfaceFaint; body = line; wordBg = null }
+        line.startsWith("+")   -> { bg = DiffAddBg;    sign = "+"; signColor = Tertiary;       textColor = OnSurface;       body = line.drop(1); wordBg = DiffAddWordBg }
+        line.startsWith("-")   -> { bg = DiffRemoveBg; sign = "−"; signColor = Error;           textColor = OnSurface;       body = line.drop(1); wordBg = DiffRemoveWordBg }
+        else                   -> { bg = Color.Transparent; sign = " "; signColor = Color.Transparent; textColor = OnSurfaceVariant; body = line.removePrefix(" "); wordBg = null }
     }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(bg)
             .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.Top,
     ) {
         Text(
             text = sign,
@@ -387,12 +462,25 @@ private fun DiffLine(line: String) {
             modifier = Modifier.width(8.dp),
         )
         Text(
-            text = body.ifEmpty { " " },
+            // Wrap long lines instead of scrolling; weight caps width so it wraps.
+            // Only the words the word diff flagged get the strong background span.
+            text = buildAnnotatedString {
+                val shownBody = body.ifEmpty { " " }
+                append(shownBody)
+                if (wordBg != null) {
+                    highlights.forEach { r ->
+                        val start = r.first.coerceIn(0, shownBody.length)
+                        val end = (r.last + 1).coerceIn(start, shownBody.length)
+                        if (end > start) addStyle(SpanStyle(background = wordBg), start, end)
+                    }
+                }
+            },
             fontFamily = Opcode42Mono,
             fontSize = 12.sp,
             lineHeight = 20.sp,
             color = textColor,
-            softWrap = false,
+            softWrap = true,
+            modifier = Modifier.weight(1f),
         )
     }
 }
