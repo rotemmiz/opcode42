@@ -90,7 +90,10 @@ fun QuestionSheet(
     var answer = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
 
     ModalBottomSheet(
-        onDismissRequest = { /* non-dismissible */ },
+        // Swipe-away or system back = reject the question, which dispatches QuestionRejected
+        // → the store drops it → the composer re-enables. Previously this was a no-op, which
+        // left the sheet visually dismissed but pendingQuestion still set → stuck composer.
+        onDismissRequest = onReject,
         sheetState = sheetState,
         containerColor = SurfaceContainerHigh,
         tonalElevation = 0.dp,
@@ -102,7 +105,8 @@ fun QuestionSheet(
                 .padding(bottom = 32.dp),
         ) {
             Text(
-                text = question.message ?: "The agent has a question:",
+                text = question.message?.takeIf { it.isNotBlank() }
+                    ?: "The agent is waiting for input. Reply or skip to continue.",
                 style = MaterialTheme.typography.titleMedium,
                 color = OnSurface,
             )

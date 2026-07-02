@@ -214,8 +214,9 @@ fun AdaptiveChatScreen(
     )
     val railProgressProvider: () -> Float = { railProgress.value }
 
-    // Right info panel: collapsible, but ON by default. Re-keyed on layout so it returns
-    // to open when the layout changes. Only meaningful when the layout has a right panel.
+    // Right info panel: collapsible, ON by default. Re-keyed on layout so it returns to open
+    // when the layout changes. The draft/empty-content auto-collapse is computed after
+    // aggregatedDiffs is available (below). Only meaningful when the layout has a right panel.
     var infoPanelOpen by remember(layout) { mutableStateOf(true) }
     val rightPanelVisible = layout.showRightPanel && infoPanelOpen
 
@@ -282,6 +283,17 @@ fun AdaptiveChatScreen(
         chatUiState.changedFiles
             .map { it.copy(file = relativeToDir(it.file, dir)) }
             .sortedByDescending { it.additions + it.deletions }
+    }
+
+    // Auto-collapse the right info panel on a draft when it would be empty (no
+    // session/todos/diffs/tokens), so a tablet draft doesn't show a blank panel. Re-keyed
+    // on layout + draft + content presence so it re-opens when the first turn produces data.
+    val isDraftSession = sessionId == DRAFT_SESSION_ID
+    val infoPanelHasContent = chatUiState.session != null ||
+        chatUiState.todos.isNotEmpty() || aggregatedDiffs.isNotEmpty() ||
+        chatUiState.contextTokens != null
+    LaunchedEffect(layout, isDraftSession, infoPanelHasContent) {
+        if (isDraftSession && !infoPanelHasContent) infoPanelOpen = false
     }
 
     // The right context sidebar (shown when the info panel is on). Rendered as a slot
@@ -373,7 +385,15 @@ fun AdaptiveChatScreen(
             LeftRailMode.InlinePush -> Row(Modifier.fillMaxSize()) {
                 railSlot()
                 Box(Modifier.width(1.dp).fillMaxHeight().background(Hairline))
-                Box(Modifier.weight(1f).fillMaxHeight()) {
+                // Crossfade the chat content on session switch so a collapsed-rail tap produces
+                // a visible motion (the NavHost chat↔chat transition is suppressed for in-place
+                // swaps; this restores a smooth content change without a full-screen slide).
+                androidx.compose.animation.Crossfade(
+                    targetState = sessionId,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                    label = "chatSwap",
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                ) {
                     chat(infoSlot)
                 }
             }
@@ -836,11 +856,9 @@ internal fun SessionInfoPanel(
             }
         }
 
-        if (commands.isNotEmpty()) {
-            SbSection("COMMANDS") {
-                commands.forEach { cmd -> CommandRow(cmd) }
-            }
-        }
+        // COMMANDS section removed — it was a read-only listing redundant with the
+        // /-palette in the composer (the actionable surface). The palette merges
+        // built-in + daemon commands, so no information is lost.
 
         Spacer(Modifier.height(8.dp))
     }
@@ -978,45 +996,6 @@ private fun TodoMarker(status: String) {
                 .clip(RoundedCornerShape(4.dp))
                 .border(2.dp, OnSurfaceGhost, RoundedCornerShape(4.dp)),
         )
-    }
-}
-
-/** A slash-command row (design `Commands`): cyan name, optional source badge, description. */
-@Composable
-private fun CommandRow(cmd: CommandInfo) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 24.dp),
-    ) {
-        Text(
-            text = "/${cmd.name}",
-            fontFamily = Opcode42Mono,
-            fontSize = 12.5.sp,
-            color = LinkCyan,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(min = 78.dp, max = 130.dp),
-        )
-        cmd.source?.takeIf { it == "mcp" || it == "skill" }?.let { src ->
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = src,
-                fontFamily = Opcode42Mono,
-                fontSize = 10.sp,
-                color = if (src == "mcp") HeaderPurple else OnSurfaceFaint,
-            )
-        }
-        cmd.description?.let { desc ->
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = desc,
-                fontSize = 12.5.sp,
-                color = OnSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-        }
     }
 }
 

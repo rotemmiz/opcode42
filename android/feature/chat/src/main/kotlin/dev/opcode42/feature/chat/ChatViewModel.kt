@@ -122,11 +122,13 @@ class ChatViewModel @Inject constructor(
             val lastModelled = messages.lastOrNull { it.role == "assistant" && it.modelID != null }
             // Context = the latest assistant turn that has produced output, matching
             // opencode's gauge-selection predicate (sidebar/context.tsx:20,
-            // prompt/index.tsx:262: `tokens.output > 0`). The daemon emits a zero-valued
-            // `tokens` block at turn START, so keying on output keeps the gauge on the
-            // previous turn's value until the new turn actually produces tokens.
+            // Context gauge: the last assistant message with token usage. Relaxed from
+            // `output > 0` to `tokens != null` so the gauge populates immediately on session
+            // switch from the session's history (the last turn's footprint) instead of
+            // blanking until a new turn produces output. On a draft (no messages) the gauge
+            // stays null — the UI shows 0/limit using the default model's limit.
             val contextMsg = messages.lastOrNull {
-                it.role == "assistant" && (it.tokens?.output ?: 0.0) > 0.0
+                it.role == "assistant" && it.tokens != null
             }
             ChatUiState(
                 session = snap.session,
