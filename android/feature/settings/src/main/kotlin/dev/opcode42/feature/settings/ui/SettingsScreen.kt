@@ -1,18 +1,30 @@
 package dev.opcode42.feature.settings.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -75,10 +87,9 @@ private fun SinglePaneSettings(
                 .verticalScroll(rememberScrollState()),
         ) {
             AppearanceSection(state, viewModel)
-            HorizontalDivider()
             ServersSection(state, viewModel, onAddServer)
-            HorizontalDivider()
             AboutSection()
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -124,7 +135,7 @@ private fun TwoPaneSettings(
                         icon = {
                             Icon(
                                 when (section) {
-                                    SettingsSection.Appearance -> Icons.Default.Palette
+                                    SettingsSection.Appearance -> Icons.Outlined.Palette
                                     SettingsSection.Servers -> Icons.Default.Dns
                                     SettingsSection.About -> Icons.Default.Info
                                 },
@@ -141,15 +152,14 @@ private fun TwoPaneSettings(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp),
+                    .verticalScroll(rememberScrollState()),
             ) {
-                Spacer(Modifier.height(24.dp))
                 when (selectedSection) {
                     SettingsSection.Appearance -> AppearanceSection(state, viewModel)
                     SettingsSection.Servers -> ServersSection(state, viewModel, onAddServer)
                     SettingsSection.About -> AboutSection()
                 }
+                Spacer(Modifier.height(24.dp))
             }
         }
     }
@@ -159,15 +169,27 @@ private fun TwoPaneSettings(
 
 @Composable
 private fun AppearanceSection(state: SettingsUiState, viewModel: SettingsViewModel) {
-    SectionHeader("Appearance")
-    ThemeModeRow("System", "Follows the OS dark setting", state.themeMode == ThemeMode.System) {
-        viewModel.setThemeMode(ThemeMode.System)
-    }
-    ThemeModeRow("Light", "Always light", state.themeMode == ThemeMode.Light) {
-        viewModel.setThemeMode(ThemeMode.Light)
-    }
-    ThemeModeRow("Dark", "Always dark", state.themeMode == ThemeMode.Dark) {
-        viewModel.setThemeMode(ThemeMode.Dark)
+    var showThemeDialog by remember { mutableStateOf(false) }
+
+    CategoryHeader("Appearance")
+    ListItem(
+        headlineContent = { Text("Theme") },
+        supportingContent = { Text(themeModeLabel(state.themeMode)) },
+        leadingContent = { Icon(Icons.Default.BrightnessMedium, contentDescription = null) },
+        trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+        modifier = Modifier.clickable { showThemeDialog = true },
+    )
+    HorizontalDivider()
+
+    if (showThemeDialog) {
+        ThemePickerDialog(
+            currentMode = state.themeMode,
+            onSelect = { mode ->
+                viewModel.setThemeMode(mode)
+                showThemeDialog = false
+            },
+            onDismiss = { showThemeDialog = false },
+        )
     }
 }
 
@@ -177,7 +199,7 @@ private fun ServersSection(
     viewModel: SettingsViewModel,
     onAddServer: () -> Unit,
 ) {
-    SectionHeader("Servers")
+    CategoryHeader("Servers")
     state.connections.forEach { conn ->
         ServerRow(
             connection = conn,
@@ -196,35 +218,75 @@ private fun ServersSection(
 
 @Composable
 private fun AboutSection() {
-    SectionHeader("About")
+    val context = LocalContext.current
+    val version = remember {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: ""
+    }
+
+    CategoryHeader("About")
     ListItem(
         headlineContent = { Text("Opcode42") },
-        supportingContent = { Text("Mobile client") },
+        supportingContent = {
+            Text(if (version.isNotBlank()) "Mobile client • $version" else "Mobile client")
+        },
         leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
     )
 }
 
+// ── Native Android Settings category header ───────────────────────────────────
+// Matches Android System Settings' small colored category label: uppercase,
+// labelMedium, primary color, 16dp horizontal padding, generous top inset.
+
 @Composable
-private fun SectionHeader(title: String) {
+private fun CategoryHeader(title: String) {
     Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 0.dp, top = 20.dp, bottom = 8.dp),
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
     )
 }
 
+// ── Theme picker dialog ───────────────────────────────────────────────────────
+// Native Android Settings "Theme" pattern: a dialog listing the three options as
+// ListItems with a check on the current selection.
+
 @Composable
-private fun ThemeModeRow(label: String, supporting: String, selected: Boolean, onClick: () -> Unit) {
-    ListItem(
-        headlineContent = { Text(label) },
-        supportingContent = { Text(supporting) },
-        leadingContent = {
-            RadioButton(selected = selected, onClick = onClick)
+private fun ThemePickerDialog(
+    currentMode: ThemeMode,
+    onSelect: (ThemeMode) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Theme") },
+        text = {
+            Column {
+                ThemeMode.entries.forEach { mode ->
+                    ListItem(
+                        headlineContent = { Text(themeModeLabel(mode)) },
+                        leadingContent = {
+                            if (mode == currentMode) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            } else {
+                                Spacer(Modifier.size(24.dp))
+                            }
+                        },
+                        modifier = Modifier.clickable { onSelect(mode) },
+                    )
+                }
+            }
         },
-        modifier = Modifier.clickable(onClick = onClick),
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
     )
 }
+
+// ── Server row — connection status dot + name + MoreVert ──────────────────────
 
 @Composable
 private fun ServerRow(
@@ -245,8 +307,15 @@ private fun ServerRow(
             }
         },
         leadingContent = {
-            if (isActive) Icon(Icons.Default.CheckCircle, contentDescription = "Active", tint = MaterialTheme.colorScheme.primary)
-            else Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null)
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isActive) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.outlineVariant
+                    ),
+            )
         },
         trailingContent = {
             Box {
@@ -269,4 +338,10 @@ private fun ServerRow(
         },
         modifier = Modifier.clickable(onClick = onSetActive),
     )
+}
+
+private fun themeModeLabel(mode: ThemeMode): String = when (mode) {
+    ThemeMode.System -> "System default"
+    ThemeMode.Light -> "Light"
+    ThemeMode.Dark -> "Dark"
 }

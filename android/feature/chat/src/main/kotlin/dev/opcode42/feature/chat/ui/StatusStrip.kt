@@ -75,7 +75,7 @@ fun StatusStrip(
         if (provider != null) {
             Text("·", fontFamily = Opcode42Mono, fontSize = 12.sp, color = OnSurfaceGhost)
             Text(
-                text = provider.replaceFirstChar { it.uppercase() },
+                text = provider,
                 fontFamily = Opcode42Mono,
                 fontSize = 12.sp,
                 color = OnSurfaceVariant,

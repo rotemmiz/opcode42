@@ -95,21 +95,21 @@ val DarkOpcode42Colors = Opcode42Colors(
     secondaryContainer = Color(0x29D99A4E), // amber @ ~16% — selection tint
 )
 
-// ─── Light scheme (inverted ramp; hues darkened for AA on light surfaces) ──────
+// ─── Light scheme (neutral white ramp; accent hues kept) ──────────────────────
 val LightOpcode42Colors = Opcode42Colors(
-    surface = Color(0xFFFCFBF9),
-    surfaceContainerLowest = Color(0xFFF1EEEA),
-    surfaceContainerLow = Color(0xFFF6F3F0),
-    surfaceContainer = Color(0xFFF0EDE9),
-    surfaceContainerHigh = Color(0xFFE9E5E0),
-    surfaceContainerHighest = Color(0xFFE1DCD6),
-    outlineVariant = Color(0xFFD2CCC4),
-    hairline = Color(0xFFE4DFD9),
-    outline = Color(0xFFADA59B),
-    onSurface = Color(0xFF201D19),
-    onSurfaceVariant = Color(0xFF57514A),
-    onSurfaceFaint = Color(0xFF8B837A),
-    onSurfaceGhost = Color(0xFFBCB4AA),
+    surface = Color(0xFFFEFEFE),
+    surfaceContainerLowest = Color(0xFFF8F8F8),
+    surfaceContainerLow = Color(0xFFF4F4F4),
+    surfaceContainer = Color(0xFFEFEFEF),
+    surfaceContainerHigh = Color(0xFFEAEAEA),
+    surfaceContainerHighest = Color(0xFFE4E4E4),
+    outlineVariant = Color(0xFFD4D4D4),
+    hairline = Color(0xFFE0E0E0),
+    outline = Color(0xFF9E9E9E),
+    onSurface = Color(0xFF1B1B1B),
+    onSurfaceVariant = Color(0xFF555555),
+    onSurfaceFaint = Color(0xFF888888),
+    onSurfaceGhost = Color(0xFFB8B8B8),
     primary = Color(0xFF2D6CB2),
     secondary = Color(0xFFA66E16),
     tertiary = Color(0xFF3C7B2C),
