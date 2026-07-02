@@ -288,15 +288,23 @@ fun PromptInput(
                 ),
                 cursorBrush = SolidColor(Primary),
                 visualTransformation = composerTransform,
+                // Single line when empty; grows with content up to 8 lines, then
+                // scrolls internally so a long draft can't balloon the composer.
+                maxLines = 8,
                 modifier = Modifier
                     .weight(1f)
                     .padding(end = 4.dp, top = 13.dp, bottom = 13.dp),
                 decorationBox = { inner ->
                     if (text.isEmpty()) {
                         Text(
+                            // Keep the hint on one line — when the field is narrow
+                            // (side panels open) a wrapping hint would balloon the box.
                             "Ask anything…  /  @",
                             color = OnSurfaceGhost,
                             fontSize = 13.5.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                     inner()
