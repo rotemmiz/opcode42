@@ -85,6 +85,7 @@ internal fun mergeTranscript(base: String, spoken: String): String =
  * autocomplete (design §5 + Interactions). Both surface as inline suggestion
  * panels above the field so the keyboard stays up while filtering.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PromptInput(
     onSend: (String, List<FilePartInput>) -> Unit,
@@ -257,48 +258,47 @@ fun PromptInput(
             }
         }
 
-        // One bordered container holding the field, attach + send. Native M3 look: 16sp
-        // body text, themed cursor/selection handles via LocalTextSelectionColors, shape
-        // from the theme scale, no custom left rail.
+        // Native M3 text-field container: BasicTextField wrapped with OutlinedTextFieldDefaults
+        // decoration so the border, focus state, and cursor match M3 OutlinedTextField exactly.
+        // 16sp body text, themed cursor/selection via LocalTextSelectionColors, no custom left rail.
         val canSend = enabled && (text.isNotBlank() || pendingAttachments.isNotEmpty())
-        val shape = MaterialTheme.shapes.large
         val selectionColors = androidx.compose.foundation.text.selection.LocalTextSelectionColors.current
-        // Read the @Composable theme colors here, then remember the transformation keyed on them,
-        // so it isn't re-allocated on every keystroke recomposition (only if a color changes).
         val accent = Secondary
         val mention = LinkCyan
         val composerTransform = remember(accent, mention) { composerTokenTransformation(accent, mention) }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .clip(shape)
-                .background(SurfaceContainer)
-                .border(1.dp, Hairline, shape)
-                .padding(start = 14.dp),
-        ) {
+        val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+        val colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = SurfaceContainer,
+            unfocusedContainerColor = SurfaceContainer,
+            focusedBorderColor = Outline,
+            unfocusedBorderColor = Hairline,
+            cursorColor = selectionColors.handleColor,
+        )
+        val shape = MaterialTheme.shapes.large
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             BasicTextField(
+            value = text,
+            onValueChange = { text = it },
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 48.dp),
+            enabled = enabled,
+            textStyle = TextStyle(color = OnSurface, fontSize = 16.sp, lineHeight = 22.4.sp),
+            cursorBrush = SolidColor(selectionColors.handleColor),
+            visualTransformation = composerTransform,
+            maxLines = 8,
+            interactionSource = interactionSource,
+        ) { innerTextField ->
+            OutlinedTextFieldDefaults.DecorationBox(
                 value = text,
-                onValueChange = { text = it },
-                textStyle = TextStyle(
-                    color = OnSurface,
-                    fontSize = 16.sp,
-                    lineHeight = 22.4.sp,
-                ),
-                cursorBrush = SolidColor(selectionColors.handleColor),
+                innerTextField = innerTextField,
+                enabled = enabled,
+                singleLine = false,
                 visualTransformation = composerTransform,
-                // Single line when empty; grows with content up to 8 lines, then
-                // scrolls internally so a long draft can't balloon the composer.
-                maxLines = 8,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 4.dp, top = 13.dp, bottom = 13.dp),
-                decorationBox = { inner ->
+                interactionSource = interactionSource,
+                placeholder = {
                     if (text.isEmpty()) {
                         Text(
-                            // Keep the hint on one line — when the field is narrow
-                            // (side panels open) a wrapping hint would balloon the box.
                             "Ask anything…  /  @",
                             color = OnSurfaceGhost,
                             fontSize = 16.sp,
@@ -307,14 +307,14 @@ fun PromptInput(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    inner()
                 },
+                colors = colors,
+                contentPadding = PaddingValues(start = 14.dp, end = 4.dp, top = 13.dp, bottom = 13.dp),
             )
+        }
 
             // ── Voice dictation ── shown only when a recognition provider exists.
             if (voice.isAvailable) {
-                // Cancel (✕): present only while listening — stop and discard this
-                // session, restoring the field to its pre-dictation contents.
                 AnimatedVisibility(visible = voice.isListening) {
                     IconButton(
                         onClick = { cancelDictation() },
@@ -328,13 +328,10 @@ fun PromptInput(
                         )
                     }
                 }
-
-                // Reads voice.amplitude internally so only this node recomposes at
-                // the ~10Hz envelope rate, not the whole composer.
                 MicButton(voice = voice, enabled = enabled, onToggle = { toggleVoice() })
             }
 
-            // Attach (add) icon — vertically centered by the Row
+            // Attach (add) icon
             IconButton(
                 onClick = { filePicker.launch("*/*") },
                 enabled = enabled,
@@ -348,8 +345,7 @@ fun PromptInput(
                 )
             }
 
-            // Trailing action — 40dp square in a 48dp touch target, centered by the Row.
-            // While the agent is running it becomes a Stop button; otherwise it's Send.
+            // Trailing action — 40dp circle in a 48dp touch target.
             val active = busy || canSend
             Box(
                 modifier = Modifier
@@ -359,8 +355,6 @@ fun PromptInput(
                         if (busy) {
                             onStop()
                         } else {
-                            // Drop any in-flight transcript so it can't repopulate the
-                            // field after we clear it below.
                             voice.cancel()
                             val trimmed = text.trim()
                             onSend(trimmed, pendingAttachments.map { it.part })

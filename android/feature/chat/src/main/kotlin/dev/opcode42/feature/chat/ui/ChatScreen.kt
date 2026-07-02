@@ -239,7 +239,8 @@ fun ChatScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             // Custom 52dp dense bar (design §1) — M3 TopAppBar's 64dp is too tall.
-            Column(Modifier.background(Surface).then(if (applySystemInsets) Modifier.statusBarsPadding() else Modifier)) {
+            // Always apply statusBarsPadding now that the host draws behind the bars (immersive).
+            Column(Modifier.background(Surface).statusBarsPadding()) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier

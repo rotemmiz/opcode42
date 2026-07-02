@@ -269,6 +269,7 @@ fun AdaptiveChatScreen(
                 // rail) like onSelectSession/onNewSession, so Back from Settings doesn't reopen it.
                 onOpenSettings = { onSelect(); onOpenSettings() },
                 onCycleTheme = onCycleTheme,
+                showChevron = layout.leftRailMode == LeftRailMode.InlinePush,
                 progress = progress,
                 modifier = mod,
             )
@@ -373,8 +374,11 @@ fun AdaptiveChatScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(Surface)
-            .systemBarsPadding(),
+            .background(Surface),
+            // No systemBarsPadding here — content draws behind the bars (true edge-to-edge /
+            // immersive). Each pane applies its own insets: ChatScreen's top bar uses
+            // statusBarsPadding, the composer uses ime+navBars padding. The rail extends to
+            // the top/bottom edge under the bars for a full-bleed look.
     ) {
         when (layout.leftRailMode) {
             // Compact width: single pane — the sessions menu floats over the chat as a
@@ -459,12 +463,13 @@ internal fun NavRailPane(
     onExpand: () -> Unit,
     onOpenSettings: () -> Unit,
     onCycleTheme: () -> Unit = {},
+    showChevron: Boolean = true,
     progress: () -> Float,
     modifier: Modifier = Modifier,
 ) {
     // Flip the header's interactivity once at the midpoint (alpha=0 still hit-tests).
     val open by remember { derivedStateOf { progress() > 0.5f } }
-    Column(modifier.fillMaxSize().background(SurfaceContainerLow)) {
+    Column(modifier.fillMaxSize().background(SurfaceContainerLow).statusBarsPadding().navigationBarsPadding()) {
         // Header: the wordmark + New fade out as the rail collapses, leaving a single chevron that
         // rotates 180° (collapse "‹" ⇄ expand "›") and slides from the open right edge to the
         // collapsed center.
@@ -509,23 +514,26 @@ internal fun NavRailPane(
             }
             // One chevron, always present + interactive. Slides open-right (174dp) → collapsed-center
             // (10dp, so the 40dp box centers in the 60dp band) and rotates 180° so "‹" becomes "›".
-            Box(
-                Modifier
-                    .align(Alignment.CenterStart)
-                    .offset {
-                        IntOffset(androidx.compose.ui.util.lerp(10.dp.toPx(), 174.dp.toPx(), progress()).roundToInt(), 0)
-                    }
-                    .size(40.dp)
-                    .clickable { if (progress() > 0.5f) onCollapse() else onExpand() }
-                    .graphicsLayer { rotationZ = (1f - progress()) * 180f },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                    contentDescription = if (open) "Collapse navigation" else "Expand navigation",
-                    tint = OnSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
+            // Hidden on the phone overlay drawer (system back closes it — no chevron needed).
+            if (showChevron) {
+                Box(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .offset {
+                            IntOffset(androidx.compose.ui.util.lerp(10.dp.toPx(), 174.dp.toPx(), progress()).roundToInt(), 0)
+                        }
+                        .size(40.dp)
+                        .clickable { if (progress() > 0.5f) onCollapse() else onExpand() }
+                        .graphicsLayer { rotationZ = (1f - progress()) * 180f },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = if (open) "Collapse navigation" else "Expand navigation",
+                        tint = OnSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
         HorizontalDivider(color = Hairline, thickness = 1.dp)
@@ -776,6 +784,19 @@ internal fun SessionInfoPanel(
                             .background(SurfaceContainerHighest),
                     ) {
                         Box(Modifier.fillMaxHeight().fillMaxWidth(barFill).background(Primary))
+                    }
+                } else if (limit == null && used > 0) {
+                    // Indeterminate: tokens exist but the model's context limit isn't resolved
+                    // yet (providers still loading). Show a shimmer bar instead of blanking.
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(SurfaceContainerHighest),
+                    ) {
+                        Box(Modifier.fillMaxHeight().fillMaxWidth(0.3f).background(OnSurfaceFaint.copy(alpha = 0.4f)))
                     }
                 }
                 val cost = session?.cost
