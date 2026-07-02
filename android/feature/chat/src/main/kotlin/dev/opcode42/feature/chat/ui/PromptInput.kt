@@ -257,12 +257,12 @@ fun PromptInput(
             }
         }
 
-        // One bordered container holding the field, attach + send (design §5).
-        // The 2dp primary rail is drawn relative to the measured height so it
-        // always spans the box; children are centered vertically.
+        // One bordered container holding the field, attach + send. Native M3 look: 16sp
+        // body text, themed cursor/selection handles via LocalTextSelectionColors, shape
+        // from the theme scale, no custom left rail.
         val canSend = enabled && (text.isNotBlank() || pendingAttachments.isNotEmpty())
-        val rail = Primary
-        val shape = RoundedCornerShape(14.dp)
+        val shape = MaterialTheme.shapes.large
+        val selectionColors = androidx.compose.foundation.text.selection.LocalTextSelectionColors.current
         // Read the @Composable theme colors here, then remember the transformation keyed on them,
         // so it isn't re-allocated on every keystroke recomposition (only if a color changes).
         val accent = Secondary
@@ -276,17 +276,17 @@ fun PromptInput(
                 .clip(shape)
                 .background(SurfaceContainer)
                 .border(1.dp, Hairline, shape)
-                .drawBehind { drawRect(rail, size = Size(2.dp.toPx(), size.height)) }
-                .padding(start = 13.dp),
+                .padding(start = 14.dp),
         ) {
             BasicTextField(
                 value = text,
                 onValueChange = { text = it },
                 textStyle = TextStyle(
                     color = OnSurface,
-                    fontSize = 13.5.sp,
+                    fontSize = 16.sp,
+                    lineHeight = 22.4.sp,
                 ),
-                cursorBrush = SolidColor(Primary),
+                cursorBrush = SolidColor(selectionColors.handleColor),
                 visualTransformation = composerTransform,
                 // Single line when empty; grows with content up to 8 lines, then
                 // scrolls internally so a long draft can't balloon the composer.
@@ -301,7 +301,7 @@ fun PromptInput(
                             // (side panels open) a wrapping hint would balloon the box.
                             "Ask anything…  /  @",
                             color = OnSurfaceGhost,
-                            fontSize = 13.5.sp,
+                            fontSize = 16.sp,
                             maxLines = 1,
                             softWrap = false,
                             overflow = TextOverflow.Ellipsis,

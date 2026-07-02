@@ -15,18 +15,25 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import dev.opcode42.app.navigation.Opcode42NavGraph
 import dev.opcode42.core.design.theme.Opcode42Theme
 import dev.opcode42.feature.notifications.PushController
 import dev.opcode42.feature.notifications.PushDeepLink
+import dev.opcode42.feature.settings.AppPreferences
+import dev.opcode42.feature.settings.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject
     lateinit var pushController: PushController
+
+    @Inject
+    lateinit var appPreferences: AppPreferences
 
     // Latest push deep-link tap, updated on launch + onNewIntent. Wrapped in a
     // monotonic token so repeat taps for the SAME session still re-navigate (the
@@ -49,7 +56,12 @@ class MainActivity : ComponentActivity() {
         emitDeepLink(intent)
         maybeRequestNotificationPermission()
         setContent {
-            val darkTheme = isSystemInDarkTheme()
+            val themeMode by appPreferences.themeMode.collectAsState(initial = ThemeMode.System)
+            val darkTheme = when (themeMode) {
+                ThemeMode.System -> isSystemInDarkTheme()
+                ThemeMode.Light -> false
+                ThemeMode.Dark -> true
+            }
             val tap by deepLink.collectAsState()
             val consumedToken = remember { mutableStateOf(-1L) }
             // Surface the tap once (keyed by token, so a repeat push for the same
@@ -60,6 +72,7 @@ class MainActivity : ComponentActivity() {
                     deepLinkSessionId = pending?.target?.sessionId,
                     deepLinkToken = pending?.token ?: -1L,
                     onDeepLinkConsumed = { consumedToken.value = pending?.token ?: -1L },
+                    appPreferences = appPreferences,
                 )
             }
         }

@@ -454,9 +454,7 @@ private fun DiffLine(line: String, highlights: List<IntRange> = emptyList()) {
     ) {
         Text(
             text = sign,
-            fontFamily = Opcode42Mono,
-            fontSize = 12.sp,
-            lineHeight = 20.sp,
+            style = dev.opcode42.core.design.theme.Opcode42Typography.code,
             color = signColor,
             softWrap = false,
             modifier = Modifier.width(8.dp),
@@ -475,9 +473,7 @@ private fun DiffLine(line: String, highlights: List<IntRange> = emptyList()) {
                     }
                 }
             },
-            fontFamily = Opcode42Mono,
-            fontSize = 12.sp,
-            lineHeight = 20.sp,
+            style = dev.opcode42.core.design.theme.Opcode42Typography.code,
             color = textColor,
             softWrap = true,
             modifier = Modifier.weight(1f),

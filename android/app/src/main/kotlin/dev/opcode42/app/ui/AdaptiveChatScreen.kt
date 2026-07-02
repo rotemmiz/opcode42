@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
@@ -155,6 +156,7 @@ fun AdaptiveChatScreen(
     onNewSession: () -> Unit = {},
     onOpenTasksBoard: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onCycleTheme: () -> Unit = {},
     chatViewModel: ChatViewModel = hiltViewModel(),
     // The sessions rail is shared across chat destinations: scope its ViewModel to the
     // Activity (not the per-session nav entry) so switching sessions doesn't tear down and
@@ -265,6 +267,7 @@ fun AdaptiveChatScreen(
                 // Dismiss the menu first (closes the overlay drawer / collapses a non-persistent
                 // rail) like onSelectSession/onNewSession, so Back from Settings doesn't reopen it.
                 onOpenSettings = { onSelect(); onOpenSettings() },
+                onCycleTheme = onCycleTheme,
                 progress = progress,
                 modifier = mod,
             )
@@ -422,6 +425,7 @@ internal fun NavRailPane(
     onCollapse: () -> Unit,
     onExpand: () -> Unit,
     onOpenSettings: () -> Unit,
+    onCycleTheme: () -> Unit = {},
     progress: () -> Float,
     modifier: Modifier = Modifier,
 ) {
@@ -525,9 +529,10 @@ internal fun NavRailPane(
             modifier = Modifier.weight(1f),
         )
 
-        // Persistent footer: a green "connected" dot + the active server (host:port). The dot is a
-        // connection indicator, so it pairs with the server identity, not a per-session path (the
-        // working directory already shows in the chat header). Falls back to "No server" when unset.
+        // Persistent footer: a connection-status dot + the active server (host:port). The
+        // dot color reflects the real SSE connection state: green (connected), amber
+        // (connecting), grey (no server), red (server configured but unreachable). Falls
+        // back to "No server" when unset.
         HorizontalDivider(color = Hairline, thickness = 1.dp)
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -535,6 +540,13 @@ internal fun NavRailPane(
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 8.dp),
         ) {
+            val hasServer = uiState.serverLabel.orEmpty().isNotEmpty() && uiState.serverLabel != "No server"
+            val dotColor = when (uiState.connectionState) {
+                is dev.opcode42.core.store.ConnectionState.Connected -> Tertiary
+                is dev.opcode42.core.store.ConnectionState.Connecting -> Secondary
+                is dev.opcode42.core.store.ConnectionState.Failed -> Error
+                is dev.opcode42.core.store.ConnectionState.Disconnected -> if (hasServer) Error else OnSurfaceFaint
+            }
             Box(
                 Modifier
                     // Open (progress 1): flush left (offset 0) so the path follows it. Collapsed
@@ -542,7 +554,7 @@ internal fun NavRailPane(
                     .offset { IntOffset(androidx.compose.ui.util.lerp(17.dp.toPx(), 0f, progress()).roundToInt(), 0) }
                     .size(6.dp)
                     .clip(CircleShape)
-                    .background(Tertiary),
+                    .background(dotColor),
             )
             Spacer(Modifier.width(6.dp))
             // Active server host:port; start-ellipsized so the port survives a narrow rail
@@ -555,6 +567,20 @@ internal fun NavRailPane(
                     .weight(1f)
                     .graphicsLayer { alpha = progress() },
             )
+            // Theme toggle (sun/moon/auto). Cycles Dark → Light → System. Always tappable
+            // (even collapsed the icon stays in the 60dp band); fades with the rail.
+            Icon(
+                Icons.Default.LightMode,
+                contentDescription = "Toggle theme",
+                tint = OnSurfaceVariant,
+                modifier = Modifier
+                    .graphicsLayer { alpha = progress() }
+                    .clip(CircleShape)
+                    .then(if (open) Modifier.clickable(onClick = onCycleTheme) else Modifier)
+                    .padding(5.dp)
+                    .size(18.dp),
+            )
+            Spacer(Modifier.width(2.dp))
             // Settings is reached from here: the rail is the app's home surface (there's no
             // standalone session-list screen), so this gear is the path to Settings / Add-Server.
             // Fades with the rail and is tappable only when open (like the +New button).
@@ -743,32 +769,21 @@ internal fun SessionInfoPanel(
                     Icon(Icons.Outlined.Difference, contentDescription = null, tint = LinkCyan, modifier = Modifier.size(14.dp))
                 },
             ) {
-                // Hoist the amber accent out of the per-row draw scope (it's a @Composable token).
-                val accent = Secondary
-                diffs.forEachIndexed { index, diff ->
-                    // Accent the most-changed file (first — diffs are churn-sorted) with the
-                    // amber active-row treatment shared with the sessions rail. Only when it
-                    // stands out: skip a lone row, and a 0/0 (status-only) top row.
-                    val active = index == 0 && diffs.size > 1 && (diff.additions + diff.deletions) > 0
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { onDiffClick(diff) }
-                            .then(
-                                if (active) {
-                                    Modifier
-                                        .background(SecondaryContainer)
-                                        .drawBehind {
-                                            drawRect(accent, size = Size(2.5.dp.toPx(), size.height))
-                                        }
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            .padding(vertical = 2.dp),
-                    ) {
+            // Hoist the amber accent out of the per-row draw scope (it's a @Composable token).
+            diffs.forEachIndexed { index, diff ->
+                // Accent the most-changed file (first — diffs are churn-sorted) with the
+                // amber active-row treatment shared with the sessions rail. Only when it
+                // stands out: skip a lone row, and a 0/0 (status-only) top row.
+                val active = index == 0 && diffs.size > 1 && (diff.additions + diff.deletions) > 0
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { onDiffClick(diff) }
+                        .focalRow(active = active)
+                        .padding(vertical = 2.dp),
+                ) {
                         Icon(
                             Icons.AutoMirrored.Outlined.InsertDriveFile,
                             contentDescription = null,

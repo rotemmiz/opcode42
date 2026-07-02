@@ -60,6 +60,8 @@ data class SessionListUiState(
     val error: String? = null,
     /** Active server host:port (scheme stripped) for the rail footer, e.g. "10.0.2.2:4096". */
     val serverLabel: String? = null,
+    /** SSE connection state for the rail-footer status dot (grey/red/green). */
+    val connectionState: dev.opcode42.core.store.ConnectionState = dev.opcode42.core.store.ConnectionState.Disconnected,
 )
 
 /** Host:port label for the rail footer — the active server URL minus its scheme and trailing
@@ -188,6 +190,8 @@ class SessionListViewModel @Inject constructor(
             projected.copy(isLoading = status.isLoading, error = status.error)
         }.combine(connectionProvider.activeFlow) { projected, active ->
             projected.copy(serverLabel = active?.url?.let(::serverLabelFrom))
+        }.combine(sessionRepo.connectionState) { projected, conn ->
+            projected.copy(connectionState = conn)
         }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SessionListUiState())
 

@@ -267,9 +267,7 @@ private fun CodeBlockView(block: MdBlock.CodeBlock) {
     ) {
         Text(
             text = highlighted,
-            fontFamily = Opcode42Mono,
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
+            style = dev.opcode42.core.design.theme.Opcode42Typography.code,
             color = OnSurface,
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
@@ -282,8 +280,7 @@ private fun CodeBlockView(block: MdBlock.CodeBlock) {
 private fun ParagraphBlock(block: MdBlock.Paragraph) {
     Text(
         text = buildInlineSpans(block.text, codeColor = Secondary, linkColor = LinkCyan),
-        fontSize = 14.5.sp,
-        lineHeight = 20.sp,
+        style = dev.opcode42.core.design.theme.Opcode42Typography.bodyMedium,
         color = OnSurface,
         modifier = Modifier.padding(horizontal = 14.dp, vertical = 1.dp),
     )
@@ -303,8 +300,7 @@ private fun ListItemBlock(block: MdBlock.ListItem) {
         )
         Text(
             text = buildInlineSpans(block.text, codeColor = Secondary, linkColor = LinkCyan),
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
+            style = dev.opcode42.core.design.theme.Opcode42Typography.bodyMedium,
             color = OnSurface,
             modifier = Modifier.weight(1f).padding(start = 10.dp), // mock gap:10 counter→text
         )
@@ -341,8 +337,7 @@ private fun TableBlock(block: MdBlock.Table) {
 private fun RowScope.TableCell(text: String, color: Color, weight: FontWeight) {
     Text(
         text = buildInlineSpans(text, codeColor = Secondary, linkColor = LinkCyan),
-        fontSize = 13.sp,
-        lineHeight = 18.sp,
+        style = dev.opcode42.core.design.theme.Opcode42Typography.bodySmall,
         color = color,
         fontWeight = weight,
         modifier = Modifier
