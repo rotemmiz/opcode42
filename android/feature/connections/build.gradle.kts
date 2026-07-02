@@ -16,4 +16,5 @@ dependencies {
     implementation(libs.security.crypto)
     implementation(libs.android.lifecycle.viewmodel.compose)
     implementation(libs.hilt.navigation.compose)
+    implementation(libs.compose.material.icons.extended)
 }

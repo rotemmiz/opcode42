@@ -184,8 +184,13 @@ fun ChatScreen(
         val m = uiState.modelID
         if (p != null && m != null) ModelRef(providerID = p, modelID = m) else null
     }
-    val displayModel = displayModelRef?.modelID
-    val displayProvider = displayModelRef?.providerID
+    // Resolve human-readable labels (provider/model `.label` falls back to the raw id) so the
+    // top bar and status strip show "Ollama Cloud" / "GLM-4" instead of raw ids.
+    val displayProviderInfo = displayModelRef?.let { ref -> providers.find { it.id == ref.providerID } }
+    val displayModelLabel = displayModelRef?.let { ref ->
+        displayProviderInfo?.models?.get(ref.modelID)?.label ?: ref.modelID
+    }
+    val displayProviderLabel = displayProviderInfo?.label ?: displayModelRef?.providerID
 
     // The composer (phone status strip + prompt input). Hosted in the Scaffold bottom
     // bar single-pane; in multi-pane it lives under the stream column so the top bar can
@@ -204,8 +209,8 @@ fun ChatScreen(
                 HorizontalDivider(color = Hairline)
                 StatusStrip(
                     mode = displayAgent,
-                    model = displayModel,
-                    provider = displayProvider,
+                    model = displayModelLabel,
+                    provider = displayProviderLabel,
                     tokens = uiState.session?.tokens,
                     onClick = if (providers.isNotEmpty()) {
                         { pickerTarget = PickerTarget.MODEL }
@@ -315,10 +320,10 @@ fun ChatScreen(
                                     )
                                     .padding(horizontal = 6.dp, vertical = 2.dp),
                             )
-                            if (displayModel != null) {
+                            if (displayModelLabel != null) {
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = displayModel,
+                                    text = displayModelLabel,
                                     fontFamily = Opcode42Mono,
                                     fontSize = 11.sp,
                                     color = OnSurfaceVariant,

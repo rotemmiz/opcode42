@@ -386,7 +386,11 @@ fun AdaptiveChatScreen(
             LeftRailMode.Overlay -> ModalNavigationDrawer(
                 drawerState = drawerState,
                 drawerContent = {
-                    ModalDrawerSheet(Modifier.width(300.dp), drawerContainerColor = Surface) {
+                    ModalDrawerSheet(
+                        Modifier.width(300.dp),
+                        drawerContainerColor = Surface,
+                        drawerShape = RoundedCornerShape(0.dp),
+                    ) {
                         val closeDrawer = { scope.launch { drawerState.close() }; Unit }
                         // The overlay drawer always shows the full rail (no morph): progress = 1f.
                         railPane(Modifier.fillMaxSize(), closeDrawer, closeDrawer, {}, { 1f })
@@ -473,11 +477,11 @@ internal fun NavRailPane(
         // Header: the wordmark + New fade out as the rail collapses, leaving a single chevron that
         // rotates 180° (collapse "‹" ⇄ expand "›") and slides from the open right edge to the
         // collapsed center.
-        Box(Modifier.fillMaxWidth().height(54.dp)) {
+        Box(Modifier.fillMaxWidth().height(52.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    // Center the wordmark + New vertically in the 54dp header band so they sit on
+                    // Center the wordmark + New vertically in the 52dp header band so they sit on
                     // the chevron's baseline (which is center-aligned) rather than hugging the top.
                     .align(Alignment.CenterStart)
                     .fillMaxWidth()
