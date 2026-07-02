@@ -195,14 +195,17 @@ class ChatViewModel @Inject constructor(
     val navigateToSession = _navigateToSession.receiveAsFlow()
 
     init {
+        // Providers are directory-independent on opencode (the catalog is global). Load them
+        // eagerly in init (not gated on the session directory) so the context gauge's limit
+        // resolves as fast as possible — this fixes the flake where the bar blanked on switch
+        // because loadPickers waited for the directory to arrive first.
+        loadPickers(null)
         if (isDraft) {
             // A draft has no server session yet: nothing to load, no SSE directory, no diffs.
-            // Load the pickers against the daemon default directory so a model/agent can be
-            // chosen before the first prompt creates the session.
-            loadPickers(null)
         } else {
             loadMessages()
-            // Load slash commands / providers / agents once the directory is known.
+            // Re-load pickers against the session's directory once known (the daemon may scope
+            // providers per-directory); the eager load above covers the gap until then.
             viewModelScope.launch {
                 val dir = uiState.first { it.session?.directory != null }.session?.directory
                 loadPickers(dir)

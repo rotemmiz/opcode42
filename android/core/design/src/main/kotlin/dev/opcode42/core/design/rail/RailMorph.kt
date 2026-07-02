@@ -70,22 +70,12 @@ fun Modifier.railActiveHighlight(
     val top = (size.height - rectH) / 2f
     val r = lerp(CollapsedCorner.toPx(), OpenCorner.toPx(), p)
     val width = size.width - insetX * 2f
+    // Container-tint only — no left accent bar (removed in the native-feel pass: Material
+    // selection reads as a container fill, not a stripe).
     drawRoundRect(
         color = container,
         topLeft = Offset(insetX, top),
         size = Size(width, rectH),
         cornerRadius = CornerRadius(r, r),
     )
-    // Clip the accent bar to the pill so its left corners round with the pill (they used to read
-    // sharp on the left while the right stayed round); the bar's right edge is interior, untouched.
-    val pill = Path().apply {
-        addRoundRect(RoundRect(insetX, top, insetX + width, top + rectH, CornerRadius(r, r)))
-    }
-    clipPath(pill) {
-        drawRect(
-            accent,
-            topLeft = Offset(insetX, top),
-            size = Size(lerp(CollapsedAccent.toPx(), OpenAccent.toPx(), p), rectH),
-        )
-    }
 }

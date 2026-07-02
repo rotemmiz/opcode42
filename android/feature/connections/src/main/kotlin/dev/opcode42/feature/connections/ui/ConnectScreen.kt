@@ -45,6 +45,9 @@ fun ConnectScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                // Cap the form width so it doesn't stretch edge-to-edge on tablet/foldable —
+                // a centered ~480dp column reads as a native first-run surface, not a stretched form.
+                .widthIn(max = 480.dp)
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
