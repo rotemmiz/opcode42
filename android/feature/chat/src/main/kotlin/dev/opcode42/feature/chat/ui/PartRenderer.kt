@@ -5,6 +5,7 @@ import dev.opcode42.core.design.theme.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -12,12 +13,18 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -27,7 +34,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import dev.opcode42.core.model.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
@@ -485,20 +495,139 @@ private fun DiffLine(line: String, highlights: List<IntRange> = emptyList()) {
 
 @Composable
 private fun FilePartView(part: FilePart, modifier: Modifier = Modifier) {
-    AssistChip(
-        onClick = {},
-        label = {
-            Text(
-                text = fileChipLabel(part),
-                fontFamily = Opcode42Mono,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+    val isImage = part.mime.startsWith("image/", ignoreCase = true) ||
+        part.url.startsWith("data:image/", ignoreCase = true)
+    if (isImage) {
+        ImageFilePart(part, modifier)
+    } else {
+        AssistChip(
+            onClick = {},
+            label = {
+                Text(
+                    text = fileChipLabel(part),
+                    fontFamily = Opcode42Mono,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            leadingIcon = { Icon(Icons.Default.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp)) },
+            modifier = modifier.padding(horizontal = 14.dp, vertical = 2.dp),
+        )
+    }
+}
+
+/**
+ * Image file part: renders a 120dp thumbnail (decoded from a `data:image/...;base64,...` URI
+ * or loaded from an HTTP URL) and opens a full-screen zoomable viewer on tap. Non-image files
+ * fall back to the chip above. No third-party image loader — base64 decodes inline, HTTP URLs
+ * load asynchronously via [produceState].
+ */
+@Composable
+private fun ImageFilePart(part: FilePart, modifier: Modifier = Modifier) {
+    var showViewer by remember { mutableStateOf(false) }
+    val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, part.url) {
+        value = loadBitmap(part.url)
+    }
+    val shape = MaterialTheme.shapes.medium
+    Box(
+        modifier = modifier
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .size(width = 120.dp, height = 120.dp)
+            .clip(shape)
+            .background(SurfaceContainerLow)
+            .clickable { showViewer = true },
+        contentAlignment = Alignment.Center,
+    ) {
+        val bmp = bitmap
+        if (bmp != null) {
+            androidx.compose.foundation.Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = part.filename ?: "image",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
             )
-        },
-        leadingIcon = { Icon(Icons.Default.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp)) },
-        modifier = modifier.padding(horizontal = 14.dp, vertical = 2.dp),
-    )
+        } else {
+            Icon(Icons.Default.AttachFile, contentDescription = null, tint = OnSurfaceFaint)
+        }
+    }
+    if (showViewer) {
+        ImageViewerDialog(bitmap = bitmap, name = part.filename ?: "image", onDismiss = { showViewer = false })
+    }
+}
+
+/** Full-screen zoomable image viewer. Pinch-to-zoom + pan via detectTransformGestures. */
+@Composable
+private fun ImageViewerDialog(bitmap: android.graphics.Bitmap?, name: String, onDismiss: () -> Unit) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.9f))
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                ) { onDismiss() }
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(1f, 5f)
+                        offsetX += pan.x
+                        offsetY += pan.y
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (bitmap != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = name,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offsetX,
+                            translationY = offsetY,
+                        ),
+                )
+            } else {
+                Text("Loading…", color = Color.White)
+            }
+        }
+    }
+}
+
+/** Decodes a Bitmap from a `data:image/...;base64,...` URI (inline) or an HTTP URL (async). */
+private suspend fun loadBitmap(url: String): android.graphics.Bitmap? {
+    return try {
+        if (url.startsWith("data:", ignoreCase = true)) {
+            // data:image/png;base64,<...>
+            val commaIdx = url.indexOf(',')
+            if (commaIdx < 0) return null
+            val b64 = url.substring(commaIdx + 1)
+            val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+            withContext(Dispatchers.Default) {
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            }
+        } else {
+            // HTTP(S) URL — fetch bytes off the main thread.
+            withContext(Dispatchers.IO) {
+                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 10_000
+                conn.inputStream.use { input ->
+                    val bytes = input.readBytes()
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }
+            }
+        }
+    } catch (e: Exception) {
+        null
+    }
 }
 
 /**

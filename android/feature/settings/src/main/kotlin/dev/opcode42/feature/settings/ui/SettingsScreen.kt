@@ -2,6 +2,8 @@ package dev.opcode42.feature.settings.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -15,6 +17,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.opcode42.feature.connections.ServerConnection
 import dev.opcode42.feature.settings.SettingsViewModel
+import dev.opcode42.feature.settings.ThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,14 +43,24 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .verticalScroll(rememberScrollState()),
         ) {
-            // ── Servers ──────────────────────────────────────────────────────
-            ListItem(
-                headlineContent = { Text("Servers", style = MaterialTheme.typography.labelLarge) },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            )
+            // ── Appearance ───────────────────────────────────────────────────
+            SectionHeader("Appearance")
+            ThemeModeRow("System", "Follows the OS dark setting", state.themeMode == ThemeMode.System) {
+                viewModel.setThemeMode(ThemeMode.System)
+            }
+            ThemeModeRow("Light", "Always light", state.themeMode == ThemeMode.Light) {
+                viewModel.setThemeMode(ThemeMode.Light)
+            }
+            ThemeModeRow("Dark", "Always dark", state.themeMode == ThemeMode.Dark) {
+                viewModel.setThemeMode(ThemeMode.Dark)
+            }
+            HorizontalDivider()
 
+            // ── Servers ──────────────────────────────────────────────────────
+            SectionHeader("Servers")
             state.connections.forEach { conn ->
                 ServerRow(
                     connection = conn,
@@ -63,8 +76,39 @@ fun SettingsScreen(
                 leadingContent = { Icon(Icons.Default.Add, contentDescription = null) },
                 modifier = Modifier.clickable(onClick = onAddServer),
             )
+            HorizontalDivider()
+
+            // ── About ────────────────────────────────────────────────────────
+            SectionHeader("About")
+            ListItem(
+                headlineContent = { Text("Opcode42") },
+                supportingContent = { Text("Mobile client") },
+                leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
+            )
         }
     }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp),
+    )
+}
+
+@Composable
+private fun ThemeModeRow(label: String, supporting: String, selected: Boolean, onClick: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(label) },
+        supportingContent = { Text(supporting) },
+        leadingContent = {
+            RadioButton(selected = selected, onClick = onClick)
+        },
+        modifier = Modifier.clickable(onClick = onClick),
+    )
 }
 
 @Composable

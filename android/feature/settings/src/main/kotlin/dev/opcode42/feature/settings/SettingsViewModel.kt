@@ -13,23 +13,31 @@ import javax.inject.Inject
 data class SettingsUiState(
     val connections: List<ServerConnection> = emptyList(),
     val activeKey: String? = null,
+    val themeMode: ThemeMode = ThemeMode.System,
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val connectionManager: ServerConnectionManager,
     private val pushController: PushController,
+    private val appPreferences: AppPreferences,
 ) : ViewModel() {
 
     val uiState: StateFlow<SettingsUiState> = combine(
         connectionManager.connections,
         connectionManager.activeServerConnectionFlow,
-    ) { connections, active ->
+        appPreferences.themeMode,
+    ) { connections, active, themeMode ->
         SettingsUiState(
             connections = connections,
             activeKey = active?.key(),
+            themeMode = themeMode,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
+
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch { appPreferences.setThemeMode(mode) }
+    }
 
     /**
      * Removes a server. When the *active* server is removed we first unregister

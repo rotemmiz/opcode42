@@ -8,9 +8,11 @@ import javax.inject.Inject
 @HiltViewModel
 class ConnectionsViewModel @Inject constructor(
     private val manager: ServerConnectionManager,
+    val mdnsDiscovery: MdnsDiscovery,
 ) : ViewModel() {
     val connections: StateFlow<List<ServerConnection>> = manager.connections
     val active: StateFlow<ServerConnection?> = manager.activeServerConnectionFlow
+    val discoveredServers: StateFlow<List<DiscoveredServer>> = mdnsDiscovery.servers
 
     fun addServer(rawUrl: String, username: String? = null, password: String? = null, displayName: String? = null, directory: String? = null) =
         manager.add(rawUrl, username, password, displayName, directory)

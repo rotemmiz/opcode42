@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -303,10 +304,8 @@ private fun SectionHeader(
             .graphicsLayer { alpha = progress() }
             .background(bg)
             .padding(start = hPad + 4.dp, end = hPad + 4.dp, top = 12.dp, bottom = 6.dp),
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 0.6.sp,
-        color = HeaderPurple,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         // Keep a single line so the header's height never grows (and pushes the rows down) as the
         // rail narrows past the label's width — it just clips while fading out.
         maxLines = 1,

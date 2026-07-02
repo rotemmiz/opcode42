@@ -4,6 +4,8 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -13,6 +15,7 @@ import androidx.navigation.navArgument
 import dev.opcode42.app.ui.AdaptiveChatScreen
 import dev.opcode42.feature.chat.DRAFT_SESSION_ID
 import dev.opcode42.feature.connections.ui.AddServerScreen
+import dev.opcode42.feature.connections.ui.ConnectScreen
 import dev.opcode42.feature.chat.ui.TasksScreen
 import dev.opcode42.feature.settings.AppPreferences
 import dev.opcode42.feature.settings.ui.SettingsScreen
@@ -22,6 +25,7 @@ import java.net.URLEncoder
 
 sealed class Screen(val route: String) {
     data object AddServer : Screen("add_server")
+    data object Connect : Screen("connect")
     data object Chat : Screen("chat/{sessionId}") {
         fun route(sessionId: String) = "chat/$sessionId"
     }
@@ -61,6 +65,13 @@ fun Opcode42NavGraph(
 ) {
     val navController = rememberNavController()
 
+    // First-run gate: if no server is configured, start at the Connect screen instead of the
+    // chat draft. Read once at composition; a server added from Connect navigates to NewChat.
+    val connectionsViewModel: dev.opcode42.feature.connections.ConnectionsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    val connections by connectionsViewModel.connections.collectAsStateWithLifecycle()
+    val hasServer = connections.isNotEmpty()
+    val startDestination = if (hasServer) Screen.NewChat.route else Screen.Connect.route
+
     // A push-notification tap deep-links straight to the relevant Chat screen.
     // Keyed on the tap token (not the session id) so a repeat push for the same
     // session still re-navigates.
@@ -75,7 +86,18 @@ fun Opcode42NavGraph(
     // The multi-pane main page is the app's home: it boots straight into the "new session" draft,
     // which hosts the sessions rail (formerly the standalone session-list start screen) alongside
     // the chat and info panes. There is no separate session-list destination.
-    NavHost(navController = navController, startDestination = Screen.NewChat.route) {
+    NavHost(navController = navController, startDestination = startDestination) {
+        composable(Screen.Connect.route) {
+            ConnectScreen(
+                onConnected = {
+                    // Replace Connect with the home draft so back doesn't return here.
+                    navController.navigate(Screen.NewChat.route) {
+                        popUpTo(Screen.Connect.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
         composable(Screen.AddServer.route) {
             AddServerScreen(
                 onNavigateBack = { navController.popBackStack() },
