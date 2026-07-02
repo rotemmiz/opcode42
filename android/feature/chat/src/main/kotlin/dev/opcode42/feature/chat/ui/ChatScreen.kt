@@ -196,7 +196,11 @@ fun ChatScreen(
                 .background(Surface)
                 .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
         ) {
-            if (!isMultiPane) {
+            // The status strip (mode/model/provider/tokens) shows above the input on phone.
+            // Hide it on a fresh draft so the new-session screen is a clean splash + composer
+            // (the model/agent pickers are reachable via /models /agents or the first-prompt
+            // flow). On a real session it reflects the active session's model.
+            if (!isMultiPane && !isDraft) {
                 HorizontalDivider(color = Hairline)
                 StatusStrip(
                     mode = displayAgent,

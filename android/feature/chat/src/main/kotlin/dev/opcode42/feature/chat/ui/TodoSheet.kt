@@ -63,7 +63,7 @@ import kotlinx.coroutines.launch
 
 private val PeekHeight = 50.dp
 private val ExpandedHeight = 308.dp
-private val ScrimColor = Color(0x80080909) // rgba(8,9,10,0.5)
+private val ScrimMaxAlpha = 0.5f
 
 /**
  * Draggable todos sheet (design §3). Docks at a 50dp peek above the status
@@ -91,11 +91,19 @@ fun TodoSheet(
     fun snapTo(target: Float) = scope.launch { height.animateTo(target) }
 
     Box(modifier = modifier.fillMaxSize()) {
-        if (open) {
+        // Gradual scrim: alpha scales with the sheet's drag progress (0 at peek → 0.5 at
+        // expanded), so the background darkens smoothly as the user drags — matching
+        // ModalBottomSheet's native scrim behavior. Drawn whenever the sheet is above peek.
+        val scrimAlpha by remember {
+            derivedStateOf {
+                ((height.value - peekPx) / (expandedPx - peekPx)).coerceIn(0f, 1f) * ScrimMaxAlpha
+            }
+        }
+        if (height.value > peekPx) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(ScrimColor)
+                    .background(Color.Black.copy(alpha = scrimAlpha))
                     .clickable(
                         indication = null,
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
