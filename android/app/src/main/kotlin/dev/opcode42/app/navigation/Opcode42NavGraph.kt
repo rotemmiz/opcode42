@@ -14,6 +14,7 @@ import dev.opcode42.app.ui.AdaptiveChatScreen
 import dev.opcode42.feature.chat.DRAFT_SESSION_ID
 import dev.opcode42.feature.connections.ui.AddServerScreen
 import dev.opcode42.feature.chat.ui.TasksScreen
+import dev.opcode42.feature.settings.AppPreferences
 import dev.opcode42.feature.settings.ui.SettingsScreen
 import dev.opcode42.feature.terminal.ui.TerminalScreen
 import java.net.URLDecoder
@@ -56,6 +57,7 @@ fun Opcode42NavGraph(
     deepLinkSessionId: String? = null,
     deepLinkToken: Long = -1L,
     onDeepLinkConsumed: () -> Unit = {},
+    appPreferences: AppPreferences? = null,
 ) {
     val navController = rememberNavController()
 
@@ -119,6 +121,7 @@ fun Opcode42NavGraph(
                 onOpenTasksBoard = {
                     navController.navigate(Screen.Tasks.route(sessionId))
                 },
+                onCycleTheme = { appPreferences?.cycleTheme() },
             )
         }
 
@@ -158,6 +161,7 @@ fun Opcode42NavGraph(
                     navController.navigate(Screen.Settings.route)
                 },
                 onOpenTasksBoard = { /* no tasks board until a session exists */ },
+                onCycleTheme = { appPreferences?.cycleTheme() },
             )
         }
 

@@ -22,6 +22,7 @@ This is the index. Detailed plans live alongside this file:
 | 11 | [test-performance](11-test-performance.md) | Performance/load test strategy |
 | 12 | [test-compatibility](12-test-compatibility.md) | Conformance harness vs real opencode |
 | 13 | [remote-ops](13-remote-ops.md) | Remote-first hardening, push, packaging |
+| 15 | [android-ux-overhaul](15-android-ux-overhaul.md) | Mobile UX polish pass: native-feel, 21 review items |
 
 ---
 

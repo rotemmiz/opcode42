@@ -754,15 +754,27 @@ private fun UserMessageBlock(
     parts: List<Part>,
     diffs: Map<String, List<SnapshotFileDiff>> = emptyMap(),
 ) {
-    // 2dp primary left accent rail drawn relative to the measured height.
-    val rail = Primary
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .drawBehind { drawRect(rail, size = Size(2.dp.toPx(), size.height)) }
-            .padding(start = 13.dp, end = 14.dp),
+    // Right-aligned M3 chat bubble: primaryContainer fill, large rounded shape with a
+    // flattened bottom-end corner, max ~80% width. Replaces the old 2dp left rail.
+    val container = MaterialTheme.colorScheme.primaryContainer
+    val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.CenterEnd,
     ) {
-        StreamParts(parts, diffs)
+        Column(
+            modifier = Modifier
+                .widthIn(max = 320.dp)
+                .clip(
+                    androidx.compose.foundation.shape.RoundedCornerShape(
+                        topStart = 16.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 4.dp,
+                    )
+                )
+                .background(container)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            StreamParts(parts, diffs)
+        }
     }
 }
 
@@ -771,31 +783,44 @@ private fun AssistantMessageBlock(
     parts: List<Part>,
     diffs: Map<String, List<SnapshotFileDiff>> = emptyMap(),
 ) {
-    Column(modifier = Modifier.padding(horizontal = 0.dp)) {
+    // Full-width, no bubble — the agent's prose flows inline. A subtle top spacing separates
+    // turns; markdown/code/diff rendering stays as-is. Distinguished from user bubbles by
+    // having no container.
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
         StreamParts(parts, diffs)
     }
 }
 
 @Composable
 private fun OptimisticMessageBlock(opt: OptimisticMessage) {
-    val rail = Primary
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .drawBehind { drawRect(rail, size = Size(2.dp.toPx(), size.height)) }
-            .padding(start = 13.dp, end = 14.dp),
+    // Same user-bubble shape but visibly pending: muted text + a 1dp progress under the text.
+    val container = MaterialTheme.colorScheme.primaryContainer
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.CenterEnd,
     ) {
-        Text(
-            text = opt.text,
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.5.sp),
-            color = OnSurface.copy(alpha = 0.6f),
-        )
-        LinearProgressIndicator(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(1.dp),
-            color = Primary,
-            trackColor = Hairline,
-        )
+        Column(
+            modifier = Modifier
+                .widthIn(max = 320.dp)
+                .clip(
+                    androidx.compose.foundation.shape.RoundedCornerShape(
+                        topStart = 16.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 4.dp,
+                    )
+                )
+                .background(container)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            Text(
+                text = opt.text,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.5.sp),
+                color = OnSurface.copy(alpha = 0.6f),
+            )
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(1.dp),
+                color = Primary,
+                trackColor = Hairline,
+            )
+        }
     }
 }
 

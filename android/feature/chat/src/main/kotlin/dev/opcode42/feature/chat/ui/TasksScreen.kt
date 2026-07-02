@@ -115,8 +115,7 @@ private fun TaskRow(todo: TodoItem) {
         TodoStatusGlyph(doing = doing, done = done)
         Text(
             text = todo.content,
-            fontSize = 14.5.sp,
-            lineHeight = 20.sp,
+            style = dev.opcode42.core.design.theme.Opcode42Typography.bodyMedium,
             fontWeight = if (doing) FontWeight.SemiBold else FontWeight.Normal,
             color = when {
                 doing -> Secondary

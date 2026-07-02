@@ -7,10 +7,12 @@ import dev.opcode42.core.model.QuestionRequest
 import dev.opcode42.core.model.Session
 import dev.opcode42.core.sdk.Opcode42Client
 import dev.opcode42.core.store.AppStore
+import dev.opcode42.core.store.ConnectionState
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,6 +33,9 @@ data class SessionsSnapshot(
 interface SessionRepository {
     /** Reactive session-list state (sessions + status + pending permissions/questions). */
     val snapshot: Flow<SessionsSnapshot>
+
+    /** SSE connection state (connected/connecting/disconnected/failed). */
+    val connectionState: Flow<ConnectionState>
 
     /** Aggregate sessions across every project/directory the daemon knows. */
     suspend fun refreshAll(): Result<Unit>
@@ -59,6 +64,9 @@ class DefaultSessionRepository @Inject constructor(
     override val snapshot: Flow<SessionsSnapshot> = store.state.map {
         SessionsSnapshot(it.sessions, it.sessionStatus, it.permissions, it.questions)
     }
+
+    override val connectionState: Flow<ConnectionState> =
+        store.state.map { it.connectionState }.distinctUntilChanged()
 
     /**
      * Enumerate `GET /project`, fan out `listSessions(dir)` per worktree + sandbox in parallel,

@@ -118,8 +118,7 @@ fun SubAgentBlock(part: ToolPart, modifier: Modifier = Modifier) {
             HorizontalDivider(color = Hairline)
             Text(
                 text = result,
-                fontSize = 13.5.sp,
-                lineHeight = 20.sp,
+                style = dev.opcode42.core.design.theme.Opcode42Typography.bodySmall,
                 color = OnSurfaceVariant,
                 modifier = Modifier
                     .background(SurfaceContainerLowest)
