@@ -357,6 +357,19 @@ fun AdaptiveChatScreen(
         )
     }
 
+    // Back-handler priority: close the overlay drawer / collapse the inline rail before
+    // letting the system back pop the nav stack. (Sheets inside ChatScreen handle their own
+    // back via ModalBottomSheet's onDismissRequest.)
+    androidx.activity.compose.BackHandler(
+        enabled = (layout.leftRailMode == LeftRailMode.Overlay && drawerState.isOpen) ||
+            (layout.leftRailMode == LeftRailMode.InlinePush && railOpen && !layout.railPersistent),
+    ) {
+        when (layout.leftRailMode) {
+            LeftRailMode.Overlay -> scope.launch { drawerState.close() }
+            LeftRailMode.InlinePush -> railOpen = false
+        }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
