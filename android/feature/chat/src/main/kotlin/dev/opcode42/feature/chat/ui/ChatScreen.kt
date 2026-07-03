@@ -412,7 +412,13 @@ fun ChatScreen(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                // Apply only top/start/end padding to the Row so the right info panel's
+                // background extends to the screen bottom edge (full-bleed). The bottom
+                // inset is handled per-pane: the stream column hosts the composer (which
+                // already applies ime+navBars padding), and the info panel applies its own
+                // navigationBarsPadding so content clears the gesture bar while the fill
+                // runs edge-to-edge.
+                .padding(top = padding.calculateTopPadding()),
         ) {
             // Multi-pane: (stream + composer) · sidebar, UNDER a top bar that spans the
             // chat area only (the rail lives outside, beside the chat, so the bar stops at

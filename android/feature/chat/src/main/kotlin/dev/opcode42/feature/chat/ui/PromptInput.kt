@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -258,99 +259,109 @@ fun PromptInput(
             }
         }
 
-        // Native M3 text-field container: BasicTextField wrapped with OutlinedTextFieldDefaults
-        // decoration so the border, focus state, and cursor match M3 OutlinedTextField exactly.
-        // 16sp body text, themed cursor/selection via LocalTextSelectionColors, no custom left rail.
+        // ── Composer container ──
+        // A single pill-shaped surface (CircleShape when single-line, morphs to a
+        // rounded rectangle as text wraps to multiple lines). All icons live INSIDE
+        // the container: + on the far left, mic + send on the far right. The text
+        // field sits between them, vertically centered when single-line and
+        // top-aligned when expanded.
         val canSend = enabled && (text.isNotBlank() || pendingAttachments.isNotEmpty())
         val selectionColors = androidx.compose.foundation.text.selection.LocalTextSelectionColors.current
         val accent = Secondary
         val mention = LinkCyan
         val composerTransform = remember(accent, mention) { composerTokenTransformation(accent, mention) }
         val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-        val colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = SurfaceContainer,
-            unfocusedContainerColor = SurfaceContainer,
-            focusedBorderColor = Outline,
-            unfocusedBorderColor = Hairline,
-            cursorColor = selectionColors.handleColor,
-        )
-        val shape = MaterialTheme.shapes.large
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            BasicTextField(
-            value = text,
-            onValueChange = { text = it },
+        val isFocused by interactionSource.collectIsFocusedAsState()
+        // Pill (CircleShape) when the field is short; rounded rectangle once it wraps.
+        val isMultiline = remember(text) { text.contains('\n') }
+        val containerShape = if (isMultiline) RoundedCornerShape(24.dp) else CircleShape
+        val borderColor = if (isFocused) Outline else Hairline
+
+        Row(
+            verticalAlignment = Alignment.Bottom,
             modifier = Modifier
-                .weight(1f)
-                .heightIn(min = 48.dp),
-            enabled = enabled,
-            textStyle = TextStyle(color = OnSurface, fontSize = 16.sp, lineHeight = 22.4.sp),
-            cursorBrush = SolidColor(selectionColors.handleColor),
-            visualTransformation = composerTransform,
-            maxLines = 8,
-            interactionSource = interactionSource,
-        ) { innerTextField ->
-            OutlinedTextFieldDefaults.DecorationBox(
-                value = text,
-                innerTextField = innerTextField,
-                enabled = enabled,
-                singleLine = false,
-                visualTransformation = composerTransform,
-                interactionSource = interactionSource,
-                placeholder = {
-                    if (text.isEmpty()) {
-                        Text(
-                            "Ask anything…  /  @",
-                            color = OnSurfaceGhost,
-                            fontSize = 16.sp,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                },
-                colors = colors,
-                contentPadding = PaddingValues(start = 14.dp, end = 4.dp, top = 13.dp, bottom = 13.dp),
-            )
-        }
-
-            // ── Voice dictation ── shown only when a recognition provider exists.
-            if (voice.isAvailable) {
-                AnimatedVisibility(visible = voice.isListening) {
-                    IconButton(
-                        onClick = { cancelDictation() },
-                        modifier = Modifier.size(44.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Cancel dictation",
-                            tint = OnSurfaceVariant,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                }
-                MicButton(voice = voice, enabled = enabled, onToggle = { toggleVoice() })
-            }
-
-            // Attach (add) icon
+                .fillMaxWidth()
+                .clip(containerShape)
+                .border(1.dp, borderColor, containerShape)
+                .background(SurfaceContainer),
+        ) {
+            // Leading: + (attach) — anchored to the bottom-left, inside the container.
             IconButton(
                 onClick = { filePicker.launch("*/*") },
                 enabled = enabled,
-                modifier = Modifier.size(44.dp),
+                modifier = Modifier.size(48.dp),
             ) {
                 Icon(
                     Icons.Default.AttachFile,
                     contentDescription = "Attach file",
                     tint = if (enabled) OnSurfaceVariant else OnSurfaceFaint,
-                    modifier = Modifier.size(19.dp),
+                    modifier = Modifier.size(22.dp),
                 )
             }
 
-            // Trailing action — 40dp circle in a 48dp touch target.
+            // Text field — fills the remaining width; top-aligned so wrapped lines
+            // grow upward while the icon row stays anchored at the bottom.
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp, max = 200.dp)
+                    .padding(vertical = 14.dp),
+                enabled = enabled,
+                textStyle = TextStyle(color = OnSurface, fontSize = 16.sp, lineHeight = 22.4.sp),
+                cursorBrush = SolidColor(selectionColors.handleColor),
+                visualTransformation = composerTransform,
+                maxLines = 8,
+                interactionSource = interactionSource,
+            ) { innerTextField ->
+                if (text.isEmpty()) {
+                    Text(
+                        "Ask anything…  /  @",
+                        color = OnSurfaceGhost,
+                        fontSize = 16.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                innerTextField()
+            }
+
+            // Trailing controls — mic (if available) + send, anchored to the bottom-right.
+            if (voice.isAvailable) {
+                AnimatedVisibility(visible = voice.isListening) {
+                    IconButton(
+                        onClick = { cancelDictation() },
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Cancel dictation",
+                            tint = OnSurfaceVariant,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                if (!voice.isListening) {
+                    MicButton(voice = voice, enabled = enabled, onToggle = { toggleVoice() })
+                }
+            }
+
+            // Send — solid circular button, anchored to the far right inside the container.
             val active = busy || canSend
             Box(
                 modifier = Modifier
-                    .padding(end = 4.dp)
-                    .size(48.dp)
+                    .padding(end = 6.dp, top = 6.dp, bottom = 6.dp)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(
+                        when {
+                            busy -> Error
+                            canSend -> Primary
+                            else -> Hairline
+                        },
+                    )
                     .clickable(enabled = active) {
                         if (busy) {
                             onStop()
@@ -364,26 +375,12 @@ fun PromptInput(
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when {
-                                busy -> Error
-                                canSend -> Primary
-                                else -> Hairline
-                            },
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (busy) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
-                        contentDescription = if (busy) "Stop" else "Send",
-                        tint = if (active) OnPrimary else OnSurfaceFaint,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
+                Icon(
+                    if (busy) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
+                    contentDescription = if (busy) "Stop" else "Send",
+                    tint = if (active) OnPrimary else OnSurfaceFaint,
+                    modifier = Modifier.size(20.dp),
+                )
             }
         }
     }

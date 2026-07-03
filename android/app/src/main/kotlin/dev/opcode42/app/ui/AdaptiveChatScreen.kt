@@ -899,6 +899,9 @@ internal fun SessionInfoPanel(
         // built-in + daemon commands, so no information is lost.
 
         Spacer(Modifier.height(8.dp))
+        // Clear the system gesture bar so the last row isn't hidden behind it. The
+        // background (Surface) fills edge-to-edge; only the content is inset.
+        Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars))
     }
 }
 
