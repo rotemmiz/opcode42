@@ -52,6 +52,11 @@ interface ChatRepository {
 
     suspend fun loadMessages(sessionId: String, directory: String?): Result<Unit>
 
+    /** D1 — Fetch a subagent (child) session's message transcript and cache it for inline
+     *  display in a SubAgentBlock. Returns the messages so the caller (ChatViewModel) can
+     *  publish them into [childSessionMessages]. */
+    suspend fun loadChildMessages(childSessionId: String): List<Message>
+
     /** Optimistically post [text], rolling the optimistic bubble back if the request fails. */
     suspend fun send(
         sessionId: String,
@@ -119,6 +124,9 @@ class DefaultChatRepository @Inject constructor(
     override suspend fun loadMessages(sessionId: String, directory: String?): Result<Unit> = resultOf {
         client.getMessages(sessionId, directory).forEach { store.dispatch(AppEvent.MessageUpdated(it)) }
     }
+
+    override suspend fun loadChildMessages(childSessionId: String): List<Message> =
+        client.getMessages(childSessionId, null)
 
     override suspend fun send(
         sessionId: String,

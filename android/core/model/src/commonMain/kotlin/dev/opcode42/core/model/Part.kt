@@ -113,6 +113,7 @@ data class ToolStateRunning(
     override val status: String = "running",
     val input: JsonObject? = null,
     val title: String? = null,
+    val metadata: JsonObject? = null,
     val time: PartTime? = null,
 ) : ToolState()
 
@@ -122,6 +123,7 @@ data class ToolStateCompleted(
     val input: JsonObject? = null,
     val output: String? = null,
     val title: String? = null,
+    val metadata: JsonObject? = null,
     val time: PartTime? = null,
 ) : ToolState()
 
@@ -130,5 +132,6 @@ data class ToolStateError(
     override val status: String = "error",
     val input: JsonObject? = null,
     val error: String? = null,
+    val metadata: JsonObject? = null,
     val time: PartTime? = null,
 ) : ToolState()

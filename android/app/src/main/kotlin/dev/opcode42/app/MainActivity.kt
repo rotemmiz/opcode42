@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import dev.opcode42.app.navigation.Opcode42NavGraph
@@ -53,6 +54,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Belt-and-suspenders with enableEdgeToEdge: explicitly opt out of decor-fits-system-windows
+        // so content draws behind the system bars on all API levels (A2).
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         emitDeepLink(intent)
         maybeRequestNotificationPermission()
         setContent {

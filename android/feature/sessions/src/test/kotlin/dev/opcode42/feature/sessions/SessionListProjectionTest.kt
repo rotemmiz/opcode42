@@ -1,6 +1,7 @@
 package dev.opcode42.feature.sessions
 
 import dev.opcode42.core.model.PermissionRequest
+import dev.opcode42.core.model.QuestionInfo
 import dev.opcode42.core.model.QuestionRequest
 import dev.opcode42.core.model.Session
 import dev.opcode42.core.model.SessionTime
@@ -121,7 +122,10 @@ class SessionListProjectionTest {
                     PermissionRequest(id = "p2", sessionID = "a"),
                 ),
             ),
-            questions = mapOf("b" to listOf(QuestionRequest(id = "q1", sessionID = "b", message = "Which env?"))),
+            questions = mapOf("b" to listOf(QuestionRequest(
+                id = "q1", sessionID = "b",
+                questions = listOf(QuestionInfo(question = "Which env?", header = "Environment")),
+            ))),
         )
         val ui = project(state)
         assertEquals("busy", ui.statuses["a"])

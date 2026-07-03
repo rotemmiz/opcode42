@@ -521,7 +521,21 @@ fun ChatScreen(
                                 message = message,
                                 parts = effectiveParts,
                                 diffs = uiState.diffs,
+                                childMessages = uiState.childSessionMessages,
+                                onLoadChildSession = viewModel::loadChildSession,
+                                onNavigateToSession = onNavigateToSession,
                             )
+                        }
+                        // D3 — Synthetic question block: a pending question is visible in the
+                        // conversation stream (not just a transient modal), positioned after the
+                        // last message. Tapping it opens the QuestionSheet (already composed below).
+                        if (pendingQuestion != null) {
+                            item(
+                                key = "synthetic-question:${pendingQuestion!!.id}",
+                                contentType = { "question" },
+                            ) {
+                                PendingQuestionBlock(question = pendingQuestion!!)
+                            }
                         }
                     }
 
@@ -567,11 +581,11 @@ fun ChatScreen(
             )
         }
 
-        // A8 — Question sheet (non-dismissible)
+        // D3 — Question sheet (structured options wizard; swipe-away = reject)
         pendingQuestion?.let { req ->
             QuestionSheet(
                 question = req,
-                onReply = { answer -> viewModel.replyQuestion(req.id, answer) },
+                onReply = { answers -> viewModel.replyQuestion(req.id, answers) },
                 onReject = { viewModel.rejectQuestion(req.id) },
             )
         }
@@ -722,13 +736,16 @@ private fun MessageBlock(
     message: Message,
     parts: List<Part>,
     diffs: Map<String, List<SnapshotFileDiff>> = emptyMap(),
+    childMessages: Map<String, List<Message>> = emptyMap(),
+    onLoadChildSession: (String) -> Unit = {},
+    onNavigateToSession: (String) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         if (message.role == "user") {
-            UserMessageBlock(parts, diffs)
+            UserMessageBlock(parts, diffs, childMessages, onLoadChildSession, onNavigateToSession)
         } else {
             if (message.isSummary) CompactionMarker()
-            AssistantMessageBlock(parts, diffs)
+            AssistantMessageBlock(parts, diffs, childMessages, onLoadChildSession, onNavigateToSession)
         }
     }
 }
@@ -754,13 +771,32 @@ private fun CompactionMarker() {
 
 /** Renders a message's parts, grouping consecutive tool calls into one card. */
 @Composable
-private fun StreamParts(parts: List<Part>, diffs: Map<String, List<SnapshotFileDiff>>) {
+private fun StreamParts(
+    parts: List<Part>,
+    diffs: Map<String, List<SnapshotFileDiff>>,
+    childMessages: Map<String, List<Message>> = emptyMap(),
+    onLoadChildSession: (String) -> Unit = {},
+    onNavigateToSession: (String) -> Unit = {},
+) {
     val items = remember(parts) { groupRenderItems(parts) }
     items.forEach { item ->
         when (item) {
             is RenderItem.Tools -> ToolRowGroup(item.parts)
-            is RenderItem.Single -> PartRenderer(item.part, diffs = diffs)
-            is RenderItem.Patch -> PartRenderer(item.part, editParts = item.editParts, diffs = diffs)
+            is RenderItem.Single -> PartRenderer(
+                item.part,
+                diffs = diffs,
+                childMessages = childMessages,
+                onLoadChildSession = onLoadChildSession,
+                onNavigateToSession = onNavigateToSession,
+            )
+            is RenderItem.Patch -> PartRenderer(
+                item.part,
+                editParts = item.editParts,
+                diffs = diffs,
+                childMessages = childMessages,
+                onLoadChildSession = onLoadChildSession,
+                onNavigateToSession = onNavigateToSession,
+            )
         }
     }
 }
@@ -769,6 +805,9 @@ private fun StreamParts(parts: List<Part>, diffs: Map<String, List<SnapshotFileD
 private fun UserMessageBlock(
     parts: List<Part>,
     diffs: Map<String, List<SnapshotFileDiff>> = emptyMap(),
+    childMessages: Map<String, List<Message>> = emptyMap(),
+    onLoadChildSession: (String) -> Unit = {},
+    onNavigateToSession: (String) -> Unit = {},
 ) {
     // Right-aligned M3 chat bubble: primaryContainer fill, large rounded shape with a
     // flattened bottom-end corner, max ~80% width. Replaces the old 2dp left rail.
@@ -789,7 +828,7 @@ private fun UserMessageBlock(
                 .background(container)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
-            StreamParts(parts, diffs)
+            StreamParts(parts, diffs, childMessages, onLoadChildSession, onNavigateToSession)
         }
     }
 }
@@ -798,12 +837,15 @@ private fun UserMessageBlock(
 private fun AssistantMessageBlock(
     parts: List<Part>,
     diffs: Map<String, List<SnapshotFileDiff>> = emptyMap(),
+    childMessages: Map<String, List<Message>> = emptyMap(),
+    onLoadChildSession: (String) -> Unit = {},
+    onNavigateToSession: (String) -> Unit = {},
 ) {
     // Full-width, no bubble — the agent's prose flows inline. A subtle top spacing separates
     // turns; markdown/code/diff rendering stays as-is. Distinguished from user bubbles by
     // having no container.
     Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
-        StreamParts(parts, diffs)
+        StreamParts(parts, diffs, childMessages, onLoadChildSession, onNavigateToSession)
     }
 }
 
@@ -844,6 +886,47 @@ private fun OptimisticMessageBlock(opt: OptimisticMessage) {
  *  cached switch resolves first, so the loader never flashes for it. Loading from the empty
  *  page shows it immediately (the splash is already on screen). */
 private const val LOADER_DELAY_MS = 250L
+
+/**
+ * D3 — In-stream synthetic question block. A pending question is rendered in the conversation
+ * stream (after the last message) so it's visible in history, not just a transient modal. The
+ * block shows the question header + text + a "tap to answer" affordance; the QuestionSheet is
+ * already composed separately and opens on tap.
+ */
+@Composable
+private fun PendingQuestionBlock(question: dev.opcode42.core.model.QuestionRequest) {
+    val info = question.questions.firstOrNull()
+    val header = info?.header?.takeIf { it.isNotBlank() } ?: "Question"
+    val body = info?.question?.takeIf { it.isNotBlank() }
+        ?: question.message
+        ?: "The agent is waiting for input."
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Text(
+            text = header,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "Tap to answer",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+        )
+    }
+}
 
 /** Once the loader has appeared, keep it up for at least this long, so a load finishing just
  *  past [LOADER_DELAY_MS] doesn't blink the spinner in and straight back out. */

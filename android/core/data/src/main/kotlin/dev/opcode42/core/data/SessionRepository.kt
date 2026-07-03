@@ -51,8 +51,11 @@ interface SessionRepository {
     suspend fun abort(sessionId: String, directory: String? = null): Result<Unit>
 
     suspend fun replyPermission(requestId: String, allow: Boolean): Result<Unit>
-    suspend fun replyQuestion(requestId: String, answer: String): Result<Unit>
+    suspend fun replyQuestion(requestId: String, answers: List<List<String>>): Result<Unit>
     suspend fun rejectQuestion(requestId: String): Result<Unit>
+
+    /** G1 — Daemon version from `GET /global/health` (for the Settings About section). */
+    suspend fun fetchDaemonVersion(): String?
 }
 
 @Singleton
@@ -140,8 +143,8 @@ class DefaultSessionRepository @Inject constructor(
         store.dispatch(AppEvent.PermissionReplied(requestId))
     }
 
-    override suspend fun replyQuestion(requestId: String, answer: String): Result<Unit> = resultOf {
-        client.replyQuestion(requestId, answer)
+    override suspend fun replyQuestion(requestId: String, answers: List<List<String>>): Result<Unit> = resultOf {
+        client.replyQuestion(requestId, answers)
         store.dispatch(AppEvent.QuestionReplied(requestId))
     }
 
@@ -149,4 +152,7 @@ class DefaultSessionRepository @Inject constructor(
         client.rejectQuestion(requestId)
         store.dispatch(AppEvent.QuestionRejected(requestId))
     }
+
+    override suspend fun fetchDaemonVersion(): String? =
+        runCatching { client.getHealth() }.getOrNull()
 }

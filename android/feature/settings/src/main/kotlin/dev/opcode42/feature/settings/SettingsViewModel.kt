@@ -3,6 +3,8 @@ package dev.opcode42.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.opcode42.core.data.SessionRepository
+import dev.opcode42.core.store.ConnectionState
 import dev.opcode42.feature.connections.ServerConnection
 import dev.opcode42.feature.connections.ServerConnectionManager
 import dev.opcode42.feature.notifications.PushController
@@ -14,6 +16,10 @@ data class SettingsUiState(
     val connections: List<ServerConnection> = emptyList(),
     val activeKey: String? = null,
     val themeMode: ThemeMode = ThemeMode.System,
+    /** SSE connection state for the active server — drives the server-row status dot (G1). */
+    val activeConnectionState: ConnectionState = ConnectionState.Disconnected,
+    /** Daemon version from `GET /global/health`, for the About section (G1). null = not fetched. */
+    val daemonVersion: String? = null,
 )
 
 @HiltViewModel
@@ -21,19 +27,34 @@ class SettingsViewModel @Inject constructor(
     private val connectionManager: ServerConnectionManager,
     private val pushController: PushController,
     private val appPreferences: AppPreferences,
+    private val sessionRepo: SessionRepository,
 ) : ViewModel() {
+
+    private val _daemonVersion = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<SettingsUiState> = combine(
         connectionManager.connections,
         connectionManager.activeServerConnectionFlow,
         appPreferences.themeMode,
-    ) { connections, active, themeMode ->
+        sessionRepo.connectionState,
+    ) { connections, active, themeMode, connState ->
         SettingsUiState(
             connections = connections,
             activeKey = active?.key(),
             themeMode = themeMode,
+            activeConnectionState = connState,
         )
+    }.combine(_daemonVersion) { state, ver ->
+        state.copy(daemonVersion = ver)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
+
+    init {
+        // Fetch the daemon version once for the About section.
+        viewModelScope.launch {
+            runCatching { sessionRepo.fetchDaemonVersion() }
+                .onSuccess { ver -> _daemonVersion.value = ver }
+        }
+    }
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { appPreferences.setThemeMode(mode) }

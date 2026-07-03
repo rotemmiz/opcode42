@@ -44,6 +44,10 @@ data class ChatUiState(
     val optimisticMessages: List<OptimisticMessage> = emptyList(),
     val pendingPermissions: List<PermissionRequest> = emptyList(),
     val pendingQuestions: List<QuestionRequest> = emptyList(),
+    /** D1 — Child session transcripts keyed by child session id, loaded on demand when a
+     *  subagent card is expanded. Lets the SubAgentBlock show the child's message stream
+     *  inline without navigating away from the parent chat. */
+    val childSessionMessages: Map<String, List<Message>> = emptyMap(),
     val sessionStatus: String = "idle",
     val todos: List<TodoItem> = emptyList(),
     /** Agent name driving the status-strip mode chip (e.g. "build", "plan"). */
@@ -99,6 +103,16 @@ class ChatViewModel @Inject constructor(
     /** Working-tree changes (`git status`) for the session directory; refreshed on idle. */
     private val _changedFiles = MutableStateFlow<List<SnapshotFileDiff>>(emptyList())
 
+    /** D1 — Child session transcripts keyed by child session id, loaded on demand when a
+     *  subagent card is expanded. One fetch per child id; cached for the session's lifetime. */
+    private val _childSessionMessages = MutableStateFlow<Map<String, List<Message>>>(emptyMap())
+
+    // Sticky context gauge: preserves the last known token usage + limit across transient
+    // empty-message states (session reload, message list clearing) so the gauge doesn't
+    // flash to 0/null between loads. Updated inside the uiState combine below.
+    private var lastContextTokens: TokenUsage? = null
+    private var lastContextLimit: Int? = null
+
     /** Lazily-fetched `/vcs/diff` patches (the heavier sibling of [_changedFiles]) for the diff
      *  viewer: fetched once on the first tapped row, reused for later taps, and invalidated on each
      *  idle refresh so a finished turn re-fetches. Guarded by [vcsDiffLock] for the read-or-fetch. */
@@ -110,12 +124,13 @@ class ChatViewModel @Inject constructor(
     val events = _events.receiveAsFlow()
 
     val uiState: StateFlow<ChatUiState> =
-        // Six inputs, but `combine` is only typed up to five — pair the last two (both plain
-        // state flows) into one and destructure them in the lambda.
+        // Six inputs, but `combine` is only typed up to five — pair the last groups into one.
         combine(
             chatRepo.observe(sessionId), _isSending, _isLoading, _branch,
-            combine(_providers, _changedFiles) { providers, changedFiles -> providers to changedFiles },
-        ) { snap, sending, loading, branch, (providers, changedFiles) ->
+            combine(_providers, _changedFiles, _childSessionMessages) { providers, changedFiles, childMsgs ->
+                Triple(providers, changedFiles, childMsgs)
+            },
+        ) { snap, sending, loading, branch, (providers, changedFiles, childMessages) ->
             val messages = snap.messages
             // Status-strip context comes from the most recent assistant turn that
             // carries a model/agent (the live "what's running" state).
@@ -130,6 +145,16 @@ class ChatViewModel @Inject constructor(
             val contextMsg = messages.lastOrNull {
                 it.role == "assistant" && it.tokens != null
             }
+            // Sticky context: hold the last known tokens/limit so the gauge doesn't flash
+            // to 0 during transient empty-message states (reload, session switch). When a
+            // new value arrives it replaces the sticky one; when it goes null (messages
+            // briefly empty) the previous value persists until the new load completes.
+            val stickyTokens = contextMsg?.tokens ?: lastContextTokens
+            val stickyLimit = contextMsg?.let { m ->
+                providers.find { it.id == m.providerID }?.models?.get(m.modelID)?.limit?.context
+            }?.takeIf { it > 0.0 }?.toInt() ?: lastContextLimit
+            lastContextTokens = stickyTokens
+            lastContextLimit = stickyLimit
             ChatUiState(
                 session = snap.session,
                 messages = messages,
@@ -139,6 +164,7 @@ class ChatViewModel @Inject constructor(
                 optimisticMessages = snap.optimistic,
                 pendingPermissions = snap.permissions,
                 pendingQuestions = snap.questions,
+                childSessionMessages = childMessages,
                 sessionStatus = snap.status,
                 todos = extractTodos(messages, snap.parts),
                 agentMode = lastModelled?.mode ?: lastModelled?.agent
@@ -147,14 +173,8 @@ class ChatViewModel @Inject constructor(
                 modelID = lastModelled?.modelID,
                 providerID = lastModelled?.providerID,
                 branch = branch,
-                contextTokens = contextMsg?.tokens,
-                // Real window size of THAT turn's model, looked up in the providers
-                // catalog by the message's provider/model (opencode sidebar/context.tsx:30,33).
-                // Raw limit.context; null when the model isn't in the catalog — the gauge
-                // then drops the denominator rather than inventing one.
-                contextLimit = contextMsg?.let { m ->
-                    providers.find { it.id == m.providerID }?.models?.get(m.modelID)?.limit?.context
-                }?.takeIf { it > 0.0 }?.toInt(),
+                contextTokens = stickyTokens,
+                contextLimit = stickyLimit,
                 isLoading = loading,
                 isSending = sending,
             )
@@ -462,16 +482,30 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    /** A8 — Question reply */
-    fun replyQuestion(requestId: String, answer: String) {
+    /** D3 — Question reply: sends `{ answers: string[][] }` per the wire contract. */
+    fun replyQuestion(requestId: String, answers: List<List<String>>) {
         viewModelScope.launch {
-            sessionRepo.replyQuestion(requestId, answer).onFailure { emitError("reply", it) }
+            sessionRepo.replyQuestion(requestId, answers).onFailure { emitError("reply", it) }
         }
     }
 
     fun rejectQuestion(requestId: String) {
         viewModelScope.launch {
             sessionRepo.rejectQuestion(requestId).onFailure { emitError("reject", it) }
+        }
+    }
+
+    /** D1 — Load a subagent (child) session's message transcript for inline display.
+     *  Fetches `GET /session/{childId}/message` once and caches it in [childSessionMessages];
+     *  subsequent expansions of the same card reuse the cached transcript. */
+    fun loadChildSession(childId: String) {
+        if (_childSessionMessages.value.containsKey(childId)) return
+        viewModelScope.launch {
+            runCatching { chatRepo.loadChildMessages(childId) }
+                .onSuccess { msgs ->
+                    _childSessionMessages.update { it + (childId to msgs) }
+                }
+                .onFailure { emitError("subagent", it) }
         }
     }
 }

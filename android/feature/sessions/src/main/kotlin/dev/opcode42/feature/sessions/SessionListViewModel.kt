@@ -283,9 +283,9 @@ class SessionListViewModel @Inject constructor(
     }
 
     /** Answer a session's pending question from the menu. */
-    fun replyQuestion(requestId: String, answer: String) {
+    fun replyQuestion(requestId: String, answers: List<List<String>>) {
         viewModelScope.launch {
-            sessionRepo.replyQuestion(requestId, answer).onFailure { emitError("reply", it) }
+            sessionRepo.replyQuestion(requestId, answers).onFailure { emitError("reply", it) }
         }
     }
 

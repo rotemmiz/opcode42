@@ -50,13 +50,25 @@ fun PartRenderer(
     modifier: Modifier = Modifier,
     diffs: Map<String, List<SnapshotFileDiff>> = emptyMap(),
     editParts: List<ToolPart> = emptyList(),
+    childMessages: Map<String, List<Message>> = emptyMap(),
+    onLoadChildSession: (String) -> Unit = {},
+    onNavigateToSession: (String) -> Unit = {},
 ) {
     when (part) {
         is TextPart -> TextPartView(part, modifier)
         is ReasoningPart -> ReasoningPartView(part, modifier)
         is ToolPart -> when {
             part.isHiddenFromRows() -> Unit
-            part.tool.lowercase() == "task" -> SubAgentBlock(part, modifier)
+            part.tool.lowercase() == "task" -> {
+                val childId = remember(part) { part.childSessionId() }
+                SubAgentBlock(
+                    part = part,
+                    modifier = modifier,
+                    childMessages = childId?.let { childMessages[it] } ?: emptyList(),
+                    onLoadChild = onLoadChildSession,
+                    onNavigateToSession = onNavigateToSession,
+                )
+            }
             part.rendersAsOwnBlock() -> ToolOutputBlock(part, modifier)
             else -> ToolRowGroup(listOf(part), modifier)
         }

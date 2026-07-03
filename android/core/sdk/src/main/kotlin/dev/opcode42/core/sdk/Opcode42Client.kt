@@ -36,6 +36,11 @@ class Opcode42Client @Inject constructor(
         arr.mapNotNull { runCatching { Opcode42Json.decodeFromJsonElement(Project.serializer(), it) }.getOrNull() }
     }
 
+    /** `GET /global/health` — the daemon's health + version (for the Settings About section). */
+    suspend fun getHealth(): String? = transport.get("/global/health", null) { json ->
+        (json as? JsonObject)?.get("version")?.jsonPrimitive?.content
+    }
+
     suspend fun createSession(directory: String? = null): Session = transport.post(
         path = "/session",
         body = buildJsonObject { directory?.let { put("directory", it) } },
@@ -284,10 +289,21 @@ class Opcode42Client @Inject constructor(
 
     // ─── Question ─────────────────────────────────────────────────────────────
 
-    suspend fun replyQuestion(requestId: String, answer: String) =
+    suspend fun replyQuestion(requestId: String, answers: List<List<String>>) =
         transport.post(
             path = "/question/$requestId/reply",
-            body = buildJsonObject { put("answer", answer) },
+            body = buildJsonObject {
+                put(
+                    "answers",
+                    buildJsonArray {
+                        answers.forEach { ans ->
+                            add(buildJsonArray {
+                                ans.forEach { label -> add(label) }
+                            })
+                        }
+                    },
+                )
+            },
         ) { _ -> Unit }
 
     suspend fun rejectQuestion(requestId: String) =

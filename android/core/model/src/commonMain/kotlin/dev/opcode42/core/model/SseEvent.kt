@@ -62,5 +62,35 @@ data class PermissionRequest(
 data class QuestionRequest(
     val id: String,
     val sessionID: String,
-    val message: String? = null,
+    val questions: List<QuestionInfo> = emptyList(),
+    val tool: QuestionTool? = null,
+) {
+    /**
+     * Backward-compat fallback: older events/clients surfaced a single `message` string.
+     * The wire contract's primary path is `questions[0].question`; this synthesizes the
+     * legacy field from it so existing call sites (e.g. `SessionPendingActions` in the
+     * rail) keep working while the structured sheet is rolled out.
+     */
+    val message: String? get() = questions.firstOrNull()?.question
+}
+
+@Serializable
+data class QuestionInfo(
+    val question: String,
+    val header: String,
+    val options: List<QuestionOption> = emptyList(),
+    val multiple: Boolean? = null,
+    val custom: Boolean? = null,
+)
+
+@Serializable
+data class QuestionOption(
+    val label: String,
+    val description: String = "",
+)
+
+@Serializable
+data class QuestionTool(
+    val messageID: String,
+    val callID: String,
 )

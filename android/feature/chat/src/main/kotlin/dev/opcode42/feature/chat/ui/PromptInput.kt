@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -278,14 +279,14 @@ fun PromptInput(
         val borderColor = if (isFocused) Outline else Hairline
 
         Row(
-            verticalAlignment = Alignment.Bottom,
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(containerShape)
                 .border(1.dp, borderColor, containerShape)
                 .background(SurfaceContainer),
         ) {
-            // Leading: + (attach) — anchored to the bottom-left, inside the container.
+            // Leading: + (attach) — default 48dp IconButton, vertically centered.
             IconButton(
                 onClick = { filePicker.launch("*/*") },
                 enabled = enabled,
@@ -309,8 +310,9 @@ fun PromptInput(
                     .heightIn(min = 48.dp, max = 200.dp)
                     .padding(vertical = 14.dp),
                 enabled = enabled,
-                textStyle = TextStyle(color = OnSurface, fontSize = 16.sp, lineHeight = 22.4.sp),
+                textStyle = Opcode42Typography.bodyLarge.copy(color = OnSurface),
                 cursorBrush = SolidColor(selectionColors.handleColor),
+                keyboardOptions = KeyboardOptions(autoCorrectEnabled = true),
                 visualTransformation = composerTransform,
                 maxLines = 8,
                 interactionSource = interactionSource,
@@ -329,6 +331,9 @@ fun PromptInput(
             }
 
             // Trailing controls — mic (if available) + send, anchored to the bottom-right.
+            // While dictating: X (cancel/discard) appears to the LEFT of the mic, which
+            // stays in place as the stop-and-keep button (red halo pulsing with amplitude).
+            // Tapping the mic again stops dictation and keeps the text; tapping X discards.
             if (voice.isAvailable) {
                 AnimatedVisibility(visible = voice.isListening) {
                     IconButton(
@@ -343,9 +348,7 @@ fun PromptInput(
                         )
                     }
                 }
-                if (!voice.isListening) {
-                    MicButton(voice = voice, enabled = enabled, onToggle = { toggleVoice() })
-                }
+                MicButton(voice = voice, enabled = enabled, onToggle = { toggleVoice() })
             }
 
             // Send — solid circular button, anchored to the far right inside the container.

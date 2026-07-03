@@ -36,7 +36,9 @@ private const val AMP_RELEASE = 0.25f
 
 // Small gap before relaunching a session in continuous mode; avoids
 // ERROR_RECOGNIZER_BUSY from restarting too eagerly inside a callback.
-private const val RESTART_DELAY_MS = 120L
+// Long enough that the recognizer's start beep (on devices/emulators that play one)
+// doesn't loop rapidly, short enough to feel continuous.
+private const val RESTART_DELAY_MS = 800L
 
 // Errors that don't mean "give up" in continuous mode: NO_MATCH/SPEECH_TIMEOUT are
 // the normal end of a quiet utterance; RECOGNIZER_BUSY is a transient restart race

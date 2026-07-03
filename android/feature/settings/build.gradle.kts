@@ -10,6 +10,7 @@ android {
 
 dependencies {
     api(project(":core:model"))
+    implementation(project(":core:data"))
     implementation(project(":feature:connections"))
     implementation(project(":feature:notifications"))
     implementation(libs.datastore.preferences)

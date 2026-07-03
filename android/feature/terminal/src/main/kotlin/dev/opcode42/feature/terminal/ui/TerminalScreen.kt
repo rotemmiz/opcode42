@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.opcode42.core.design.theme.Opcode42Typography
 import dev.opcode42.feature.terminal.TerminalViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -94,7 +95,7 @@ fun TerminalScreen(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 12.sp,
                         color = Color(0xFF00FF00),
-                        lineHeight = 16.sp,
+                        style = Opcode42Typography.terminal,
                     )
                 }
             }
