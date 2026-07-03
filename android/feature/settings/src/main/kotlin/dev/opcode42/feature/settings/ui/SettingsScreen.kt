@@ -11,11 +11,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BrightnessMedium
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,7 +22,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,13 +29,6 @@ import dev.opcode42.feature.connections.ServerConnection
 import dev.opcode42.feature.settings.SettingsUiState
 import dev.opcode42.feature.settings.SettingsViewModel
 import dev.opcode42.feature.settings.ThemeMode
-
-/** A settings section — the left-pane entry; [content] renders in the right pane on wide screens. */
-private enum class SettingsSection(val title: String) {
-    Appearance("Appearance"),
-    Servers("Servers"),
-    About("About"),
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,7 +38,6 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    // Two-pane on >=600dp (Material MEDIUM width breakpoint), matching the chat layout tiers.
     val isTwoPane = LocalConfiguration.current.screenWidthDp >= 600
 
     if (isTwoPane) {
@@ -94,10 +83,10 @@ private fun SinglePaneSettings(
     }
 }
 
-// ── Two-pane (tablet/fold) — list on left, content on right ────────────────────
-// The native Android settings pattern: a fixed-width section index on the left, the
-// selected section's content scrolls on the right. A selection highlight marks the
-// active section. This matches Android System Settings on tablets/foldables.
+// ── Two-pane (tablet/fold) — plain list on left, content on right ──────────────
+// Matches Android System Settings on tablets: a simple ListItem list as the
+// master (not a NavigationRail — that's app-level nav, not settings master-detail),
+// with the selected section's content scrolling on the right.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -122,27 +111,35 @@ private fun TwoPaneSettings(
         }
     ) { padding ->
         Row(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Left pane: section index (fixed 240dp) — the native Android settings master-detail.
-            NavigationRail(
-                modifier = Modifier.width(240.dp).fillMaxHeight(),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            // Left pane: plain ListItem list (the settings master-detail pattern).
+            Column(
+                modifier = Modifier
+                    .width(280.dp)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .verticalScroll(rememberScrollState()),
             ) {
                 SettingsSection.entries.forEach { section ->
                     val selected = section == selectedSection
-                    NavigationRailItem(
-                        selected = selected,
-                        onClick = { selectedSection = section },
-                        icon = {
+                    ListItem(
+                        headlineContent = { Text(section.title) },
+                        leadingContent = {
                             Icon(
                                 when (section) {
-                                    SettingsSection.Appearance -> Icons.Outlined.Palette
+                                    SettingsSection.Appearance -> Icons.Default.BrightnessMedium
                                     SettingsSection.Servers -> Icons.Default.Dns
                                     SettingsSection.About -> Icons.Default.Info
                                 },
                                 contentDescription = null,
+                                tint = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         },
-                        label = { Text(section.title) },
+                        colors = ListItemDefaults.colors(
+                            containerColor = if (selected) MaterialTheme.colorScheme.surfaceContainer
+                            else MaterialTheme.colorScheme.surfaceContainerLow,
+                        ),
+                        modifier = Modifier.clickable { selectedSection = section },
                     )
                 }
             }
@@ -166,6 +163,12 @@ private fun TwoPaneSettings(
 }
 
 // ── Sections ──────────────────────────────────────────────────────────────────
+
+private enum class SettingsSection(val title: String) {
+    Appearance("Appearance"),
+    Servers("Servers"),
+    About("About"),
+}
 
 @Composable
 private fun AppearanceSection(state: SettingsUiState, viewModel: SettingsViewModel) {
@@ -235,24 +238,21 @@ private fun AboutSection() {
     )
 }
 
-// ── Native Android Settings category header ───────────────────────────────────
-// Matches Android System Settings' small colored category label: uppercase,
-// labelMedium, primary color, 16dp horizontal padding, generous top inset.
+// ── Category header ───────────────────────────────────────────────────────────
+// Android Settings style: small muted-grey label, title case, labelMedium.
 
 @Composable
 private fun CategoryHeader(title: String) {
     Text(
-        text = title.uppercase(),
+        text = title,
         style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
     )
 }
 
 // ── Theme picker dialog ───────────────────────────────────────────────────────
-// Native Android Settings "Theme" pattern: a dialog listing the three options as
-// ListItems with a check on the current selection.
+// Standard Android dialog pattern: RadioButton in a Column, one per option.
 
 @Composable
 private fun ThemePickerDialog(
@@ -266,17 +266,20 @@ private fun ThemePickerDialog(
         text = {
             Column {
                 ThemeMode.entries.forEach { mode ->
-                    ListItem(
-                        headlineContent = { Text(themeModeLabel(mode)) },
-                        leadingContent = {
-                            if (mode == currentMode) {
-                                Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            } else {
-                                Spacer(Modifier.size(24.dp))
-                            }
-                        },
-                        modifier = Modifier.clickable { onSelect(mode) },
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(mode) }
+                            .padding(vertical = 8.dp),
+                    ) {
+                        RadioButton(
+                            selected = mode == currentMode,
+                            onClick = { onSelect(mode) },
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(themeModeLabel(mode))
+                    }
                 }
             }
         },
