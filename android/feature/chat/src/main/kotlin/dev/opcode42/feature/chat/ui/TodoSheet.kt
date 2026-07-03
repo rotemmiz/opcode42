@@ -91,6 +91,10 @@ fun TodoSheet(
 
     fun snapTo(target: Float) = scope.launch { height.animateTo(target) }
 
+    androidx.activity.compose.BackHandler(enabled = open) {
+        snapTo(peekPx)
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         // Gradual scrim: alpha scales with the sheet's drag progress (0 at peek → 0.5 at
         // expanded), so the background darkens smoothly as the user drags — matching

@@ -318,9 +318,10 @@ fun AdaptiveChatScreen(
         if (isDraftSession && infoPanelHasContent && !infoPanelOpen) infoPanelOpen = true
     }
 
-    // The right context sidebar (shown when the info panel is on). Rendered as a slot
-    // inside ChatScreen in multi-pane so the top bar spans the chat area above it.
-    val infoSlot: (@Composable () -> Unit)? = if (rightPanelVisible) {
+    // The right context sidebar. Rendered as a slot inside ChatScreen in multi-pane.
+    // Mounted whenever layout.showRightPanel is true, so ChatScreen can run smooth
+    // enter/exit open/close slide animations.
+    val infoSlot: (@Composable () -> Unit)? = if (layout.showRightPanel) {
         {
             SessionInfoPanel(
                 session = chatUiState.session,
@@ -560,17 +561,17 @@ internal fun NavRailPane(
                     Text("New", fontSize = 12.5.sp, color = OnSurface)
                 }
             }
-            // One chevron, always present + interactive. Slides open-right (174dp) → collapsed-center
-            // (10dp, so the 40dp box centers in the 60dp band) and rotates 180° so "‹" becomes "›".
+            // One chevron, always present + interactive. Slides open-right (166dp) → collapsed-center
+            // (16dp, so the 48dp box centers in the 80dp band) and rotates 180° so "‹" becomes "›".
             // Hidden on the phone overlay drawer (system back closes it — no chevron needed).
             if (showChevron) {
                 Box(
                     Modifier
                         .align(Alignment.CenterStart)
                         .offset {
-                            IntOffset(androidx.compose.ui.util.lerp(10.dp.toPx(), 174.dp.toPx(), progress()).roundToInt(), 0)
+                            IntOffset(androidx.compose.ui.util.lerp(16.dp.toPx(), 166.dp.toPx(), progress()).roundToInt(), 0)
                         }
-                        .size(40.dp)
+                        .size(48.dp)
                         .clickable { if (progress() > 0.5f) onCollapse() else onExpand() }
                         .graphicsLayer { rotationZ = (1f - progress()) * 180f },
                     contentAlignment = Alignment.Center,
@@ -639,8 +640,8 @@ internal fun NavRailPane(
             Box(
                 Modifier
                     // Open (progress 1): flush left (offset 0) so the path follows it. Collapsed
-                    // (progress 0): offset 17dp → dot left edge ≈27, center 30 = the 60dp band's center.
-                    .offset { IntOffset(androidx.compose.ui.util.lerp(17.dp.toPx(), 0f, progress()).roundToInt(), 0) }
+                    // (progress 0): offset 27dp → dot left edge ≈37, center 40 = the 80dp band's center.
+                    .offset { IntOffset(androidx.compose.ui.util.lerp(27.dp.toPx(), 0f, progress()).roundToInt(), 0) }
                     .size(6.dp)
                     .clip(CircleShape)
                     .background(dotColor),
@@ -657,33 +658,39 @@ internal fun NavRailPane(
                     .graphicsLayer { alpha = progress() },
             )
             // Theme toggle (sun/moon/auto). Cycles Dark → Light → System. Always tappable
-            // (even collapsed the icon stays in the 60dp band); fades with the rail.
-            Icon(
-                Icons.Default.LightMode,
-                contentDescription = "Toggle theme",
-                tint = OnSurfaceVariant,
+            // (even collapsed the icon stays in the 80dp band); fades with the rail.
+            IconButton(
+                onClick = onCycleTheme,
+                enabled = open,
                 modifier = Modifier
                     .graphicsLayer { alpha = progress() }
-                    .clip(CircleShape)
-                    .then(if (open) Modifier.clickable(onClick = onCycleTheme) else Modifier)
-                    .padding(5.dp)
-                    .size(18.dp),
-            )
+                    .size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.LightMode,
+                    contentDescription = "Toggle theme",
+                    tint = OnSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
             Spacer(Modifier.width(2.dp))
             // Settings is reached from here: the rail is the app's home surface (there's no
             // standalone session-list screen), so this gear is the path to Settings / Add-Server.
             // Fades with the rail and is tappable only when open (like the +New button).
-            Icon(
-                Icons.Default.Settings,
-                contentDescription = "Settings",
-                tint = OnSurfaceVariant,
+            IconButton(
+                onClick = onOpenSettings,
+                enabled = open,
                 modifier = Modifier
                     .graphicsLayer { alpha = progress() }
-                    .clip(CircleShape)
-                    .then(if (open) Modifier.clickable(onClick = onOpenSettings) else Modifier)
-                    .padding(5.dp)
-                    .size(18.dp),
-            )
+                    .size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = OnSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }
@@ -717,7 +724,9 @@ private fun NavRow(
             tint = if (active) accent else OnSurfaceVariant,
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .padding(start = 22.dp)
+                .offset {
+                    IntOffset(androidx.compose.ui.util.lerp(32.dp.toPx(), 22.dp.toPx(), progress()).roundToInt(), 0)
+                }
                 .size(16.dp),
         )
         Text(

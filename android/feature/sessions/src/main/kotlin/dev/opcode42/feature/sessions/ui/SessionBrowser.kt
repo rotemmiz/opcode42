@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -221,7 +224,11 @@ private fun SessionSearchField(
             Icons.Default.Search,
             contentDescription = null,
             tint = OnSurfaceFaint,
-            modifier = Modifier.size(if (compact) 16.dp else 18.dp),
+            modifier = Modifier
+                .offset {
+                    IntOffset(androidx.compose.ui.util.lerp(10.dp.toPx(), 0f, progress()).roundToInt(), 0)
+                }
+                .size(if (compact) 16.dp else 18.dp),
         )
         Spacer(Modifier.width(9.dp))
         Box(

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -153,64 +155,131 @@ internal fun SessionRow(
     val busy = isSessionBusy(status)
     val accent = Secondary // hoisted: a @Composable token can't be read inside a draw/offset lambda
 
-    Box(modifier.fillMaxWidth()) {
-        if (compact) {
-            CompactRailRow(
-                session = session,
-                isActive = isActive,
-                busy = busy,
-                needsInput = needsInput,
-                accent = accent,
-                progress = progress,
-                onClick = onClick,
-                onLongPress = { showMenu = true },
-                pendingPermission = pendingPermission,
-                pendingQuestion = pendingQuestion,
-                onApprove = onApprove,
-                onDeny = onDeny,
-                onReply = onReply,
-                onSkip = onSkip,
-            )
-        } else {
-            FullListRow(
-                session = session,
-                isActive = isActive,
-                busy = busy,
-                needsInput = needsInput,
-                onClick = onClick,
-                onLongPress = { showMenu = true },
-                pendingPermission = pendingPermission,
-                pendingQuestion = pendingQuestion,
-                onApprove = onApprove,
-                onDeny = onDeny,
-                onReply = onReply,
-                onSkip = onSkip,
-            )
+    val open by remember { derivedStateOf { progress() > 0.5f } }
+    val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (open) {
+                when (value) {
+                    androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> {
+                        if (!showArchived) {
+                            onArchive()
+                        }
+                        false
+                    }
+                    androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> {
+                        onDelete()
+                        false
+                    }
+                    else -> false
+                }
+            } else {
+                false
+            }
         }
-        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-            DropdownMenuItem(
-                text = { Text("Rename session") },
-                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                onClick = { showMenu = false; onRename() },
-            )
-            DropdownMenuItem(
-                text = { Text("Fork session") },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.CallSplit, contentDescription = null) },
-                onClick = { showMenu = false; onFork() },
-            )
-            // opencode has no un-archive path, so archive is offered only on active rows.
-            if (!showArchived) {
-                DropdownMenuItem(
-                    text = { Text("Archive session") },
-                    leadingIcon = { Icon(Icons.Default.Archive, contentDescription = null) },
-                    onClick = { showMenu = false; onArchive() },
+    )
+
+    androidx.compose.material3.SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = open && !showArchived,
+        enableDismissFromEndToStart = open,
+        backgroundContent = {
+            val direction = dismissState.dismissDirection
+            val color = when (direction) {
+                androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.secondaryContainer
+                androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
+                else -> Color.Transparent
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(color)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
+                    Alignment.CenterStart
+                } else {
+                    Alignment.CenterEnd
+                }
+            ) {
+                if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
+                    Icon(
+                        Icons.Default.Archive,
+                        contentDescription = "Archive",
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                } else if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+        },
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Box(Modifier.fillMaxWidth()) {
+            if (compact) {
+                CompactRailRow(
+                    session = session,
+                    isActive = isActive,
+                    busy = busy,
+                    needsInput = needsInput,
+                    accent = accent,
+                    progress = progress,
+                    onClick = onClick,
+                    onLongPress = { showMenu = true },
+                    pendingPermission = pendingPermission,
+                    pendingQuestion = pendingQuestion,
+                    onApprove = onApprove,
+                    onDeny = onDeny,
+                    onReply = onReply,
+                    onSkip = onSkip,
+                )
+            } else {
+                FullListRow(
+                    session = session,
+                    isActive = isActive,
+                    busy = busy,
+                    needsInput = needsInput,
+                    onClick = onClick,
+                    onLongPress = { showMenu = true },
+                    pendingPermission = pendingPermission,
+                    pendingQuestion = pendingQuestion,
+                    onApprove = onApprove,
+                    onDeny = onDeny,
+                    onReply = onReply,
+                    onSkip = onSkip,
                 )
             }
-            DropdownMenuItem(
-                text = { Text("Delete session") },
-                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                onClick = { showMenu = false; onDelete() },
-            )
+            DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { showMenu = false },
+                modifier = Modifier.border(androidx.compose.foundation.BorderStroke(1.dp, Hairline), MaterialTheme.shapes.extraSmall)
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Rename session", fontFamily = Opcode42Mono, fontSize = 13.sp) },
+                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = { showMenu = false; onRename() },
+                )
+                DropdownMenuItem(
+                    text = { Text("Fork session", fontFamily = Opcode42Mono, fontSize = 13.sp) },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.CallSplit, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = { showMenu = false; onFork() },
+                )
+                // opencode has no un-archive path, so archive is offered only on active rows.
+                if (!showArchived) {
+                    DropdownMenuItem(
+                        text = { Text("Archive session", fontFamily = Opcode42Mono, fontSize = 13.sp) },
+                        leadingIcon = { Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                        onClick = { showMenu = false; onArchive() },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text("Delete session", fontFamily = Opcode42Mono, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
+                    onClick = { showMenu = false; onDelete() },
+                )
+            }
         }
     }
 }
