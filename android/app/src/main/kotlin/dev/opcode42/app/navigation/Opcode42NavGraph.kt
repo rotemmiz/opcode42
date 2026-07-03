@@ -130,10 +130,10 @@ fun Opcode42NavGraph(
                     }
                 },
                 onNewSession = {
-                    // Return to the home draft as a fresh composer: pop the open chat (and the old
-                    // draft) so a new prompt starts a brand-new session and Back exits the app.
+                    // Return to the home draft as a fresh composer: pop the open chat so a new
+                    // prompt starts a brand-new session and Back exits the app.
                     navController.navigate(Screen.NewChat.route) {
-                        popUpTo(Screen.NewChat.route) { inclusive = true }
+                        popUpTo(Screen.Chat.route) { inclusive = true }
                         launchSingleTop = true
                     }
                 },
@@ -172,9 +172,10 @@ fun Opcode42NavGraph(
                     navController.navigate(Screen.Terminal.route(directory))
                 },
                 onNavigateToSession = { newSessionId ->
-                    // Keep the draft home beneath: push the chat on top (don't pop the draft) so
-                    // Back from the chat returns to this home page rather than exiting the app.
+                    // Navigate to the chat session and pop the draft screen off the back stack
+                    // so the back gesture/button exits the app directly instead of returning to a blank screen.
                     navController.navigate(Screen.Chat.route(newSessionId)) {
+                        popUpTo(Screen.NewChat.route) { inclusive = true }
                         launchSingleTop = true
                     }
                 },
