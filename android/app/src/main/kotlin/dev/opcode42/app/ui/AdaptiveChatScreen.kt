@@ -362,6 +362,7 @@ fun AdaptiveChatScreen(
             showTodoSheet = !rightPanelVisible,
             isDraft = sessionId == DRAFT_SESSION_ID,
             infoContent = infoContent,
+            infoPanelWidth = infoPanelWidth(layout),
             viewModel = chatViewModel,
         )
     }

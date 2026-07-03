@@ -43,6 +43,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -79,6 +81,7 @@ fun ChatScreen(
     showTodoSheet: Boolean = true,
     /** True for the lazy "new session" draft — no server session exists yet. */
     isDraft: Boolean = false,
+    infoPanelWidth: androidx.compose.ui.unit.Dp = 320.dp,
     /**
      * Multi-pane sidebar slot: when [infoContent] is non-null the chat hosts the context
      * sidebar inside its own Scaffold content, so the top bar spans the chat area (stream
@@ -101,6 +104,12 @@ fun ChatScreen(
     val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
     val selectedAgent by viewModel.selectedAgent.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+
+    val animatedWidth by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (infoContent != null && infoPanelOpen) infoPanelWidth else 0.dp,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 240, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "RightPanelWidth"
+    )
 
     // Surface one-shot errors (a failed send/rename/share/…) as a snackbar.
     val snackbarHostState = remember { SnackbarHostState() }
@@ -567,21 +576,23 @@ fun ChatScreen(
                 // so toggling the info panel doesn't re-parent + reset the composer.
                 if (isMultiPane) composerBar()
             }
-            androidx.compose.animation.AnimatedVisibility(
-                visible = infoContent != null && infoPanelOpen,
-                enter = androidx.compose.animation.slideInHorizontally(
-                    initialOffsetX = { it },
-                    animationSpec = androidx.compose.animation.core.tween(durationMillis = 240, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                ) + androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(durationMillis = 240)),
-                exit = androidx.compose.animation.slideOutHorizontally(
-                    targetOffsetX = { it },
-                    animationSpec = androidx.compose.animation.core.tween(durationMillis = 240, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                ) + androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(durationMillis = 240)),
-                modifier = Modifier.fillMaxHeight()
-            ) {
-                Row(Modifier.fillMaxHeight()) {
-                    Box(Modifier.width(1.dp).fillMaxHeight().background(Hairline))
-                    infoContent?.invoke()
+            if (animatedWidth > 0.dp) {
+                Box(
+                    modifier = Modifier
+                        .width(animatedWidth)
+                        .fillMaxHeight()
+                        .clipToBounds()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .offset {
+                                IntOffset((infoPanelWidth - animatedWidth).roundToPx(), 0)
+                            }
+                    ) {
+                        Box(Modifier.width(1.dp).fillMaxHeight().background(Hairline))
+                        infoContent?.invoke()
+                    }
                 }
             }
         }
