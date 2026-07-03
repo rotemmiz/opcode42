@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -203,7 +204,7 @@ private fun SessionSearchField(
     progress: () -> Float = { 1f },
     onExpand: () -> Unit = {},
 ) {
-    val shape = RoundedCornerShape(if (compact) 8.dp else 14.dp)
+    val shape = CircleShape
     val textSize = if (compact) 13.sp else 14.sp
     // Below the midpoint the field is a non-interactive search dot whose tap re-opens the rail.
     val open by remember { derivedStateOf { progress() > 0.5f } }
@@ -213,10 +214,9 @@ private fun SessionSearchField(
             .fillMaxWidth()
             .height(if (compact) 38.dp else 44.dp)
             .clip(shape)
-            .background(SurfaceContainer)
-            .border(1.dp, Hairline, shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .then(if (!open) Modifier.clickable(onClick = onExpand) else Modifier)
-            // Compact: start inset 14 puts the icon at rail-x 22 → centered in the 60dp band, so it
+            // Compact: start inset 14 puts the icon at rail-x 22 → centered in the 80dp band, so it
             // sits dead-center when collapsed and stays put (no glide) as the rail retracts.
             .padding(start = if (compact) 14.dp else 11.dp, end = 11.dp),
     ) {
@@ -305,14 +305,15 @@ private fun SectionHeader(
     // surface behind it so rows scroll cleanly under the sticky header. In the rail it fades
     // out (height kept) as the rail collapses, so rows below keep their Y.
     Text(
-        text = text.uppercase(),
+        text = text.lowercase().replaceFirstChar { it.uppercase() },
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { alpha = progress() }
             .background(bg)
             .padding(start = hPad + 4.dp, end = hPad + 4.dp, top = 12.dp, bottom = 6.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        letterSpacing = 0.5.sp,
         // Keep a single line so the header's height never grows (and pushes the rows down) as the
         // rail narrows past the label's width — it just clips while fading out.
         maxLines = 1,

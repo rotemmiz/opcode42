@@ -33,10 +33,10 @@ val RailAvatarSize = 38.dp
 val RailLeftInset = (RailCollapsedWidth - RailAvatarSize) / 2
 
 // Active-highlight tuning, lerped open ⇄ collapsed:
-private val OpenInsetX = 6.dp // pill horizontal inset when open
-private val OpenInsetY = 1.dp // pill vertical inset when open (full row height − 2)
-private val OpenCorner = 6.dp
-private val CollapsedCorner = 8.dp // corner tightens as the pill contracts into the compact square
+private val OpenInsetX = 8.dp // pill horizontal inset when open
+private val OpenInsetY = 3.dp // pill vertical inset when open (floating capsule style)
+private val OpenCorner = 16.dp
+private val CollapsedCorner = 19.dp // perfect circle when collapsed (size 38dp / 2)
 private val OpenAccent = 2.5.dp // left accent-bar width when open
 private val CollapsedAccent = 2.dp // accent thins into the square
 

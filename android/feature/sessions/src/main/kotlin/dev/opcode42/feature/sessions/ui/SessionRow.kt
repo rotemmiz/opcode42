@@ -76,9 +76,9 @@ private val SpinnerBaseDp = 18.dp // open loader size — matches the shared Spi
 private val SpinnerBadge = 18.dp // the collapsed loader's bordered backing disc
 // Busy-loader center, in row-start-relative dp, lerped by progress (1=open … 0=collapsed):
 private val SpinX1 = 200.dp // open: trailing-right of the 220dp row
-private val SpinX0 = 47.dp // collapsed: the avatar's top-right
+private val SpinX0 = 55.dp // collapsed: the avatar's top-right edge
 private val SpinY1 = 23.dp // open: vertically centered (band/2)
-private val SpinY0 = 6.dp // collapsed: up at the avatar's top edge
+private val SpinY0 = 8.dp // collapsed: up at the avatar's top-right edge
 private const val SpinScale1 = 1.0f
 private const val SpinScale0 = 0.8f
 
