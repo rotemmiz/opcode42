@@ -66,6 +66,22 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.Light -> false
                 ThemeMode.Dark -> true
             }
+
+            // Dynamically adjust status and navigation bar icons to match the theme (toggled or system)
+            androidx.compose.runtime.DisposableEffect(darkTheme) {
+                enableEdgeToEdge(
+                    statusBarStyle = androidx.activity.SystemBarStyle.auto(
+                        android.graphics.Color.TRANSPARENT,
+                        android.graphics.Color.TRANSPARENT
+                    ) { darkTheme },
+                    navigationBarStyle = androidx.activity.SystemBarStyle.auto(
+                        android.graphics.Color.TRANSPARENT,
+                        android.graphics.Color.TRANSPARENT
+                    ) { darkTheme }
+                )
+                onDispose {}
+            }
+
             val tap by deepLink.collectAsState()
             val consumedToken = remember { mutableStateOf(-1L) }
             // Surface the tap once (keyed by token, so a repeat push for the same

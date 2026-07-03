@@ -1,8 +1,10 @@
 package dev.opcode42.feature.settings.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -27,6 +29,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.opcode42.core.store.ConnectionState
 import dev.opcode42.feature.connections.ServerConnection
+import dev.opcode42.core.design.theme.Opcode42Mono
+import dev.opcode42.core.design.theme.Hairline
 import dev.opcode42.feature.settings.SettingsUiState
 import dev.opcode42.feature.settings.SettingsViewModel
 import dev.opcode42.feature.settings.ThemeMode
@@ -39,7 +43,8 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val isTwoPane = LocalConfiguration.current.screenWidthDp >= 600
+    val adaptiveInfo = androidx.compose.material3.adaptive.currentWindowAdaptiveInfo()
+    val isTwoPane = adaptiveInfo.windowSizeClass.windowWidthSizeClass != androidx.window.core.layout.WindowWidthSizeClass.COMPACT
 
     if (isTwoPane) {
         TwoPaneSettings(state, viewModel, onNavigateBack, onAddServer)
@@ -343,15 +348,19 @@ private fun ServerRow(
                 IconButton(onClick = { showMenu = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = "More")
                 }
-                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.border(androidx.compose.foundation.BorderStroke(1.dp, Hairline), MaterialTheme.shapes.extraSmall)
+                ) {
                     if (!isActive) {
                         DropdownMenuItem(
-                            text = { Text("Set as active") },
+                            text = { Text("Set as active", fontFamily = Opcode42Mono, fontSize = 13.sp) },
                             onClick = { onSetActive(); showMenu = false },
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("Remove") },
+                        text = { Text("Remove", fontFamily = Opcode42Mono, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) },
                         onClick = { onRemove(); showMenu = false },
                     )
                 }

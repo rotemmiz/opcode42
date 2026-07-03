@@ -8,6 +8,7 @@ import android.os.SystemClock
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -566,9 +567,22 @@ fun ChatScreen(
                 // so toggling the info panel doesn't re-parent + reset the composer.
                 if (isMultiPane) composerBar()
             }
-            infoContent?.let {
-                Box(Modifier.width(1.dp).fillMaxHeight().background(Hairline))
-                it()
+            androidx.compose.animation.AnimatedVisibility(
+                visible = infoContent != null && infoPanelOpen,
+                enter = androidx.compose.animation.slideInHorizontally(
+                    initialOffsetX = { it },
+                    animationSpec = androidx.compose.animation.core.tween(durationMillis = 240, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                ) + androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(durationMillis = 240)),
+                exit = androidx.compose.animation.slideOutHorizontally(
+                    targetOffsetX = { it },
+                    animationSpec = androidx.compose.animation.core.tween(durationMillis = 240, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                ) + androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(durationMillis = 240)),
+                modifier = Modifier.fillMaxHeight()
+            ) {
+                Row(Modifier.fillMaxHeight()) {
+                    Box(Modifier.width(1.dp).fillMaxHeight().background(Hairline))
+                    infoContent?.invoke()
+                }
             }
         }
 
@@ -688,44 +702,45 @@ private fun OverflowMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
         containerColor = SurfaceContainerHigh,
+        modifier = Modifier.border(androidx.compose.foundation.BorderStroke(1.dp, Hairline), MaterialTheme.shapes.extraSmall)
     ) {
         onTerminal?.let { open ->
             DropdownMenuItem(
-                text = { Text("Open terminal", color = OnSurface) },
-                leadingIcon = { Icon(Icons.Default.Terminal, contentDescription = null, tint = OnSurfaceVariant) },
+                text = { Text("Open terminal", color = OnSurface, fontFamily = Opcode42Mono, fontSize = 13.sp) },
+                leadingIcon = { Icon(Icons.Default.Terminal, contentDescription = null, tint = OnSurfaceVariant, modifier = Modifier.size(16.dp)) },
                 onClick = open,
             )
             HorizontalDivider(color = Hairline)
         }
         DropdownMenuItem(
-            text = { Text("Rename session", color = OnSurface) },
-            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = OnSurfaceVariant) },
+            text = { Text("Rename session", color = OnSurface, fontFamily = Opcode42Mono, fontSize = 13.sp) },
+            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = OnSurfaceVariant, modifier = Modifier.size(16.dp)) },
             onClick = onRename,
         )
         DropdownMenuItem(
-            text = { Text("Fork session", color = OnSurface) },
-            leadingIcon = { Icon(Icons.Default.CallSplit, contentDescription = null, tint = OnSurfaceVariant) },
+            text = { Text("Fork session", color = OnSurface, fontFamily = Opcode42Mono, fontSize = 13.sp) },
+            leadingIcon = { Icon(Icons.Default.CallSplit, contentDescription = null, tint = OnSurfaceVariant, modifier = Modifier.size(16.dp)) },
             onClick = onFork,
         )
         DropdownMenuItem(
-            text = { Text("Summarize context", color = OnSurface) },
-            leadingIcon = { Icon(Icons.Default.Compress, contentDescription = null, tint = OnSurfaceVariant) },
+            text = { Text("Summarize context", color = OnSurface, fontFamily = Opcode42Mono, fontSize = 13.sp) },
+            leadingIcon = { Icon(Icons.Default.Compress, contentDescription = null, tint = OnSurfaceVariant, modifier = Modifier.size(16.dp)) },
             onClick = onSummarize,
         )
         DropdownMenuItem(
-            text = { Text(if (isShared) "Sharing… (manage)" else "Share session", color = OnSurface) },
-            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = OnSurfaceVariant) },
+            text = { Text(if (isShared) "Sharing… (manage)" else "Share session", color = OnSurface, fontFamily = Opcode42Mono, fontSize = 13.sp) },
+            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = OnSurfaceVariant, modifier = Modifier.size(16.dp)) },
             onClick = onShare,
         )
         HorizontalDivider(color = Hairline)
         DropdownMenuItem(
-            text = { Text("Archive session", color = OnSurface) },
-            leadingIcon = { Icon(Icons.Default.Archive, contentDescription = null, tint = OnSurfaceVariant) },
+            text = { Text("Archive session", color = OnSurface, fontFamily = Opcode42Mono, fontSize = 13.sp) },
+            leadingIcon = { Icon(Icons.Default.Archive, contentDescription = null, tint = OnSurfaceVariant, modifier = Modifier.size(16.dp)) },
             onClick = onArchive,
         )
         DropdownMenuItem(
-            text = { Text("Delete session", color = Error) },
-            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Error) },
+            text = { Text("Delete session", color = Error, fontFamily = Opcode42Mono, fontSize = 13.sp) },
+            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Error, modifier = Modifier.size(16.dp)) },
             onClick = onDelete,
         )
     }

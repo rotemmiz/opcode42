@@ -183,9 +183,25 @@ fun Opcode42Theme(
     content: @Composable () -> Unit,
 ) {
     val colors = if (darkTheme) DarkOpcode42Colors else LightOpcode42Colors
+    val m3Shapes = androidx.compose.material3.Shapes(
+        extraSmall = Opcode42Shapes.xs,
+        small = Opcode42Shapes.sm,
+        medium = Opcode42Shapes.md,
+        large = Opcode42Shapes.lg
+    )
+    val m3Typography = androidx.compose.material3.Typography(
+        bodyLarge = Opcode42Typography.bodyLarge,
+        bodyMedium = Opcode42Typography.bodyMedium,
+        bodySmall = Opcode42Typography.bodySmall,
+        labelLarge = Opcode42Typography.labelLarge,
+        labelMedium = Opcode42Typography.labelMedium,
+        labelSmall = Opcode42Typography.labelSmall,
+    )
     CompositionLocalProvider(LocalOpcode42Colors provides colors) {
         MaterialTheme(
             colorScheme = colors.toM3Scheme(darkTheme),
+            shapes = m3Shapes,
+            typography = m3Typography,
             content = content,
         )
     }
