@@ -20,11 +20,11 @@ import androidx.compose.ui.util.lerp
 // (session rows), and [railActiveHighlight] below — they must agree for the clip-off-the-edge
 // collapse to line up.
 
-/** Open (expanded) rail width. */
+/** Open (expanded) rail width. M3 navigation-drawer spec: 220dp for inline-push is fine. */
 val RailOpenWidth = 220.dp
 
-/** Collapsed icon-band width. */
-val RailCollapsedWidth = 60.dp
+/** Collapsed icon-band width. M3 navigation-rail default is 80dp (not the former 60). */
+val RailCollapsedWidth = 80.dp
 
 /** Edge of the collapsed glyph (the single-letter avatar / active square). */
 val RailAvatarSize = 38.dp

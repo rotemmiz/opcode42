@@ -386,44 +386,107 @@ decoded or displayed.** `FilePart(mime, filename?, url)` (`Part.kt:37-46`) carri
 **Acceptance:** an image file part shows a thumbnail inline; tapping opens a full-screen zoomable
 view in-app; non-images stay as chips; works for `data:` and `http(s)` URLs.
 
-### D3. Agent questions: render in stream + fix stuck state  *(item 11)*
+### D3. Agent questions: full overhaul — wire contract, option picker, in-stream rendering  *(item 11 + overhaul)*
 
-**Current:** `QuestionSheet` (`PermissionSheet.kt:82-134`) — `onDismissRequest = { /* non-dismissible */ }`
-is a **no-op**, so swipe-down/system-back dismisses the sheet visually but the store never gets
-`QuestionReplied`/`QuestionRejected`, `pendingQuestion` stays non-null, and the composer stays
-disabled forever (`ChatScreen.kt:217` `enabled = pendingQuestion == null`). Also "does not output
-the questions at all": the question only appears as a transient modal; there's no `QuestionPart` in
-the stream (`Part.kt:8-91` has no question type); `question.message` is nullable so a question with
-no message shows just "The agent has a question:".
+**Current:** `QuestionSheet` (`PermissionSheet.kt:82-138`) shows a **plain text input** and a Reply/Skip
+button — it completely ignores the wire contract's structured question model. The Android
+`QuestionRequest` model (`SseEvent.kt:62-66`) has only `{ id, sessionID, message }` — it's missing the
+entire `questions: QuestionInfo[]` array that the server sends. The reply endpoint takes
+`{ answers: string[][] }` (one array of selected labels per question), but the client sends a single
+`{ answer: string }`.
 
-**Fix (two parts):**
-1. **Fix the stuck state:**
-   - Replace the no-op `onDismissRequest` with `onReject(req.id)` (call `viewModel.rejectQuestion`).
-     Swiping away or pressing back on the sheet = rejecting the question, which dispatches
-     `QuestionRejected` → store removes it → composer re-enables. This matches the web client's
-     "skip" semantics.
-   - Add a `BackHandler` (WS B2) so system back on the sheet rejects (don't let it fall through to
-     pop the screen).
-   - Defensive: even if the sheet is somehow dismissed without the callback, add a
-     `LaunchedEffect(pendingQuestion?.id)` that re-shows the sheet if `pendingQuestion` is still
-     non-null and no sheet is composed — i.e. the sheet is *derived* from `pendingQuestion`, not
-     independently dismissible.
-2. **Render questions in the conversation stream:**
-   - Add a `QuestionPart` to the `Part` sealed class (`Part.kt`) — or, to avoid a wire-contract
-     change, render a **synthetic question block** in the chat stream when
-     `pendingQuestion != null`, keyed by the question id, positioned after the last assistant
-     message. The block shows the full question text (with a graceful fallback when `message` is
-     null: "The agent is waiting for input" + a tap-to-open-sheet affordance) and an inline
-     "Reply / Skip" row (reuse `SessionPendingActions`'s question branch from
-     `SessionActivity.kt:107-144`). This makes the question **visible in history** even after the
-     sheet is dismissed — it stays as a turn in the transcript until `QuestionReplied`/`Rejected`
-     arrives, then collapses to the answered state.
-   - Ensure `question.message` is always shown: if null, fall back to a generic prompt and surface
-     the question id/role so the user has context.
+**The real wire contract** (verified against `packages/schema/src/v1/question.ts` and `openapi.json`):
+- **`QuestionRequest`** = `{ id, sessionID, questions: QuestionInfo[], tool?: QuestionTool }`
+  — a request carries **one or more** questions (a multi-step wizard).
+- **`QuestionInfo`** = `{ question: string, header: string, options: QuestionOption[], multiple?: bool, custom?: bool }`
+  — each question has a **header** (short label), full **question** text, a list of **options** (the
+  enumerated choices the agent offers), a **multiple** flag (select-one vs select-many), and a **custom**
+  flag (allow typing a free-form answer, default true).
+- **`QuestionOption`** = `{ label: string, description: string }` — a selectable choice with a label
+  and explanation.
+- **Reply body** = `{ answers: string[][] }` — user answers in order of questions; each answer is an
+  array of selected **labels** (multiple labels when `multiple=true`).
+- The opencode web client (`session-question-dock.tsx`) renders this as a tabbed wizard: one question
+  per tab, radio/checkbox options, a "type your own answer" custom row, Back/Next/Submit navigation,
+  and per-question progress segments.
 
-**Acceptance:** dismissing the question sheet (swipe/back) rejects it and re-enables the composer
-(no stuck state); the question text appears in the chat stream with inline reply/skip; a null
-`message` shows a sensible fallback.
+**Fix (three parts):**
+
+1. **Upgrade the model to the full wire contract** (`core/model/SseEvent.kt`):
+   - Replace the stub `QuestionRequest` with the real shape:
+     ```kotlin
+     data class QuestionRequest(
+         val id: String,
+         val sessionID: String,
+         val questions: List<QuestionInfo>,
+         val tool: QuestionTool? = null,
+     )
+     data class QuestionInfo(
+         val question: String,
+         val header: String,
+         val options: List<QuestionOption>,
+         val multiple: Boolean? = null,    // default false (single-select)
+         val custom: Boolean? = null,       // default true (allow free-form)
+     )
+     data class QuestionOption(
+         val label: String,
+         val description: String,
+     )
+     data class QuestionTool(
+         val messageID: String,
+         val callID: String,
+     )
+     ```
+   - Keep the old `message: String?` field as a computed fallback for backward compat if needed,
+     but the primary path is `questions[0].question`.
+   - The SSE parser (`SseEventParser.kt:75-77`) already decodes via `QuestionRequest.serializer()` —
+     it'll pick up the new fields automatically once the model matches.
+
+2. **Overhaul the `QuestionSheet` UI** (`PermissionSheet.kt` → rewrite the `QuestionSheet` composable):
+   - **Multi-question wizard:** if `questions.size > 1`, show a tabbed/stepped layout (one question
+     per step) with Back/Next/Submit navigation and progress segments. If `questions.size == 1`,
+     show a single-step sheet (no tabs).
+   - **Per-question rendering:**
+     - **Header:** `question.header` as the sheet title (`titleMedium`).
+     - **Question text:** `question.question` as the body (`bodyMedium`), scrollable if long.
+     - **Options:** render each `QuestionOption` as an M3 `ListItem` or selectable row:
+       - **Single-select** (`multiple != true`): `RadioButton`-style — tapping one deselects the
+         others. Show `option.label` as headline, `option.description` as supporting text.
+       - **Multi-select** (`multiple == true`): `Checkbox`-style — toggle each independently.
+     - **Custom answer** (`custom != false`, the default): a trailing "Type your own answer" row
+       that, when tapped, reveals an `OutlinedTextField` for free-form input. In single-select mode,
+       selecting custom deselects all options; in multi-select, it's an additional selection.
+   - **Reply submission:** collect answers as `List<List<String>>` — for each question, the array
+     of selected labels (option labels and/or the custom text). Call the reply endpoint with the
+     full `{ answers: [...] }` body.
+   - **Skip/Reject:** unchanged — `onReject` dispatches `QuestionRejected`.
+   - **State caching:** (optional, stretch) cache partial answers per request id so a sheet
+     dismissed mid-wizard restores progress when re-opened (matches the web client's `cache` map).
+
+3. **Fix the reply transport** (`Opcode42Client.kt:287-291`):
+   - Change `replyQuestion(requestId: String, answer: String)` to
+     `replyQuestion(requestId: String, answers: List<List<String>>)` and send
+     `{ answers: [["label1"], ["custom text", "label2"], ...] }` instead of `{ answer: "..." }`.
+   - Thread the new signature through `SessionRepository` → `ChatViewModel.replyQuestion` →
+     `QuestionSheet.onReply`.
+
+4. **Render questions in the conversation stream** (the in-stream block from the original D3):
+   - Add a **synthetic question block** in the chat stream when `pendingQuestion != null`, keyed by
+     the question id, positioned after the last assistant message. The block shows the question
+     header + text + the selected/answered state. Tapping it opens the `QuestionSheet`.
+   - After `QuestionReplied`/`Rejected`, the block collapses to the answered/skipped state (showing
+     the selected labels or "Skipped").
+   - This makes the question **visible in history** — not just a transient modal.
+
+**Acceptance:**
+- A `question.asked` event with structured options renders as a **selectable list** (radio or
+  checkbox), not a plain text input.
+- Multi-question requests show a wizard with Back/Next/Submit.
+- The "type your own answer" row appears when `custom != false`.
+- The reply sends `answers: string[][]` matching the wire contract.
+- Single-select questions enforce one selection; multi-select allows several.
+- Dismissing the sheet rejects; the composer re-enables; the question text appears in the stream.
+- A question with `custom=false` and no options (edge case) falls back to a text input.
 
 ### D4. Context bar flake on session switch  *(item 1)*
 
@@ -764,7 +827,7 @@ Each step lands only after passing the **three-device validation gate (H1b)** on
 | 8 | Image thumbnail | D2 | `PartRenderer.kt:490-522`, `Part.kt:37-46`, `PromptInput.kt:239-258` |
 | 9 | mDNS | F3 | (none — net-new; `AndroidManifest.xml`, new `MdnsDiscovery.kt`) |
 | 10 | Green dot no server | F2 | `AdaptiveChatScreen.kt:538-546`, `SessionListViewModel.kt:67, 189-191`, `ChatViewModel.kt:236` |
-| 11 | Questions stuck/no output | D3 | `PermissionSheet.kt:82-134`, `ChatScreen.kt:145, 217, 555-561`, `SseEvent.kt:62-66`, `StoreReducer.kt:97-112` |
+| 11 | Questions stuck/no output + overhaul | D3 | `PermissionSheet.kt:82-138`, `SseEvent.kt:62-66`, `Opcode42Client.kt:287-291`, `ChatScreen.kt:145,226,571-577`, `SseEventParser.kt:75-77` |
 | 12 | TODOs scrim | E1 | `TodoSheet.kt:66, 87-103` |
 | 13 | Input native look | A7 + A5 | `PromptInput.kt:265-312, 279` |
 | 14 | Sidebar native look | A3 | `RailMorph.kt:24-27`, `Opcode42Theme.kt:33-38`, `SessionBrowser.kt:299-314`, `AdaptiveChatScreen.kt:623-832` |

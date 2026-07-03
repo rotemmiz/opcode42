@@ -154,9 +154,7 @@ fun ToolOutputBlock(part: ToolPart, modifier: Modifier = Modifier) {
                 }
                 Text(
                     text = rendered,
-                    fontFamily = Opcode42Mono,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
+                    style = Opcode42Typography.code,
                     color = if (isError) Error else OnSurfaceVariant,
                     softWrap = false,
                     modifier = Modifier.padding(12.dp),

@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.opcode42.core.store.ConnectionState
 import dev.opcode42.feature.connections.ServerConnection
 import dev.opcode42.feature.settings.SettingsUiState
 import dev.opcode42.feature.settings.SettingsViewModel
@@ -77,7 +78,7 @@ private fun SinglePaneSettings(
         ) {
             AppearanceSection(state, viewModel)
             ServersSection(state, viewModel, onAddServer)
-            AboutSection()
+            AboutSection(state)
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -154,7 +155,7 @@ private fun TwoPaneSettings(
                 when (selectedSection) {
                     SettingsSection.Appearance -> AppearanceSection(state, viewModel)
                     SettingsSection.Servers -> ServersSection(state, viewModel, onAddServer)
-                    SettingsSection.About -> AboutSection()
+                    SettingsSection.About -> AboutSection(state)
                 }
                 Spacer(Modifier.height(24.dp))
             }
@@ -204,9 +205,12 @@ private fun ServersSection(
 ) {
     CategoryHeader("Servers")
     state.connections.forEach { conn ->
+        val isActive = conn.key() == state.activeKey
         ServerRow(
             connection = conn,
-            isActive = conn.key() == state.activeKey,
+            isActive = isActive,
+            connectionState = if (isActive) state.activeConnectionState
+                else ConnectionState.Disconnected,
             onSetActive = { viewModel.setActiveServer(conn.key()) },
             onRemove = { viewModel.removeServer(conn.key()) },
         )
@@ -220,7 +224,7 @@ private fun ServersSection(
 }
 
 @Composable
-private fun AboutSection() {
+private fun AboutSection(state: SettingsUiState) {
     val context = LocalContext.current
     val version = remember {
         runCatching {
@@ -232,7 +236,12 @@ private fun AboutSection() {
     ListItem(
         headlineContent = { Text("Opcode42") },
         supportingContent = {
-            Text(if (version.isNotBlank()) "Mobile client • $version" else "Mobile client")
+            val appLine = if (version.isNotBlank()) "Mobile client • $version" else "Mobile client"
+            val daemonLine = state.daemonVersion?.let { "Daemon • $it" }
+            Column {
+                Text(appLine)
+                daemonLine?.let { Text(it) }
+            }
         },
         leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
     )
@@ -295,10 +304,22 @@ private fun ThemePickerDialog(
 private fun ServerRow(
     connection: ServerConnection,
     isActive: Boolean,
+    connectionState: ConnectionState,
     onSetActive: () -> Unit,
     onRemove: () -> Unit,
 ) {
     var showMenu by remember { mutableStateOf(false) }
+
+    // G1 — Connection-state dot: green (connected), amber (connecting), red (failed),
+    // grey (no server / disconnected). Only the active server has a live SSE state;
+    // inactive servers show grey.
+    val dotColor = when {
+        !isActive -> MaterialTheme.colorScheme.outlineVariant
+        connectionState is ConnectionState.Connected -> MaterialTheme.colorScheme.tertiary
+        connectionState is ConnectionState.Connecting -> MaterialTheme.colorScheme.secondary
+        connectionState is ConnectionState.Failed -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.outlineVariant
+    }
 
     ListItem(
         headlineContent = {
@@ -314,10 +335,7 @@ private fun ServerRow(
                 modifier = Modifier
                     .size(10.dp)
                     .clip(CircleShape)
-                    .background(
-                        if (isActive) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.outlineVariant
-                    ),
+                    .background(dotColor),
             )
         },
         trailingContent = {

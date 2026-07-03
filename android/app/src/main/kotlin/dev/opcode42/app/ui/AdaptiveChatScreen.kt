@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -35,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -82,6 +84,8 @@ data class ChatLayout(
     val leftRailMode: LeftRailMode,
     /** Expanded width: the rail is open by default (the full triptych), not closed. */
     val railPersistent: Boolean,
+    /** The width tier this layout was resolved for — drives adaptive sizing (A3). */
+    val tier: ChatPaneTier,
 )
 
 /** The three standard width tiers — Material `WindowWidthSizeClass` breakpoints (600/840dp). */
@@ -91,6 +95,13 @@ internal fun chatPaneTier(width: WindowWidthSizeClass): ChatPaneTier = when (wid
     WindowWidthSizeClass.COMPACT -> ChatPaneTier.Compact
     WindowWidthSizeClass.MEDIUM -> ChatPaneTier.Medium
     else -> ChatPaneTier.Expanded
+}
+
+/** A3 — Adaptive right info-panel width: 280dp on compact, 320dp on medium, 360dp on expanded. */
+internal fun infoPanelWidth(layout: ChatLayout): androidx.compose.ui.unit.Dp = when (layout.tier) {
+    ChatPaneTier.Compact -> 280.dp
+    ChatPaneTier.Medium -> 320.dp
+    ChatPaneTier.Expanded -> 360.dp
 }
 
 /**
@@ -111,27 +122,33 @@ internal fun chatPaneTier(width: WindowWidthSizeClass): ChatPaneTier = when (wid
 internal fun chatLayoutFor(
     width: WindowWidthSizeClass,
     height: WindowHeightSizeClass,
-): ChatLayout = when (chatPaneTier(width)) {
-    ChatPaneTier.Compact -> ChatLayout(
-        singlePane = true,
-        showRightPanel = false,
-        leftRailMode = LeftRailMode.Overlay,
-        railPersistent = false,
-    )
-    ChatPaneTier.Medium -> ChatLayout(
-        singlePane = false,
-        showRightPanel = true,
-        leftRailMode = LeftRailMode.InlinePush,
-        railPersistent = false,
-    )
-    ChatPaneTier.Expanded -> ChatLayout(
-        singlePane = false,
-        showRightPanel = true,
-        leftRailMode = LeftRailMode.InlinePush,
-        // Persistent triptych only when there's vertical room; a short Expanded-width
-        // window (large phone in landscape) keeps the rail closed by default.
-        railPersistent = height != WindowHeightSizeClass.COMPACT,
-    )
+): ChatLayout {
+    val tier = chatPaneTier(width)
+    return when (tier) {
+        ChatPaneTier.Compact -> ChatLayout(
+            singlePane = true,
+            showRightPanel = false,
+            leftRailMode = LeftRailMode.Overlay,
+            railPersistent = false,
+            tier = tier,
+        )
+        ChatPaneTier.Medium -> ChatLayout(
+            singlePane = false,
+            showRightPanel = true,
+            leftRailMode = LeftRailMode.InlinePush,
+            railPersistent = false,
+            tier = tier,
+        )
+        ChatPaneTier.Expanded -> ChatLayout(
+            singlePane = false,
+            showRightPanel = true,
+            leftRailMode = LeftRailMode.InlinePush,
+            // Persistent triptych only when there's vertical room; a short Expanded-width
+            // window (large phone in landscape) keeps the rail closed by default.
+            railPersistent = height != WindowHeightSizeClass.COMPACT,
+            tier = tier,
+        )
+    }
 }
 
 /**
@@ -261,7 +278,9 @@ fun AdaptiveChatScreen(
                 onFork = { id -> sessionListViewModel.forkSession(id) { onNavigateToSession(it.id) } },
                 onDelete = sessionListViewModel::deleteSession,
                 onReplyPermission = sessionListViewModel::replyPermission,
-                onReplyQuestion = sessionListViewModel::replyQuestion,
+                onReplyQuestion = { id, answer ->
+                    sessionListViewModel.replyQuestion(id, listOf(listOf(answer)))
+                },
                 onSkipQuestion = sessionListViewModel::rejectQuestion,
                 onCollapse = onCollapse,
                 onExpand = onExpand,
@@ -287,14 +306,16 @@ fun AdaptiveChatScreen(
     }
 
     // Auto-collapse the right info panel on a draft when it would be empty (no
-    // session/todos/diffs/tokens), so a tablet draft doesn't show a blank panel. Re-keyed
-    // on layout + draft + content presence so it re-opens when the first turn produces data.
+    // session/todos/diffs/tokens), and auto-re-open when the first turn produces content.
+    // Re-keyed on layout + draft + content presence so both transitions are animated.
     val isDraftSession = sessionId == DRAFT_SESSION_ID
     val infoPanelHasContent = chatUiState.session != null ||
         chatUiState.todos.isNotEmpty() || aggregatedDiffs.isNotEmpty() ||
         chatUiState.contextTokens != null
     LaunchedEffect(layout, isDraftSession, infoPanelHasContent) {
         if (isDraftSession && !infoPanelHasContent) infoPanelOpen = false
+        // C2 — Auto-open the panel when the first turn produces data (was closed on draft).
+        if (isDraftSession && infoPanelHasContent && !infoPanelOpen) infoPanelOpen = true
     }
 
     // The right context sidebar (shown when the info panel is on). Rendered as a slot
@@ -313,7 +334,7 @@ fun AdaptiveChatScreen(
                 commands = chatCommands,
                 messageCount = chatUiState.messages.size,
                 onDiffClick = { openDiff = it },
-                modifier = Modifier.width(280.dp).fillMaxHeight(),
+                modifier = Modifier.width(infoPanelWidth(layout)).fillMaxHeight(),
             )
         }
     } else {
@@ -382,7 +403,8 @@ fun AdaptiveChatScreen(
     ) {
         when (layout.leftRailMode) {
             // Compact width: single pane — the sessions menu floats over the chat as a
-            // scrim drawer; the chat hosts no sidebar (rail = drawer).
+            // scrim drawer; the chat hosts no sidebar (rail = drawer). A left-edge swipe
+            // opens the drawer (the native Android nav-drawer gesture).
             LeftRailMode.Overlay -> ModalNavigationDrawer(
                 drawerState = drawerState,
                 drawerContent = {
@@ -397,7 +419,28 @@ fun AdaptiveChatScreen(
                     }
                 },
             ) {
-                chat(null)
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            // B2 — Edge-swipe to open the drawer on phones: detect a rightward
+                            // drag starting from the left ~24dp edge. Matches DrawerLayout's
+                            // default nav-drawer gesture.
+                            val edgeWidthPx = 24.dp.toPx()
+                            detectHorizontalDragGestures(
+                                onDragStart = { offset ->
+                                    if (!drawerState.isOpen && offset.x <= edgeWidthPx) {
+                                        scope.launch { drawerState.open() }
+                                    }
+                                },
+                                onHorizontalDrag = { _, _ -> },
+                                onDragEnd = {},
+                                onDragCancel = {},
+                            )
+                        },
+                ) {
+                    chat(null)
+                }
             }
             // Wider windows: the sessions rail sits BESIDE the chat (outside it), so the
             // chat's top bar spans only the chat area (stream + sidebar) and stops at the
@@ -409,12 +452,13 @@ fun AdaptiveChatScreen(
                 // Crossfade the chat content on session switch so a collapsed-rail tap produces
                 // a visible motion (the NavHost chat↔chat transition is suppressed for in-place
                 // swaps; this restores a smooth content change without a full-screen slide).
+                @Suppress("UnusedCrossfadeTargetStateParameter")
                 androidx.compose.animation.Crossfade(
                     targetState = sessionId,
                     animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
                     label = "chatSwap",
                     modifier = Modifier.weight(1f).fillMaxHeight(),
-                ) {
+                ) { _ ->
                     chat(infoSlot)
                 }
             }
@@ -505,9 +549,9 @@ internal fun NavRailPane(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(MaterialTheme.shapes.small)
                         .background(SurfaceContainerHigh)
-                        .border(BorderStroke(1.dp, Hairline), RoundedCornerShape(6.dp))
+                        .border(BorderStroke(1.dp, Hairline), MaterialTheme.shapes.small)
                         .then(if (open) Modifier.clickable(onClick = onNewSession) else Modifier)
                         .padding(horizontal = 9.dp, vertical = 6.dp),
                 ) {
@@ -906,9 +950,9 @@ internal fun SessionInfoPanel(
 }
 
 /**
- * A bordered section block — the design's `SbSection`: a purple uppercase kicker, an
- * optional mono count, an optional trailing cyan action glyph, then content, closed by a
- * full-bleed hairline divider.
+ * A bordered section block — the design's `SbSection`: an M3 `labelMedium` kicker in
+ * `onSurfaceVariant` (A3 — was a custom purple 11sp bold), an optional mono count, an
+ * optional trailing action glyph, then content, closed by a full-bleed hairline divider.
  */
 @Composable
 private fun SbSection(
@@ -925,10 +969,8 @@ private fun SbSection(
             ) {
                 Text(
                     text = title,
-                    fontSize = 11.sp,
-                    letterSpacing = 0.6.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = HeaderPurple,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (count != null) {
                     Text(
@@ -997,9 +1039,9 @@ private fun TodoRow(todo: TodoItem) {
         Spacer(Modifier.width(10.dp))
         Text(
             text = todo.content,
-            fontSize = 13.sp,
-            lineHeight = 17.sp,
-            fontWeight = if (todo.status == "in_progress") FontWeight.SemiBold else FontWeight.Normal,
+            style = Opcode42Typography.bodySmall.copy(
+                fontWeight = if (todo.status == "in_progress") FontWeight.SemiBold else FontWeight.Normal,
+            ),
             color = when (todo.status) {
                 "in_progress" -> Secondary
                 "completed" -> OnSurfaceVariant
