@@ -420,16 +420,22 @@ private fun processFileDiff(lines: List<String>): List<ProcessedDiffLine?> {
     val processed = mutableListOf<ProcessedDiffLine>()
     var oldLineNum: Int? = null
     var newLineNum: Int? = null
+    var inHunk = false
 
     for (index in lines.indices) {
         val line = lines[index]
-        val isHeader = line.startsWith("+++") || line.startsWith("---") ||
-                       line.startsWith("@@") || line.startsWith("Index:") ||
-                       line.startsWith("===")
+        val isHunkHeader = line.startsWith("@@")
+        if (isHunkHeader) {
+            inHunk = true
+        }
+
+        // File headers (+++ and ---) only appear before the first hunk (inHunk is false)
+        val isHeader = !inHunk && (line.startsWith("+++") || line.startsWith("---") ||
+                       line.startsWith("Index:") || line.startsWith("===")) || isHunkHeader
         val isModified = !isHeader && (line.startsWith("+") || line.startsWith("-"))
         val isContext = !isHeader && !isModified
 
-        if (line.startsWith("@@")) {
+        if (isHunkHeader) {
             // Parse hunk header: @@ -10,7 +10,8 @@
             val match = Regex("""@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@""").find(line)
             if (match != null) {
@@ -540,7 +546,7 @@ fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier
     // Strip git-diff cruft and process diffs to trim context and compute highlights
     val perFile = remember(diffs) {
         diffs.map { diff ->
-            val lines = diff.patch?.lines().orEmpty().filterNot(::isDiffNoise)
+            val lines = diff.patch?.lines().orEmpty().filter { it.isNotEmpty() }.filterNot(::isDiffNoise)
             val highlights = computeWordHighlights(lines)
             val processed = processFileDiff(lines)
             Triple(processed, highlights, lines.size)
@@ -624,6 +630,8 @@ private fun DiffLine(
             fontSize = 11.sp,
             color = OnSurfaceGhost,
             textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            maxLines = 1,
+            softWrap = false,
             modifier = Modifier
                 .width(32.dp)
                 .padding(end = 6.dp)
@@ -634,6 +642,8 @@ private fun DiffLine(
             fontSize = 11.sp,
             color = OnSurfaceGhost,
             textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            maxLines = 1,
+            softWrap = false,
             modifier = Modifier
                 .width(32.dp)
                 .padding(end = 6.dp)
