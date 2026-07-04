@@ -406,34 +406,173 @@ private fun mergeChangedWords(words: List<MatchResult>, changed: BooleanArray): 
     return ranges
 }
 
+private data class ProcessedDiffLine(
+    val originalLine: String,
+    val oldLineNum: Int?,
+    val newLineNum: Int?,
+    val isHeader: Boolean,
+    val isModified: Boolean,
+    val isContext: Boolean,
+    val originalIndex: Int
+)
+
+private fun processFileDiff(lines: List<String>): List<ProcessedDiffLine?> {
+    val processed = mutableListOf<ProcessedDiffLine>()
+    var oldLineNum: Int? = null
+    var newLineNum: Int? = null
+
+    for (index in lines.indices) {
+        val line = lines[index]
+        val isHeader = line.startsWith("+++") || line.startsWith("---") ||
+                       line.startsWith("@@") || line.startsWith("Index:") ||
+                       line.startsWith("===")
+        val isModified = !isHeader && (line.startsWith("+") || line.startsWith("-"))
+        val isContext = !isHeader && !isModified
+
+        if (line.startsWith("@@")) {
+            // Parse hunk header: @@ -10,7 +10,8 @@
+            val match = Regex("""@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@""").find(line)
+            if (match != null) {
+                oldLineNum = match.groupValues[1].toIntOrNull()
+                newLineNum = match.groupValues[2].toIntOrNull()
+            } else {
+                oldLineNum = null
+                newLineNum = null
+            }
+            processed.add(ProcessedDiffLine(line, null, null, isHeader, isModified, isContext, originalIndex = index))
+        } else if (isHeader) {
+            processed.add(ProcessedDiffLine(line, null, null, isHeader, isModified, isContext, originalIndex = index))
+        } else {
+            val oldVal = oldLineNum
+            val newVal = newLineNum
+            if (line.startsWith("-")) {
+                if (oldLineNum != null) oldLineNum++
+                processed.add(ProcessedDiffLine(line, oldVal, null, isHeader, isModified, isContext, originalIndex = index))
+            } else if (line.startsWith("+")) {
+                if (newLineNum != null) newLineNum++
+                processed.add(ProcessedDiffLine(line, null, newVal, isHeader, isModified, isContext, originalIndex = index))
+            } else {
+                if (oldLineNum != null) oldLineNum++
+                if (newLineNum != null) newLineNum++
+                processed.add(ProcessedDiffLine(line, oldVal, newVal, isHeader, isModified, isContext, originalIndex = index))
+            }
+        }
+    }
+
+    // Mark kept lines (header, modified, or context within 4 lines of a modified line)
+    val kept = BooleanArray(processed.size)
+    for (i in processed.indices) {
+        val line = processed[i]
+        if (line.isHeader || line.isModified) {
+            kept[i] = true
+            continue
+        }
+        // Look behind up to 4 lines
+        var nearModified = false
+        for (j in 1..4) {
+            if (i - j < 0) break
+            val prev = processed[i - j]
+            if (prev.isHeader) break
+            if (prev.isModified) {
+                nearModified = true
+                break
+            }
+        }
+        if (!nearModified) {
+            // Look ahead up to 4 lines
+            for (j in 1..4) {
+                if (i + j >= processed.size) break
+                val next = processed[i + j]
+                if (next.isHeader) break
+                if (next.isModified) {
+                    nearModified = true
+                    break
+                }
+            }
+        }
+        kept[i] = nearModified
+    }
+
+    // Build the final list, inserting a single null placeholder to signify skipped lines
+    val result = mutableListOf<ProcessedDiffLine?>()
+    var skippedAny = false
+    for (i in processed.indices) {
+        if (kept[i]) {
+            if (skippedAny) {
+                result.add(null)
+                skippedAny = false
+            }
+            result.add(processed[i])
+        } else {
+            skippedAny = true
+        }
+    }
+    if (skippedAny) {
+        result.add(null)
+    }
+    return result
+}
+
+@Composable
+private fun SkippedLinesSeparator() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(SurfaceContainerLowest)
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.width(32.dp))
+        Box(modifier = Modifier.width(32.dp))
+        Box(modifier = Modifier.width(8.dp))
+        Text(
+            text = "··· skipped unchanged lines ···",
+            fontFamily = Opcode42Mono,
+            fontSize = 11.sp,
+            color = OnSurfaceGhost,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
 @Composable
 fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier) {
-    // Strip git-diff cruft so the body reads like the design's unified diff.
-    // Keyed on `diffs` so it doesn't re-run on every recomposition.
-    val perFile = remember(diffs) { diffs.map { it.patch?.lines().orEmpty().filterNot(::isDiffNoise) } }
-    val totalLines = remember(perFile) { perFile.sumOf { it.size } }
-    // Intra-line word highlights, computed once per diff (not per recomposition/scroll).
-    val highlightsPerFile = remember(perFile) { perFile.map(::computeWordHighlights) }
+    // Strip git-diff cruft and process diffs to trim context and compute highlights
+    val perFile = remember(diffs) {
+        diffs.map { diff ->
+            val lines = diff.patch?.lines().orEmpty().filterNot(::isDiffNoise)
+            val highlights = computeWordHighlights(lines)
+            val processed = processFileDiff(lines)
+            Triple(processed, highlights, lines.size)
+        }
+    }
+    val totalLines = remember(perFile) { perFile.sumOf { it.third } }
     var budget = MAX_DIFF_LINES
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(SurfaceContainerLowest),
     ) {
-        perFile.forEachIndexed { fileIdx, lines ->
-            if (budget <= 0 || lines.isEmpty()) return@forEachIndexed
-            val shown = lines.take(budget)
+        perFile.forEach { (processedLines, fileHighlights, _) ->
+            if (budget <= 0 || processedLines.isEmpty()) return@forEach
+            val shown = processedLines.take(budget)
             budget -= shown.size
-            val fileHighlights = highlightsPerFile[fileIdx]
-            // Lines soft-wrap to the viewport width so long edits stay fully
-            // visible — no horizontal scroll, nothing clipped off the right edge.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
             ) {
-                shown.forEachIndexed { idx, line ->
-                    DiffLine(line, fileHighlights.getOrElse(idx) { emptyList() })
+                shown.forEach { processedLine ->
+                    if (processedLine == null) {
+                        SkippedLinesSeparator()
+                    } else {
+                        DiffLine(
+                            line = processedLine.originalLine,
+                            oldNum = processedLine.oldLineNum,
+                            newNum = processedLine.newLineNum,
+                            highlights = fileHighlights.getOrElse(processedLine.originalIndex) { emptyList() }
+                        )
+                    }
                 }
             }
         }
@@ -450,7 +589,12 @@ fun UnifiedDiffView(diffs: List<SnapshotFileDiff>, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun DiffLine(line: String, highlights: List<IntRange> = emptyList()) {
+private fun DiffLine(
+    line: String,
+    oldNum: Int?,
+    newNum: Int?,
+    highlights: List<IntRange> = emptyList()
+) {
     val bg: Color
     val sign: String
     val signColor: Color
@@ -474,6 +618,26 @@ private fun DiffLine(line: String, highlights: List<IntRange> = emptyList()) {
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.Top,
     ) {
+        Text(
+            text = oldNum?.toString() ?: "",
+            fontFamily = Opcode42Mono,
+            fontSize = 11.sp,
+            color = OnSurfaceGhost,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier
+                .width(32.dp)
+                .padding(end = 6.dp)
+        )
+        Text(
+            text = newNum?.toString() ?: "",
+            fontFamily = Opcode42Mono,
+            fontSize = 11.sp,
+            color = OnSurfaceGhost,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier
+                .width(32.dp)
+                .padding(end = 6.dp)
+        )
         Text(
             text = sign,
             style = dev.opcode42.core.design.theme.Opcode42Typography.code,
