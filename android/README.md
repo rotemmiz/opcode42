@@ -59,7 +59,7 @@ interface, set a password first:
 ```sh
 OPENCODE_SERVER_PASSWORD=secret opcoded --host 0.0.0.0 --port 4096
 # or, with mDNS advertising:
-OPENCODE_SERVER_PASSWORD=secret opencode serve --mdns --hostname 0.0.0.0
+OPENCODE_SERVER_PASSWORD=secret opcoded --mdns --host 0.0.0.0
 ```
 
 See [`plans/13-remote-ops.md`](../plans/13-remote-ops.md) for Tailscale / SSH-tunnel / reverse-proxy setups.
