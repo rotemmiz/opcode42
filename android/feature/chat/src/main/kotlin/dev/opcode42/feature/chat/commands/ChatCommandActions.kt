@@ -22,6 +22,8 @@ interface ChatCommandActions {
     fun openAgentPicker()
     fun openTerminal()
     fun openInfo()
+    /** `/diff` opens the session diff viewer (working-tree changes or session patches). */
+    fun openDiffViewer()
     fun renameSession()
     fun forkSession()
     fun summarize()

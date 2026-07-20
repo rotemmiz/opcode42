@@ -7,7 +7,7 @@ import org.junit.Test
 
 class BuiltinCommandsTest {
 
-    private val comingSoon = setOf("diff", "timeline", "variant", "stash")
+    private val comingSoon = setOf("timeline", "variant", "stash")
 
     @Test
     fun registryHasNoDuplicateNames() {

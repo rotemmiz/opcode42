@@ -28,9 +28,17 @@ class PaletteEntryTest {
     @Test
     fun comingSoonEntriesAreDisabledWithSoonBadge() {
         val entries = buildPaletteEntries(builtinCommands, emptyList(), RecordingCommandActions())
+        val timeline = entries.first { it.name == "timeline" }
+        assertFalse(timeline.enabled)
+        assertEquals("soon", timeline.badge)
+    }
+
+    @Test
+    fun diffEntryIsEnabledNow() {
+        val entries = buildPaletteEntries(builtinCommands, emptyList(), RecordingCommandActions())
         val diff = entries.first { it.name == "diff" }
-        assertFalse(diff.enabled)
-        assertEquals("soon", diff.badge)
+        assertTrue(diff.enabled)
+        assertNull(diff.badge)
     }
 
     @Test
