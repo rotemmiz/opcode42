@@ -276,9 +276,9 @@ class SessionListViewModel @Inject constructor(
     // opening it. The store maps drop the request on the *Replied/*Rejected event.
 
     /** Approve or deny a session's pending permission from the menu. */
-    fun replyPermission(requestId: String, allow: Boolean) {
+    fun replyPermission(requestId: String, reply: String, message: String? = null) {
         viewModelScope.launch {
-            sessionRepo.replyPermission(requestId, allow).onFailure { emitError("reply", it) }
+            sessionRepo.replyPermission(requestId, reply, message).onFailure { emitError("reply", it) }
         }
     }
 

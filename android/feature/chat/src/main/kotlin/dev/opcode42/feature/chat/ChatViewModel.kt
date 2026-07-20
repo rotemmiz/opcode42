@@ -476,9 +476,9 @@ class ChatViewModel @Inject constructor(
     }
 
     /** A8 — Permission reply */
-    fun replyPermission(requestId: String, allow: Boolean) {
+    fun replyPermission(requestId: String, reply: String, message: String? = null) {
         viewModelScope.launch {
-            sessionRepo.replyPermission(requestId, allow).onFailure { emitError("reply", it) }
+            sessionRepo.replyPermission(requestId, reply, message).onFailure { emitError("reply", it) }
         }
     }
 

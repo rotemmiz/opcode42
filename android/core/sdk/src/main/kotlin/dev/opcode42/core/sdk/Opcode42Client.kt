@@ -281,13 +281,34 @@ class Opcode42Client @Inject constructor(
 
     // ─── Permission ───────────────────────────────────────────────────────────
 
-    suspend fun replyPermission(requestId: String, allow: Boolean) =
+    suspend fun listPermissions(): List<PermissionRequest> = transport.get(
+        path = "/permission",
+        parse = { json ->
+            (json as? JsonArray)?.mapNotNull {
+                runCatching { Opcode42Json.decodeFromJsonElement(PermissionRequest.serializer(), it) }.getOrNull()
+            } ?: emptyList()
+        },
+    )
+
+    suspend fun replyPermission(requestId: String, reply: String, message: String? = null) =
         transport.post(
             path = "/permission/$requestId/reply",
-            body = buildJsonObject { put("allow", allow) },
+            body = buildJsonObject {
+                put("reply", reply)
+                if (message != null) put("message", message)
+            },
         ) { _ -> Unit }
 
     // ─── Question ─────────────────────────────────────────────────────────────
+
+    suspend fun listQuestions(): List<QuestionRequest> = transport.get(
+        path = "/question",
+        parse = { json ->
+            (json as? JsonArray)?.mapNotNull {
+                runCatching { Opcode42Json.decodeFromJsonElement(QuestionRequest.serializer(), it) }.getOrNull()
+            } ?: emptyList()
+        },
+    )
 
     suspend fun replyQuestion(requestId: String, answers: List<List<String>>) =
         transport.post(
