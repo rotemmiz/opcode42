@@ -18,5 +18,8 @@ dependencies {
     implementation(libs.android.lifecycle.viewmodel.compose)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.compose.material.icons.extended)
+    implementation(libs.datastore.preferences)
+    implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

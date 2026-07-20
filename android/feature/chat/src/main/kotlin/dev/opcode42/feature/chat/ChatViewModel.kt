@@ -10,6 +10,7 @@ import dev.opcode42.core.data.toUserMessage
 import dev.opcode42.core.model.*
 import dev.opcode42.core.store.ConnectionState
 import dev.opcode42.core.store.OptimisticMessage
+import dev.opcode42.feature.chat.data.StashStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
@@ -81,7 +82,11 @@ class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val chatRepo: ChatRepository,
     private val sessionRepo: SessionRepository,
+    stashStore: StashStore,
 ) : ViewModel() {
+
+    /** Local-only stash store, exposed for the `/stash` sheet to read/write drafts. */
+    val stash: StashStore = stashStore
 
     private val sessionId: String = checkNotNull(savedStateHandle["sessionId"])
 

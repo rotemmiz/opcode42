@@ -17,6 +17,7 @@ class CommandDispatchTest {
             ModelsCommand to "openModelPicker",
             VariantCommand to "openVariantPicker",
             AgentsCommand to "openAgentPicker",
+            StashCommand to "openStash",
             TerminalCommand to "openTerminal",
             InfoCommand to "openInfo",
             DiffCommand to "openDiffViewer",
@@ -45,7 +46,7 @@ class CommandDispatchTest {
 
     @Test
     fun comingSoonCommandsDoNothing() {
-        for (command in listOf(TimelineCommand, StashCommand)) {
+        for (command in listOf(TimelineCommand)) {
             val rec = RecordingCommandActions()
             command.execute(rec)
             assertTrue("${command.name} should be a no-op", rec.calls.isEmpty())
