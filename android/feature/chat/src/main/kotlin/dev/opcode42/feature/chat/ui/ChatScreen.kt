@@ -241,10 +241,10 @@ fun ChatScreen(
                 onStop = { viewModel.abort() },
                 paletteEntries = paletteEntries,
                 onSearchFiles = { query -> viewModel.searchFiles(query) },
-                onPickEntry = { entry ->
+                onPickEntry = { entry, args ->
                     when (entry) {
                         is PaletteEntry.Builtin -> entry.command.execute(commandActions)
-                        is PaletteEntry.Daemon -> viewModel.runCommand(entry.name, "")
+                        is PaletteEntry.Daemon -> viewModel.runCommand(entry.name, args)
                     }
                 },
             )

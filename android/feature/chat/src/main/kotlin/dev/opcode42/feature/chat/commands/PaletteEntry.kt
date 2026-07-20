@@ -78,3 +78,23 @@ fun buildPaletteEntries(
 fun List<PaletteEntry>.filterByQuery(query: String): List<PaletteEntry> =
     if (query.isEmpty()) this
     else filter { it.name.contains(query, ignoreCase = true) }
+
+/**
+ * Parses a composer line into its slash-command [SlashCommandInput] parts:
+ * the command name (before the first space) and the trailing args (everything
+ * after the first space, verbatim). Returns `null` when [text] is not a slash
+ * command (no leading `/`, or contains a newline). A bare `/` yields an empty
+ * command name so the palette still shows every entry.
+ */
+fun parseSlashCommand(text: String): SlashCommandInput? {
+    if (!text.startsWith("/") || text.contains('\n')) return null
+    val space = text.indexOf(' ')
+    return if (space == -1) {
+        SlashCommandInput(name = text.drop(1), args = "")
+    } else {
+        SlashCommandInput(name = text.substring(1, space), args = text.substring(space + 1))
+    }
+}
+
+/** Parsed `/name args` from a composer line. */
+data class SlashCommandInput(val name: String, val args: String)
