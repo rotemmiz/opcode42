@@ -83,7 +83,7 @@ class SessionListProjectionTest {
     }
 
     @Test fun counts_areTabIndependent_andFilterApplies() {
-        val perm = PermissionRequest(id = "p1", sessionID = "b", title = "Run rm?")
+        val perm = PermissionRequest(id = "p1", sessionID = "b", permission = "Run rm?")
         val state = AppState(
             sessions = listOf(session("a", updated = now), session("b", updated = now), session("c", updated = now)),
             sessionStatus = mapOf("a" to "busy"),

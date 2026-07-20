@@ -50,7 +50,7 @@ interface SessionRepository {
     suspend fun summarize(sessionId: String, model: ModelRef, directory: String? = null): Result<Unit>
     suspend fun abort(sessionId: String, directory: String? = null): Result<Unit>
 
-    suspend fun replyPermission(requestId: String, allow: Boolean): Result<Unit>
+    suspend fun replyPermission(requestId: String, reply: String, message: String? = null): Result<Unit>
     suspend fun replyQuestion(requestId: String, answers: List<List<String>>): Result<Unit>
     suspend fun rejectQuestion(requestId: String): Result<Unit>
 
@@ -138,8 +138,8 @@ class DefaultSessionRepository @Inject constructor(
         Unit
     }
 
-    override suspend fun replyPermission(requestId: String, allow: Boolean): Result<Unit> = resultOf {
-        client.replyPermission(requestId, allow)
+    override suspend fun replyPermission(requestId: String, reply: String, message: String?): Result<Unit> = resultOf {
+        client.replyPermission(requestId, reply, message)
         store.dispatch(AppEvent.PermissionReplied(requestId))
     }
 

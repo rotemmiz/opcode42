@@ -601,8 +601,8 @@ fun ChatScreen(
         pendingPermission?.let { req ->
             PermissionSheet(
                 permission = req,
-                onApprove = { viewModel.replyPermission(req.id, allow = true) },
-                onDeny = { viewModel.replyPermission(req.id, allow = false) },
+                onApprove = { viewModel.replyPermission(req.id, reply = "once") },
+                onDeny = { viewModel.replyPermission(req.id, reply = "reject") },
             )
         }
 

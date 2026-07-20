@@ -230,16 +230,23 @@ class SseWireParsingTest {
 
     @Test
     fun `permission_asked decodes request directly from properties`() {
-        // EventPermissionAsked.properties IS the PermissionRequest.
+        // EventPermissionAsked.properties IS the PermissionRequest — wire shape per
+        // packages/schema/src/v1/permission.ts (id, sessionID, permission, patterns,
+        // metadata, always, tool?).
         val raw = sse(
             "permission.asked",
-            """{"id":"per_1","sessionID":"ses_1","title":"Run rm"}""",
+            """{"id":"per_1","sessionID":"ses_1","permission":"bash","patterns":["**"],"always":["**"],"metadata":{}}""",
         )
         val ev = parser.parse(raw)
         assertTrue(ev is AppEvent.PermissionAsked)
         val p = (ev as AppEvent.PermissionAsked).permission
         assertEquals("per_1", p.id)
         assertEquals("ses_1", p.sessionID)
+        assertEquals("bash", p.permission)
+        assertEquals(listOf("**"), p.patterns)
+        assertEquals(listOf("**"), p.always)
+        assertEquals("bash", p.title)
+        assertEquals("**", p.description)
     }
 
     @Test

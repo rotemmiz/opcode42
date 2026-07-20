@@ -53,10 +53,15 @@ sealed class AppEvent {
 data class PermissionRequest(
     val id: String,
     val sessionID: String,
-    val title: String? = null,
-    val description: String? = null,
+    val permission: String = "",
+    val patterns: List<String> = emptyList(),
     val metadata: JsonObject? = null,
-)
+    val always: List<String> = emptyList(),
+    val tool: QuestionTool? = null,
+) {
+    val title: String? get() = permission.takeIf { it.isNotBlank() }
+    val description: String? get() = patterns.joinToString(", ").takeIf { it.isNotBlank() }
+}
 
 @Serializable
 data class QuestionRequest(
