@@ -162,6 +162,7 @@ fun ChatScreen(
     var showShareDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showArchiveConfirm by remember { mutableStateOf(false) }
+    var showDiffViewer by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
 
     // Capability surface for the `/` palette's built-in actions. Recreated each
@@ -174,6 +175,7 @@ fun ChatScreen(
         override fun openAgentPicker() { pickerTarget = PickerTarget.AGENT }
         override fun openTerminal() { sessionDirectory?.let { onOpenTerminal(it) } }
         override fun openInfo() { showInfoSheet = true }
+        override fun openDiffViewer() { showDiffViewer = true }
         override fun renameSession() { showRenameDialog = true }
         override fun forkSession() = viewModel.forkSession { newId -> onNavigateToSession(newId) }
         override fun summarize() = viewModel.summarize()
@@ -692,6 +694,14 @@ fun ChatScreen(
                 onDismiss = { pickerTarget = null },
             )
             null -> Unit
+        }
+
+        if (showDiffViewer) {
+            DiffListSheet(
+                diffs = uiState.diffs,
+                changedFiles = uiState.changedFiles,
+                onDismiss = { showDiffViewer = false },
+            )
         }
     }
 }
