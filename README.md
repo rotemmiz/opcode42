@@ -6,6 +6,46 @@ opencode is amazing. This is a personal exercise in reimplementing it from scrat
 
 Wire compatibility is kept deliberately until interop becomes a wall worth breaking.
 
+## Android client
+
+The mobile client is the primary UI. It's a single Compose app that speaks the same opencode
+wire protocol as the web/desktop and Go TUI clients, so it runs against either daemon
+unchanged — mDNS LAN discovery, streaming chat with markdown / syntax-highlighted code /
+word-level diff highlighting, an embedded PTY terminal over WebSocket, push notifications,
+and an adaptive triptych layout that reflows phone → foldable → tablet.
+
+### Phone
+
+<p align="center">
+  <a href="docs/screenshots/phone-chat.png"><img src="docs/screenshots/phone-chat.png" width="270" alt="Opcode42 on phone — chat"></a>
+</p>
+<p align="center">
+  <sub>Chat with reasoning blocks, compact tool-call rows, and a one-line composer.</sub>
+</p>
+
+### Foldable
+
+<p align="center">
+  <a href="docs/screenshots/foldable-chat.png"><img src="docs/screenshots/foldable-chat.png" width="430" alt="Opcode42 on foldable — in-chat git diff"></a>
+</p>
+<p align="center">
+  <sub>Two-pane at medium width — chat with an inline git diff and the session info panel.</sub>
+</p>
+
+### Tablet
+
+<p align="center">
+  <a href="docs/screenshots/tablet-triptych.png"><img src="docs/screenshots/tablet-triptych.png" width="720" alt="Opcode42 on tablet — triptych layout"></a>
+</p>
+<p align="center">
+  <sub>Expanded triptych — sessions rail · chat with streaming tool rows · session info panel.</sub>
+</p>
+
+Build & install instructions in [`android/BUILD.md`](android/BUILD.md); full client docs in
+[`android/README.md`](android/README.md). Engineering plan:
+[`plans/07-client-mobile.md`](plans/07-client-mobile.md); UX overhaul:
+[`plans/15-android-ux-overhaul.md`](plans/15-android-ux-overhaul.md).
+
 ## Architecture
 
 ```
