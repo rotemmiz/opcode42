@@ -11,7 +11,6 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -194,7 +193,6 @@ class PermissionWireTest {
 
         val list = client.listQuestions()
 
-        assertFalse(list.isNotEmpty())
         assertTrue(list.isEmpty())
     }
 
