@@ -103,6 +103,8 @@ fun ChatScreen(
     val agents by viewModel.agents.collectAsStateWithLifecycle()
     val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
     val selectedAgent by viewModel.selectedAgent.collectAsStateWithLifecycle()
+    val selectedVariant by viewModel.selectedVariant.collectAsStateWithLifecycle()
+    val currentModelVariants by viewModel.currentModelVariants.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     val animatedWidth by androidx.compose.animation.core.animateDpAsState(
@@ -169,9 +171,11 @@ fun ChatScreen(
     // recomposition so it always closes over the current session state/callbacks.
     val commandActions = object : ChatCommandActions {
         override val hasDirectory: Boolean get() = sessionDirectory != null
+        override val hasVariants: Boolean get() = currentModelVariants.isNotEmpty()
         override fun newSession() = onNewSession()
         override fun openSessions() = onOpenNavRail()
         override fun openModelPicker() { pickerTarget = PickerTarget.MODEL }
+        override fun openVariantPicker() { pickerTarget = PickerTarget.VARIANT }
         override fun openAgentPicker() { pickerTarget = PickerTarget.AGENT }
         override fun openTerminal() { sessionDirectory?.let { onOpenTerminal(it) } }
         override fun openInfo() { showInfoSheet = true }
@@ -689,6 +693,16 @@ fun ChatScreen(
                 selectedAgent = displayAgent,
                 onSelectAgent = { name ->
                     viewModel.selectAgent(name)
+                    pickerTarget = null
+                },
+                onDismiss = { pickerTarget = null },
+            )
+            PickerTarget.VARIANT -> VariantPickerSheet(
+                variants = currentModelVariants,
+                selectedVariant = selectedVariant,
+                modelLabel = displayModelLabel,
+                onSelectVariant = { variant ->
+                    viewModel.selectVariant(variant)
                     pickerTarget = null
                 },
                 onDismiss = { pickerTarget = null },

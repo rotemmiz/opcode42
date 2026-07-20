@@ -47,7 +47,7 @@ import dev.opcode42.core.model.ModelRef
 import dev.opcode42.core.model.ProviderInfo
 
 /** Which sheet the composer's model/agent affordances open. */
-enum class PickerTarget { MODEL, AGENT }
+enum class PickerTarget { MODEL, AGENT, VARIANT }
 
 /**
  * Model picker (the `/models` command and the status-strip model tap). Models are

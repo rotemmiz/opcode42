@@ -3,12 +3,14 @@ package dev.opcode42.feature.chat.commands
 /** Test double that records which capability a command invoked. */
 class RecordingCommandActions(
     override val hasDirectory: Boolean = true,
+    override val hasVariants: Boolean = true,
 ) : ChatCommandActions {
     val calls = mutableListOf<String>()
 
     override fun newSession() { calls += "newSession" }
     override fun openSessions() { calls += "openSessions" }
     override fun openModelPicker() { calls += "openModelPicker" }
+    override fun openVariantPicker() { calls += "openVariantPicker" }
     override fun openAgentPicker() { calls += "openAgentPicker" }
     override fun openTerminal() { calls += "openTerminal" }
     override fun openInfo() { calls += "openInfo" }
