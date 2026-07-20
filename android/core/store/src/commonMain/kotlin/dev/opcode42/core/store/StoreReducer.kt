@@ -111,6 +111,9 @@ fun reduce(state: AppState, event: AppEvent): AppState = when (event) {
         )
     }
 
+    is AppEvent.PermissionsReconciled -> state.copy(permissions = event.bySession)
+    is AppEvent.QuestionsReconciled -> state.copy(questions = event.bySession)
+
     is AppEvent.SessionDiffLoaded -> state.copy(
         diffs = state.diffs + (event.messageId to event.diffs)
     )
