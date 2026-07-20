@@ -64,6 +64,7 @@ import androidx.core.content.ContextCompat
 import dev.opcode42.core.model.FilePartInput
 import dev.opcode42.feature.chat.commands.PaletteEntry
 import dev.opcode42.feature.chat.commands.filterByQuery
+import dev.opcode42.feature.chat.commands.parseSlashCommand
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -97,7 +98,7 @@ fun PromptInput(
     onStop: () -> Unit = {},
     paletteEntries: List<PaletteEntry> = emptyList(),
     onSearchFiles: suspend (String) -> List<String> = { emptyList() },
-    onPickEntry: (PaletteEntry) -> Unit = {},
+    onPickEntry: (PaletteEntry, String) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -111,10 +112,12 @@ fun PromptInput(
     var baseText by remember { mutableStateOf("") }
     var preDictationText by remember { mutableStateOf("") }
 
-    // `/cmd` is active only while the text is a single leading slash token.
-    val slashQuery: String? = remember(text) {
-        if (text.startsWith("/") && !text.contains(' ') && !text.contains('\n')) text.drop(1) else null
-    }
+    // `/cmd` (and `/cmd args…`) is active while the text starts with a slash and
+    // has no newline. The command name (before the first space) drives palette
+    // filtering; the remainder becomes the args string passed to runCommand.
+    val slashInput = remember(text) { parseSlashCommand(text) }
+    val slashQuery: String? = slashInput?.name
+    val slashArgs: String = slashInput?.args ?: ""
     val mentionMatch = remember(text) { MentionRegex.find(text) }
     val mentionQuery: String? = mentionMatch?.groupValues?.get(1)
 
@@ -224,7 +227,7 @@ fun PromptInput(
                 entries = filteredCommands,
                 query = slashQuery ?: "",
                 onPick = { entry ->
-                    onPickEntry(entry)
+                    onPickEntry(entry, slashArgs)
                     text = ""
                 },
             )
