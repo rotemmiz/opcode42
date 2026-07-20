@@ -25,6 +25,8 @@ interface ChatCommandActions {
     fun openVariantPicker()
     /** `/agents` opens the agent-mode picker. */
     fun openAgentPicker()
+    /** `/stash` opens the stashed-drafts sheet (local-only persistence). */
+    fun openStash()
     fun openTerminal()
     fun openInfo()
     /** `/diff` opens the session diff viewer (working-tree changes or session patches). */

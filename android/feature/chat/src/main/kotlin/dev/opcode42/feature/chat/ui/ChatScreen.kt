@@ -165,6 +165,13 @@ fun ChatScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showArchiveConfirm by remember { mutableStateOf(false) }
     var showDiffViewer by remember { mutableStateOf(false) }
+    var showStashSheet by remember { mutableStateOf(false) }
+    // The composer's current text, mirrored from PromptInput so the StashSheet can
+    // stash it ("Add current") without hoisting the field's voice/attachment state.
+    var composerDraft by remember { mutableStateOf("") }
+    // Outbound channel: a draft loaded from the StashSheet flows back into the
+    // composer. Cleared (→ null) by PromptInput once applied.
+    var stashLoadDraft by remember { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
 
     // Capability surface for the `/` palette's built-in actions. Recreated each
@@ -177,6 +184,7 @@ fun ChatScreen(
         override fun openModelPicker() { pickerTarget = PickerTarget.MODEL }
         override fun openVariantPicker() { pickerTarget = PickerTarget.VARIANT }
         override fun openAgentPicker() { pickerTarget = PickerTarget.AGENT }
+        override fun openStash() { showStashSheet = true }
         override fun openTerminal() { sessionDirectory?.let { onOpenTerminal(it) } }
         override fun openInfo() { showInfoSheet = true }
         override fun openDiffViewer() { showDiffViewer = true }
@@ -251,6 +259,9 @@ fun ChatScreen(
                         is PaletteEntry.Daemon -> viewModel.runCommand(entry.name, args)
                     }
                 },
+                externalDraft = stashLoadDraft,
+                onExternalDraftConsumed = { stashLoadDraft = null },
+                onDraftChanged = { composerDraft = it },
             )
         }
     }
@@ -715,6 +726,15 @@ fun ChatScreen(
                 diffs = uiState.diffs,
                 changedFiles = uiState.changedFiles,
                 onDismiss = { showDiffViewer = false },
+            )
+        }
+
+        if (showStashSheet) {
+            StashSheet(
+                store = viewModel.stash,
+                composerDraftProvider = { composerDraft },
+                onLoad = { draft -> stashLoadDraft = draft },
+                onDismiss = { showStashSheet = false },
             )
         }
     }

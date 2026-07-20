@@ -99,6 +99,9 @@ fun PromptInput(
     paletteEntries: List<PaletteEntry> = emptyList(),
     onSearchFiles: suspend (String) -> List<String> = { emptyList() },
     onPickEntry: (PaletteEntry, String) -> Unit = { _, _ -> },
+    externalDraft: String? = null,
+    onExternalDraftConsumed: () -> Unit = {},
+    onDraftChanged: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -111,6 +114,19 @@ fun PromptInput(
     // Cancel restores.
     var baseText by remember { mutableStateOf("") }
     var preDictationText by remember { mutableStateOf("") }
+
+    // `/stash` loads a draft into the composer from outside (the StashSheet). When
+    // a non-null externalDraft arrives, replace the field and hand control back to
+    // the caller via onExternalDraftConsumed so a fresh value can be set later.
+    LaunchedEffect(externalDraft) {
+        if (externalDraft != null) {
+            text = externalDraft
+            baseText = externalDraft
+            onExternalDraftConsumed()
+        }
+    }
+    // Mirror the field into the host so the StashSheet can stash the current draft.
+    LaunchedEffect(text) { onDraftChanged(text) }
 
     // `/cmd` (and `/cmd args…`) is active while the text starts with a slash and
     // has no newline. The command name (before the first space) drives palette

@@ -12,6 +12,7 @@ class RecordingCommandActions(
     override fun openModelPicker() { calls += "openModelPicker" }
     override fun openVariantPicker() { calls += "openVariantPicker" }
     override fun openAgentPicker() { calls += "openAgentPicker" }
+    override fun openStash() { calls += "openStash" }
     override fun openTerminal() { calls += "openTerminal" }
     override fun openInfo() { calls += "openInfo" }
     override fun openDiffViewer() { calls += "openDiffViewer" }
