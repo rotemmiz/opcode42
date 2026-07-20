@@ -67,6 +67,7 @@ class Opcode42Client @Inject constructor(
                 put("model", buildJsonObject {
                     put("providerID", it.providerID)
                     put("modelID", it.modelID)
+                    it.variant?.let { v -> put("variant", v) }
                 })
             }
             agent?.let { put("agent", it) }

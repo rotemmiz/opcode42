@@ -15,6 +15,7 @@ class CommandDispatchTest {
             NewSessionCommand to "newSession",
             SessionsCommand to "openSessions",
             ModelsCommand to "openModelPicker",
+            VariantCommand to "openVariantPicker",
             AgentsCommand to "openAgentPicker",
             TerminalCommand to "openTerminal",
             InfoCommand to "openInfo",
@@ -34,8 +35,17 @@ class CommandDispatchTest {
     }
 
     @Test
+    fun variantCommandIsGatedByHasVariants() {
+        val hidden = buildPaletteEntries(listOf(VariantCommand), emptyList(), RecordingCommandActions(hasVariants = false))
+        assertTrue("variant should be hidden when the model has no variants", hidden.none { it.name == "variant" })
+
+        val shown = buildPaletteEntries(listOf(VariantCommand), emptyList(), RecordingCommandActions(hasVariants = true))
+        assertTrue("variant should appear when the model has variants", shown.any { it.name == "variant" })
+    }
+
+    @Test
     fun comingSoonCommandsDoNothing() {
-        for (command in listOf(TimelineCommand, VariantCommand, StashCommand)) {
+        for (command in listOf(TimelineCommand, StashCommand)) {
             val rec = RecordingCommandActions()
             command.execute(rec)
             assertTrue("${command.name} should be a no-op", rec.calls.isEmpty())

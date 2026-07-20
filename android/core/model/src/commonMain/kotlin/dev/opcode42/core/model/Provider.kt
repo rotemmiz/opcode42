@@ -1,12 +1,15 @@
 package dev.opcode42.core.model
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /** A provider/model pair — the shape POST /session/{id}/message accepts as `model`. */
 @Serializable
 data class ModelRef(
     val providerID: String,
     val modelID: String,
+    /** Selected variant id for the model (opencode `model.variant`); null = the model's default. */
+    val variant: String? = null,
 )
 
 /**
@@ -30,9 +33,18 @@ data class ModelInfo(
     val id: String,
     val name: String? = null,
     val limit: ModelLimit = ModelLimit(),
+    /**
+     * Per-model variants the user can pick at runtime (opencode `Model.variants`):
+     * a map of variant id → opaque options object. Empty when the model has no
+     * variants (the common case), which is what gates the `/variant` command.
+     */
+    val variants: Map<String, JsonElement> = emptyMap(),
 ) {
     /** Human label, falling back to the raw id. */
     val label: String get() = name?.takeIf { it.isNotBlank() } ?: id
+
+    /** Variant ids available for this model, in catalog order. */
+    val variantIds: List<String> get() = variants.keys.toList()
 }
 
 /** A provider surfaced by GET /provider (only the fields the model picker needs). */

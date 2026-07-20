@@ -202,9 +202,31 @@ class ChatViewModel @Inject constructor(
     private val _selectedAgent = MutableStateFlow<String?>(null)
     val selectedAgent: StateFlow<String?> = _selectedAgent.asStateFlow()
 
-    fun selectModel(model: ModelRef) { _selectedModel.value = model }
+    /** User's explicit variant pick for upcoming prompts; null = the model's default. */
+    private val _selectedVariant = MutableStateFlow<String?>(null)
+    val selectedVariant: StateFlow<String?> = _selectedVariant.asStateFlow()
+
+    fun selectModel(model: ModelRef) {
+        _selectedModel.value = model
+        // A new model may not expose the previously picked variant; reset to default.
+        _selectedVariant.value = null
+    }
 
     fun selectAgent(name: String) { _selectedAgent.value = name }
+
+    /** Sets the variant for upcoming prompts; `null` clears to the model default. */
+    fun selectVariant(variant: String?) { _selectedVariant.value = variant }
+
+    /** The effective model's label + variants, for the variant picker and the `/variant` gate. */
+    val currentModelVariants: StateFlow<List<String>> =
+        combine(_selectedModel, _providers, uiState) { selected, providers, state ->
+            val ref = selected ?: run {
+                val p = state.providerID
+                val m = state.modelID
+                if (p != null && m != null) ModelRef(providerID = p, modelID = m) else null
+            } ?: return@combine emptyList()
+            providers.find { it.id == ref.providerID }?.models?.get(ref.modelID)?.variantIds ?: emptyList()
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * Emits the real session id once a draft's first prompt has created the session, so the
@@ -340,11 +362,11 @@ class ChatViewModel @Inject constructor(
                         emitError("create session", it)
                         return@launch
                     }
-                    chatRepo.send(created.id, text, created.directory, attachments, _selectedModel.value, _selectedAgent.value)
+                    chatRepo.send(created.id, text, created.directory, attachments, effectiveModelForSend(), _selectedAgent.value)
                         .onFailure { emitError("send", it) }
                     _navigateToSession.trySend(created.id)
                 } else {
-                    chatRepo.send(sessionId, text, directory, attachments, _selectedModel.value, _selectedAgent.value)
+                    chatRepo.send(sessionId, text, directory, attachments, effectiveModelForSend(), _selectedAgent.value)
                         .onFailure { emitError("send", it) }
                 }
             } finally {
@@ -412,6 +434,18 @@ class ChatViewModel @Inject constructor(
             val m = uiState.value.modelID
             if (p != null && m != null) ModelRef(providerID = p, modelID = m) else null
         }
+
+    /** The model ref to send: the effective model with the user's variant selection applied.
+     *  The variant is only attached when the picked model actually exposes it, so a stale
+     *  selection from a prior model never leaks into a request for one without variants. */
+    private fun effectiveModelForSend(): ModelRef? {
+        val ref = effectiveModel() ?: return null
+        val variant = _selectedVariant.value ?: return ref
+        val model = _providers.value
+            .find { it.id == ref.providerID }?.models?.get(ref.modelID) ?: return ref
+        if (model.variantIds.isEmpty() || variant !in model.variantIds) return ref
+        return ref.copy(variant = variant)
+    }
 
     /** Overflow → Rename: set the session title; the returned session updates the store. */
     fun renameSession(title: String) {

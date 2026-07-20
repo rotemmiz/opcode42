@@ -13,11 +13,16 @@ interface ChatCommandActions {
     /** Whether the session has a working directory (runtime gate for `/terminal`). */
     val hasDirectory: Boolean
 
+    /** Whether the current model exposes selectable variants (runtime gate for `/variant`). */
+    val hasVariants: Boolean
+
     fun newSession()
     /** Multi-pane: open the nav rail; compact: navigate back to the session list. */
     fun openSessions()
     /** `/models` opens the model picker (provider-grouped). */
     fun openModelPicker()
+    /** `/variant` opens the variant picker for the current model. */
+    fun openVariantPicker()
     /** `/agents` opens the agent-mode picker. */
     fun openAgentPicker()
     fun openTerminal()
