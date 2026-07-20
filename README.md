@@ -1,4 +1,18 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/logo-light.png">
+    <img alt="Opcode42" src="docs/images/logo-light.png" width="120">
+  </picture>
+</p>
+
 # Opcode42
+
+<p align="center">
+  <a href="https://github.com/rotemmiz/opcode42/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/rotemmiz/opcode42/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/rotemmiz/opcode42/actions/workflows/conformance.yml"><img alt="Conformance" src="https://github.com/rotemmiz/opcode42/actions/workflows/conformance.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+</p>
 
 A ground-up, interop-first alternative to opencode: a Go daemon that is wire-compatible with opencode's HTTP+SSE+WebSocket API.
 
