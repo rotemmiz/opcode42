@@ -11,6 +11,12 @@ private fun msg(id: String, sessionID: String = "s1", parts: List<Part> = emptyL
 private fun textPart(id: String, msgID: String = "m1") =
     TextPart(id = id, sessionID = "s1", messageID = msgID, text = "hello")
 
+private fun perm(id: String, sessionID: String = "s1") =
+    PermissionRequest(id = id, sessionID = sessionID, permission = "bash")
+
+private fun question(id: String, sessionID: String = "s1") =
+    QuestionRequest(id = id, sessionID = sessionID)
+
 class StoreReducerTest {
 
     // ─── MessageUpdated ────────────────────────────────────────────────────────
@@ -140,5 +146,35 @@ class StoreReducerTest {
         val state = AppState(messages = mapOf("s1" to listOf(msg("m1"), msg("m2"))))
         val next = reduce(state, AppEvent.MessageRemoved(sessionId = "s1", messageId = "m1"))
         assertEquals(listOf(msg("m2")), next.messages["s1"])
+    }
+
+    // ─── PermissionsReconciled / QuestionsReconciled ───────────────────────────
+
+    @Test
+    fun permissionsReconciled_replacesTheWholePermissionsMap() {
+        val s1 = listOf(perm("p1", "s1"))
+        val s2 = listOf(perm("p2", "s2"))
+        val state = AppState(permissions = mapOf("s1" to s1, "s2" to s2))
+        val next = reduce(state, AppEvent.PermissionsReconciled(bySession = mapOf("s1" to s1)))
+        assertEquals(mapOf("s1" to s1), next.permissions)
+    }
+
+    @Test
+    fun questionsReconciled_replacesTheWholeQuestionsMap() {
+        val s1 = listOf(question("q1", "s1"))
+        val s2 = listOf(question("q2", "s2"))
+        val state = AppState(questions = mapOf("s1" to s1, "s2" to s2))
+        val next = reduce(state, AppEvent.QuestionsReconciled(bySession = mapOf("s1" to s1)))
+        assertEquals(mapOf("s1" to s1), next.questions)
+    }
+
+    @Test
+    fun permissionsReconciled_isIdempotentWithPermissionReplied() {
+        val s1 = listOf(perm("p1", "s1"))
+        val state = AppState(permissions = mapOf("s1" to s1))
+        val afterReply = reduce(state, AppEvent.PermissionReplied("p1"))
+        val afterBoth = reduce(afterReply, AppEvent.PermissionsReconciled(bySession = emptyMap()))
+        val reconcileOnly = reduce(state, AppEvent.PermissionsReconciled(bySession = emptyMap()))
+        assertEquals(reconcileOnly, afterBoth)
     }
 }

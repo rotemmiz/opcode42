@@ -41,6 +41,8 @@ sealed class AppEvent {
     data class QuestionAsked(val question: QuestionRequest) : AppEvent()
     data class QuestionReplied(val requestId: String) : AppEvent()
     data class QuestionRejected(val requestId: String) : AppEvent()
+    data class PermissionsReconciled(val bySession: Map<String, List<PermissionRequest>>) : AppEvent()
+    data class QuestionsReconciled(val bySession: Map<String, List<QuestionRequest>>) : AppEvent()
 
     /** Diff data loaded from /session/{id}/diff */
     data class SessionDiffLoaded(val messageId: String, val diffs: List<SnapshotFileDiff>) : AppEvent()
