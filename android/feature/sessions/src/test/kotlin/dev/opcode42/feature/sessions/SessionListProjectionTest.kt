@@ -7,6 +7,8 @@ import dev.opcode42.core.model.Session
 import dev.opcode42.core.model.SessionTime
 import dev.opcode42.core.store.AppState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -71,6 +73,58 @@ class SessionListProjectionTest {
         val ui = project(state)
         assertEquals(listOf("a"), ui.ids())
         assertEquals(1, ui.allCount)
+    }
+
+    @Test fun childSessions_areGroupedByParent_inChildrenByParent_neverAtTopLevel() {
+        val state = AppState(
+            sessions = listOf(
+                session("parent", updated = now, title = "Parent"),
+                session("c1", updated = now - 1_000, parentID = "parent", title = "Child 1"),
+                session("c2", updated = now, parentID = "parent", title = "Child 2"),
+                session("orphan", updated = now, parentID = "missing"),
+                session("top", updated = now, title = "Top"),
+            ),
+        )
+        val ui = project(state)
+
+        // Top-level list keeps only the parents (parentID == null); children never appear.
+        assertEquals(listOf("parent", "top"), ui.ids())
+        assertEquals(2, ui.allCount)
+
+        // The children map keys only parents that have children; the orphan's "missing" parent
+        // is absent from the top-level list, so it is keyed but never reachable from a row —
+        // that's fine (the row looks up children by its own id, which isn't "missing").
+        assertEquals(listOf("parent", "missing"), ui.childrenByParent.keys.toList())
+
+        // The parent's children are both present, recency-ordered (newest first).
+        val parentChildren = ui.childrenByParent["parent"]
+        assertNotNull(parentChildren)
+        assertEquals(listOf("c2", "c1"), parentChildren!!.map { it.id })
+
+        // Children don't appear at the top level even when expanded — they're only in the map.
+        val allTopLevelIds = ui.groups.flatMap { it.sessions }.map { it.id }.toSet()
+        assertFalse("c1" in allTopLevelIds)
+        assertFalse("c2" in allTopLevelIds)
+        assertFalse("orphan" in allTopLevelIds)
+
+        // A childless parent has no entry in the children map.
+        assertNull(ui.childrenByParent["top"])
+    }
+
+    @Test fun childSessions_keepArchivedChildrenInTheSubtree() {
+        val state = AppState(
+            sessions = listOf(
+                session("parent", updated = now),
+                session("live", updated = now, parentID = "parent"),
+                session("gone", updated = now, archived = 5, parentID = "parent"),
+            ),
+        )
+        val ui = project(state)
+        // Archived top-level sessions move to the archivedCount; but a child's archived flag
+        // doesn't evict it from the subtree — it stays reachable under its parent.
+        val parentChildren = ui.childrenByParent["parent"]
+        assertNotNull(parentChildren)
+        assertEquals(setOf("live", "gone"), parentChildren!!.map { it.id }.toSet())
     }
 
     @Test fun showArchived_returnsOnlyArchived() {

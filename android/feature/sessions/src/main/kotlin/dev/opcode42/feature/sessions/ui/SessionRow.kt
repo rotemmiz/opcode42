@@ -3,6 +3,7 @@ package dev.opcode42.feature.sessions.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,8 @@ import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -149,11 +152,21 @@ internal fun SessionRow(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     progress: () -> Float = { 1f },
+    /** Sub-agent children of this session (parentID == session.id); empty means no subtree. */
+    children: List<Session> = emptyList(),
+    /** Open a child session — tapped on an indented child row in the expanded subtree. */
+    onOpenChild: (Session) -> Unit = {},
+    /** sessionID → active, for highlighting the child row that is currently open. */
+    activeChildId: String? = null,
+    /** sessionID → status string, for the subtree children's busy spinner. */
+    childStatuses: Map<String, String> = emptyMap(),
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var expanded by remember(session.id) { mutableStateOf(false) }
     val needsInput = pendingPermission != null || pendingQuestion != null
     val busy = isSessionBusy(status)
     val accent = Secondary // hoisted: a @Composable token can't be read inside a draw/offset lambda
+    val hasChildren = children.isNotEmpty()
 
     val open by remember { derivedStateOf { progress() > 0.5f } }
     val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
@@ -178,108 +191,140 @@ internal fun SessionRow(
         }
     )
 
-    androidx.compose.material3.SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = open && !showArchived,
-        enableDismissFromEndToStart = open,
-        backgroundContent = {
-            val direction = dismissState.dismissDirection
-            val color = when (direction) {
-                androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.secondaryContainer
-                androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
-                else -> Color.Transparent
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(color)
-                    .padding(horizontal = 20.dp),
-                contentAlignment = if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
-                    Alignment.CenterStart
+    // The row is a vertical stack: the swipe-dismissable parent row, then (when expanded) the
+    // subagent subtree as a sibling. Wrapping both in one Column keeps them stacked inside the
+    // single LazyColumn item slot, and keeps the subtree OUTSIDE SwipeToDismissBox so a child
+    // swipe never triggers the parent's archive/delete.
+    Column(modifier.fillMaxWidth()) {
+        androidx.compose.material3.SwipeToDismissBox(
+            state = dismissState,
+            enableDismissFromStartToEnd = open && !showArchived,
+            enableDismissFromEndToStart = open,
+            backgroundContent = {
+                val direction = dismissState.dismissDirection
+                val color = when (direction) {
+                    androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.secondaryContainer
+                    androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
+                    else -> Color.Transparent
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(color)
+                        .padding(horizontal = 20.dp),
+                    contentAlignment = if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
+                        Alignment.CenterStart
+                    } else {
+                        Alignment.CenterEnd
+                    }
+                ) {
+                    if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
+                        Icon(
+                            Icons.Default.Archive,
+                            contentDescription = "Archive",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    } else if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            // The swipe-dismissable content is the PARENT ROW ONLY. The subagent subtree is
+            // rendered as a sibling below the SwipeToDismissBox (see the outer Column) so swiping
+            // a child row does NOT archive/delete the parent — the dismiss gesture is scoped to
+            // the parent row.
+            Box(Modifier.fillMaxWidth()) {
+                if (compact) {
+                    CompactRailRow(
+                        session = session,
+                        isActive = isActive,
+                        busy = busy,
+                        needsInput = needsInput,
+                        accent = accent,
+                        progress = progress,
+                        onClick = onClick,
+                        onLongPress = { showMenu = true },
+                        hasChildren = hasChildren,
+                        expanded = expanded,
+                        onToggleExpand = { expanded = !expanded },
+                        pendingPermission = pendingPermission,
+                        pendingQuestion = pendingQuestion,
+                        onApprove = onApprove,
+                        onDeny = onDeny,
+                        onReply = onReply,
+                        onSkip = onSkip,
+                    )
                 } else {
-                    Alignment.CenterEnd
-                }
-            ) {
-                if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
-                    Icon(
-                        Icons.Default.Archive,
-                        contentDescription = "Archive",
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    FullListRow(
+                        session = session,
+                        isActive = isActive,
+                        busy = busy,
+                        needsInput = needsInput,
+                        onClick = onClick,
+                        onLongPress = { showMenu = true },
+                        hasChildren = hasChildren,
+                        expanded = expanded,
+                        onToggleExpand = { expanded = !expanded },
+                        pendingPermission = pendingPermission,
+                        pendingQuestion = pendingQuestion,
+                        onApprove = onApprove,
+                        onDeny = onDeny,
+                        onReply = onReply,
+                        onSkip = onSkip,
                     )
-                } else if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = MaterialTheme.colorScheme.onErrorContainer
-                    )
                 }
-            }
-        },
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Box(Modifier.fillMaxWidth()) {
-            if (compact) {
-                CompactRailRow(
-                    session = session,
-                    isActive = isActive,
-                    busy = busy,
-                    needsInput = needsInput,
-                    accent = accent,
-                    progress = progress,
-                    onClick = onClick,
-                    onLongPress = { showMenu = true },
-                    pendingPermission = pendingPermission,
-                    pendingQuestion = pendingQuestion,
-                    onApprove = onApprove,
-                    onDeny = onDeny,
-                    onReply = onReply,
-                    onSkip = onSkip,
-                )
-            } else {
-                FullListRow(
-                    session = session,
-                    isActive = isActive,
-                    busy = busy,
-                    needsInput = needsInput,
-                    onClick = onClick,
-                    onLongPress = { showMenu = true },
-                    pendingPermission = pendingPermission,
-                    pendingQuestion = pendingQuestion,
-                    onApprove = onApprove,
-                    onDeny = onDeny,
-                    onReply = onReply,
-                    onSkip = onSkip,
-                )
-            }
-            DropdownMenu(
-                expanded = showMenu,
-                onDismissRequest = { showMenu = false },
-                modifier = Modifier.border(androidx.compose.foundation.BorderStroke(1.dp, Hairline), MaterialTheme.shapes.extraSmall)
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Rename session", fontFamily = Opcode42Mono, fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                    onClick = { showMenu = false; onRename() },
-                )
-                DropdownMenuItem(
-                    text = { Text("Fork session", fontFamily = Opcode42Mono, fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.CallSplit, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                    onClick = { showMenu = false; onFork() },
-                )
-                // opencode has no un-archive path, so archive is offered only on active rows.
-                if (!showArchived) {
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.border(androidx.compose.foundation.BorderStroke(1.dp, Hairline), MaterialTheme.shapes.extraSmall)
+                ) {
                     DropdownMenuItem(
-                        text = { Text("Archive session", fontFamily = Opcode42Mono, fontSize = 13.sp) },
-                        leadingIcon = { Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                        onClick = { showMenu = false; onArchive() },
+                        text = { Text("Rename session", fontFamily = Opcode42Mono, fontSize = 13.sp) },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                        onClick = { showMenu = false; onRename() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Fork session", fontFamily = Opcode42Mono, fontSize = 13.sp) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.CallSplit, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                        onClick = { showMenu = false; onFork() },
+                    )
+                    // opencode has no un-archive path, so archive is offered only on active rows.
+                    if (!showArchived) {
+                        DropdownMenuItem(
+                            text = { Text("Archive session", fontFamily = Opcode42Mono, fontSize = 13.sp) },
+                            leadingIcon = { Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            onClick = { showMenu = false; onArchive() },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Delete session", fontFamily = Opcode42Mono, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
+                        onClick = { showMenu = false; onDelete() },
                     )
                 }
-                DropdownMenuItem(
-                    text = { Text("Delete session", fontFamily = Opcode42Mono, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) },
-                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
-                    onClick = { showMenu = false; onDelete() },
-                )
             }
+        }
+        // Expandable subagent subtree — rendered as a sibling BELOW the SwipeToDismissBox so the
+        // parent's swipe-to-dismiss gesture never fires from a child row. The rail fades the
+        // subtree with [progress] so it retracts with the rail; once collapsed the chevron is
+        // hidden (the rail is a 60dp band) and the subtree is not shown. The full list shows it
+        // unconditionally.
+        if (hasChildren && expanded && (!compact || open)) {
+            SubAgentChildren(
+                children = children,
+                statuses = childStatuses,
+                onOpen = onOpenChild,
+                activeChildId = activeChildId,
+                compact = compact,
+                progress = progress,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -297,6 +342,9 @@ private fun CompactRailRow(
     progress: () -> Float,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
+    hasChildren: Boolean,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
     pendingPermission: PermissionRequest?,
     pendingQuestion: QuestionRequest?,
     onApprove: () -> Unit,
@@ -431,6 +479,39 @@ private fun CompactRailRow(
                     Spinner(size = SpinnerBaseDp, color = accent)
                 }
             }
+            // (4) Subagent expand chevron — trailing-right of the open row, held at the open
+            //     width so the row's clipToBounds cuts it off the right edge as the rail narrows
+            //     (same resize-clip as the title). Its alpha rides the [TitleGone]/[TitleRamp]
+            //     window so it only shows while near-open, clearing before the collapsed letter
+            //     fades in. Tapping it (not the row) toggles the subtree. Hidden when no children.
+            //     Seated just left of the busy spinner's open X (or at the trailing edge when idle)
+            //     so the two never collide.
+            if (hasChildren) {
+                val chevronOpenX = if (busy) SpinX1 - 22.dp else RailOpenWidth - 18.dp
+                Box(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .offset {
+                            val s = 24.dp.toPx()
+                            IntOffset(
+                                (chevronOpenX.toPx() - s / 2f).roundToInt(),
+                                ((RailRowBand.toPx() - s) / 2f).roundToInt(),
+                            )
+                        }
+                        .size(24.dp)
+                        .graphicsLayer { alpha = ((progress() - TitleGone) / TitleRamp).coerceIn(0f, 1f) }
+                        .clip(CircleShape)
+                        .clickable(onClick = onToggleExpand),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "Collapse subagents" else "Expand subagents",
+                        tint = OnSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
         }
         // Inline permission/question actions: fade with the rail, then drop once collapsed.
         if (needsInput && open) {
@@ -460,6 +541,9 @@ private fun FullListRow(
     needsInput: Boolean,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
+    hasChildren: Boolean,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
     pendingPermission: PermissionRequest?,
     pendingQuestion: QuestionRequest?,
     onApprove: () -> Unit,
@@ -506,6 +590,24 @@ private fun FullListRow(
                     )
                 }
             }
+            // Subagent expand chevron — trailing-right of the row. Tapping it (not the row)
+            // toggles the indented subtree below. Hidden when the parent has no children.
+            if (hasChildren) {
+                Box(
+                    Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onToggleExpand),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "Collapse subagents" else "Expand subagents",
+                        tint = OnSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
         }
         if (needsInput) {
             SessionPendingActions(
@@ -539,5 +641,82 @@ private fun StatusLeading(busy: Boolean, needsInput: Boolean, isActive: Boolean)
     }
     Box(Modifier.size(12.dp), contentAlignment = Alignment.Center) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(color))
+    }
+}
+
+/**
+ * The indented subagent subtree rendered under an expanded parent row in the rail and the full
+ * list. Each child is a single tappable line: a leading status glyph (spinner when busy, dot
+ * otherwise), the child title, and a faint relative-time/workdir meta. The indentation visually
+ * nests the child under its parent; tapping the row navigates to the child session.
+ *
+ * In the rail the subtree fades with [progress] (it retracts with the rail) and indents less than
+ * in the full list to fit the narrow 220dp band.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SubAgentChildren(
+    children: List<Session>,
+    statuses: Map<String, String>,
+    onOpen: (Session) -> Unit,
+    activeChildId: String?,
+    compact: Boolean,
+    progress: () -> Float = { 1f },
+    modifier: Modifier = Modifier,
+) {
+    val indent = if (compact) 20.dp else 32.dp
+    Column(
+        modifier
+            .fillMaxWidth()
+            .then(if (compact) Modifier.graphicsLayer { alpha = progress() } else Modifier),
+    ) {
+        children.forEach { child ->
+            val busy = isSessionBusy(statuses[child.id])
+            val isActive = child.id == activeChildId
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(onClick = { onOpen(child) })
+                    .padding(start = indent, end = if (compact) 12.dp else 16.dp, top = 6.dp, bottom = 6.dp),
+            ) {
+                if (busy) {
+                    SessionStatusSpinner("busy", Modifier.size(12.dp))
+                } else {
+                    Box(Modifier.size(12.dp), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(if (isActive) Primary else OnSurfaceGhost)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = child.title?.takeIf { it.isNotBlank() } ?: "Subagent",
+                        fontSize = if (compact) 12.5.sp else 13.5.sp,
+                        fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal,
+                        color = if (isActive) OnSurface else OnSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val dir = child.directory?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                    val rel = relativeTime(child.time?.updated ?: child.time?.created ?: 0L)
+                        .takeIf { it.isNotEmpty() }
+                    val meta = listOfNotNull(rel, dir).joinToString(" · ").takeIf { it.isNotEmpty() }
+                    if (meta != null) {
+                        Text(
+                            text = meta,
+                            fontSize = 11.sp,
+                            color = OnSurfaceFaint,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
     }
 }

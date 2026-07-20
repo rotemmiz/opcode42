@@ -123,6 +123,10 @@ fun SessionBrowser(
             onSkip = { question?.let { onSkipQuestion(it.id) } },
             compact = compact,
             progress = progress,
+            children = uiState.childrenByParent[session.id].orEmpty(),
+            onOpenChild = onOpen,
+            activeChildId = activeSessionId,
+            childStatuses = uiState.statuses,
         )
     }
 

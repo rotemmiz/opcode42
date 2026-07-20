@@ -56,6 +56,13 @@ data class SessionListUiState(
     val pendingPermissions: Map<String, PermissionRequest> = emptyMap(),
     /** sessionID → first pending question, for an inline reply field in the menu. */
     val pendingQuestions: Map<String, QuestionRequest> = emptyMap(),
+    /**
+     * parentID → child sessions (the sub-agent `task` spawn of a parent turn). Children are
+     * always excluded from the top-level list (they carry `parentID`); this map surfaces them so
+     * a parent row in the rail can render an expandable subtree of its subagents. Recency-ordered
+     * within each parent; an entry exists only for parents that have at least one child.
+     */
+    val childrenByParent: Map<String, List<Session>> = emptyMap(),
     val isLoading: Boolean = false,
     val error: String? = null,
     /** Active server host:port (scheme stripped) for the rail footer, e.g. "10.0.2.2:4096". */
@@ -102,6 +109,16 @@ internal fun projectSessionList(
     // implementation detail of the parent turn, not user-initiated sessions.
     val topLevel = inputs.sessions.filter { it.parentID == null }
     val (archived, active) = topLevel.partition { it.isArchived }
+
+    // Sub-agent children keyed by their parent, recency-ordered, for the rail's expandable
+    // subtree. Children are never top-level (filtered above); archived children are kept so a
+    // parent that has archived a spawn still shows it under its subtree.
+    val childrenByParent: Map<String, List<Session>> = inputs.sessions
+        .filter { it.parentID != null }
+        .groupBy { it.parentID!! }
+        .mapValues { (_, kids) ->
+            kids.sortedByDescending { it.time?.updated ?: it.time?.created ?: 0L }
+        }
 
     val statuses = inputs.sessionStatus
     // First pending request per session — the menu shows one actionable affordance per row.
@@ -151,6 +168,7 @@ internal fun projectSessionList(
         statuses = statuses,
         pendingPermissions = pendingPermissions,
         pendingQuestions = pendingQuestions,
+        childrenByParent = childrenByParent,
     )
 }
 
