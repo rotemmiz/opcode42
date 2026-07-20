@@ -191,46 +191,54 @@ internal fun SessionRow(
         }
     )
 
-    androidx.compose.material3.SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = open && !showArchived,
-        enableDismissFromEndToStart = open,
-        backgroundContent = {
-            val direction = dismissState.dismissDirection
-            val color = when (direction) {
-                androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.secondaryContainer
-                androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
-                else -> Color.Transparent
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(color)
-                    .padding(horizontal = 20.dp),
-                contentAlignment = if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
-                    Alignment.CenterStart
-                } else {
-                    Alignment.CenterEnd
+    // The row is a vertical stack: the swipe-dismissable parent row, then (when expanded) the
+    // subagent subtree as a sibling. Wrapping both in one Column keeps them stacked inside the
+    // single LazyColumn item slot, and keeps the subtree OUTSIDE SwipeToDismissBox so a child
+    // swipe never triggers the parent's archive/delete.
+    Column(modifier.fillMaxWidth()) {
+        androidx.compose.material3.SwipeToDismissBox(
+            state = dismissState,
+            enableDismissFromStartToEnd = open && !showArchived,
+            enableDismissFromEndToStart = open,
+            backgroundContent = {
+                val direction = dismissState.dismissDirection
+                val color = when (direction) {
+                    androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.secondaryContainer
+                    androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
+                    else -> Color.Transparent
                 }
-            ) {
-                if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
-                    Icon(
-                        Icons.Default.Archive,
-                        contentDescription = "Archive",
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                } else if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = MaterialTheme.colorScheme.onErrorContainer
-                    )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(color)
+                        .padding(horizontal = 20.dp),
+                    contentAlignment = if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
+                        Alignment.CenterStart
+                    } else {
+                        Alignment.CenterEnd
+                    }
+                ) {
+                    if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
+                        Icon(
+                            Icons.Default.Archive,
+                            contentDescription = "Archive",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    } else if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
                 }
-            }
-        },
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.fillMaxWidth()) {
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            // The swipe-dismissable content is the PARENT ROW ONLY. The subagent subtree is
+            // rendered as a sibling below the SwipeToDismissBox (see the outer Column) so swiping
+            // a child row does NOT archive/delete the parent — the dismiss gesture is scoped to
+            // the parent row.
             Box(Modifier.fillMaxWidth()) {
                 if (compact) {
                     CompactRailRow(
@@ -301,21 +309,22 @@ internal fun SessionRow(
                     )
                 }
             }
-            // Expandable subagent subtree — children indented under the parent, each tappable.
-            // The rail fades the subtree with [progress] so it retracts with the rail; once
-            // collapsed the parent's chevron is hidden (the rail is a 60dp band) and the subtree is
-            // not shown. The full list shows it unconditionally.
-            if (hasChildren && expanded && (!compact || open)) {
-                SubAgentChildren(
-                    children = children,
-                    statuses = childStatuses,
-                    onOpen = onOpenChild,
-                    activeChildId = activeChildId,
-                    compact = compact,
-                    progress = progress,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+        }
+        // Expandable subagent subtree — rendered as a sibling BELOW the SwipeToDismissBox so the
+        // parent's swipe-to-dismiss gesture never fires from a child row. The rail fades the
+        // subtree with [progress] so it retracts with the rail; once collapsed the chevron is
+        // hidden (the rail is a 60dp band) and the subtree is not shown. The full list shows it
+        // unconditionally.
+        if (hasChildren && expanded && (!compact || open)) {
+            SubAgentChildren(
+                children = children,
+                statuses = childStatuses,
+                onOpen = onOpenChild,
+                activeChildId = activeChildId,
+                compact = compact,
+                progress = progress,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
