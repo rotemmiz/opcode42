@@ -7,7 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -269,7 +269,7 @@ fun QuestionCard(
         modifier = modifier,
         leading = {
             Icon(
-                Icons.Default.HelpOutline,
+                Icons.AutoMirrored.Filled.HelpOutline,
                 contentDescription = null,
                 tint = HeaderPurple,
                 modifier = Modifier.size(16.dp),
@@ -551,7 +551,7 @@ private fun ResolvedQuestionRow(
             .padding(horizontal = 12.dp),
     ) {
         Icon(
-            Icons.Default.HelpOutline,
+            Icons.AutoMirrored.Filled.HelpOutline,
             contentDescription = null,
             tint = OnSurfaceFaint,
             modifier = Modifier.size(16.dp),

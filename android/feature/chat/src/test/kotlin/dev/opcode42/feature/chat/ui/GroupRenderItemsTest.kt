@@ -87,6 +87,19 @@ class GroupRenderItemsTest {
     }
 
     @Test
+    fun questionToolPart_isHiddenFromRows() {
+        val parts: List<Part> = listOf(
+            toolPart("t1", "question"),
+            toolPart("t2", "read"),
+        )
+        val items = groupRenderItems(parts)
+        assertEquals(1, items.size)
+        val group = items[0] as RenderItem.Tools
+        assertEquals(1, group.parts.size)
+        assertEquals("t2", group.parts[0].id)
+    }
+
+    @Test
     fun patchPart_becomesRenderItemPatch() {
         val edit = toolPart("t1", "edit", filePath = "src/Foo.kt")
         val patch = patchPart("p1", files = listOf("src/Foo.kt"))
