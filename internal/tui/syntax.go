@@ -41,6 +41,7 @@ package tui
 import (
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"charm.land/lipgloss/v2"
 	chroma "github.com/alecthomas/chroma/v2"
@@ -48,6 +49,14 @@ import (
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
+
+// lexerCache memoizes chooseLexer's result per filenameOrLang. chroma's
+// lexers.Match walks every registered lexer's filename patterns via
+// filepath.Match — O(lexers × patterns) per call — and chooseLexer was
+// being invoked on every diff code line in every View() frame, making it
+// the dominant CPU sink (82% in profiles). The lexer for a filename never
+// changes, so a map keyed by the input string is a safe cache.
+var lexerCache sync.Map // map[string]chroma.Lexer
 
 // tokenColor returns the theme.Color from p.Syntax that corresponds to the
 // given chroma TokenType. The TokenType hierarchy in chroma is represented by
@@ -143,21 +152,27 @@ func tokenStyleBg(tt chroma.TokenType, p theme.Palette, bg theme.Color) lipgloss
 //
 // Never returns nil.
 func chooseLexer(filenameOrLang string) chroma.Lexer {
+	if v, ok := lexerCache.Load(filenameOrLang); ok {
+		return v.(chroma.Lexer)
+	}
+	var l chroma.Lexer
 	// Try as a language name / alias first (fast path for explicit "go", "ts" etc.).
-	if l := lexers.Get(filenameOrLang); l != nil {
-		return chroma.Coalesce(l)
-	}
-	// Try as a filename glob (handles "main.go", "*.ts", full paths).
-	if l := lexers.Match(filenameOrLang); l != nil {
-		return chroma.Coalesce(l)
-	}
-	// For full paths, also try just the base name (e.g. "internal/tui/model.go" → "model.go").
-	if base := filepath.Base(filenameOrLang); base != filenameOrLang {
-		if l := lexers.Match(base); l != nil {
-			return chroma.Coalesce(l)
+	if g := lexers.Get(filenameOrLang); g != nil {
+		l = chroma.Coalesce(g)
+	} else if m := lexers.Match(filenameOrLang); m != nil {
+		// Try as a filename glob (handles "main.go", "*.ts", full paths).
+		l = chroma.Coalesce(m)
+	} else if base := filepath.Base(filenameOrLang); base != filenameOrLang {
+		// For full paths, also try just the base name (e.g. "internal/tui/model.go" → "model.go").
+		if m2 := lexers.Match(base); m2 != nil {
+			l = chroma.Coalesce(m2)
 		}
 	}
-	return chroma.Coalesce(lexers.Fallback)
+	if l == nil {
+		l = chroma.Coalesce(lexers.Fallback)
+	}
+	lexerCache.Store(filenameOrLang, l)
+	return l
 }
 
 // highlightCode syntax-highlights code using chroma, themed from the given
