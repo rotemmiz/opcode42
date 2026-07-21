@@ -278,7 +278,7 @@ func (m Model) diffView() string {
 
 	width, height := m.width, m.height
 	if width <= 0 {
-		width = maxContentWidth
+		width = m.contentWidth()
 	}
 	if height <= 0 {
 		height = 24

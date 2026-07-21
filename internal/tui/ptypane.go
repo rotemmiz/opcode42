@@ -104,7 +104,7 @@ func resizePTYCmd(ctx context.Context, c *opcode42client.Opcode42Client, id stri
 func (m Model) ptyGridSize() (cols, rows int) {
 	cols = m.leftColumnWidth()
 	if cols <= 0 {
-		cols = maxContentWidth
+		cols = m.width
 	}
 	rows = m.height / ptyFraction
 	if rows < ptyMinRows {

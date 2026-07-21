@@ -383,7 +383,7 @@ func buildStyleConfig(p theme.Palette) gansi.StyleConfig {
 // live TermRenderer instances.
 func newMarkdownRenderer(p theme.Palette, width int) (*glamour.TermRenderer, error) {
 	if width <= 0 {
-		width = maxContentWidth
+		width = 80
 	}
 	return glamour.NewTermRenderer(
 		glamour.WithStyles(buildStyleConfig(p)),
