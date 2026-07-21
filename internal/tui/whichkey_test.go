@@ -207,6 +207,56 @@ func TestWhichKeyOverlay_FullWidth(t *testing.T) {
 	}
 }
 
+// TestWhichKeyOverlay_NoWrapAtCommonWidths asserts the strip is always a
+// single line (height=1) across a range of screen widths. The strip is
+// rendered at the bottom row (whichKeyLayerHeight=1); a wrap would overflow
+// into the composer and break the layer-height-1 assumption. The strip
+// truncates with " …" when the chord list doesn't fit, so narrow terminals
+// see fewer chords (the most frequent first) but never a wrapped strip.
+func TestWhichKeyOverlay_NoWrapAtCommonWidths(t *testing.T) {
+	for _, w := range []int{10, 15, 20, 30, 40, 60, 80, 100, 120, 160, 200} {
+		m := New(Config{URL: "http://x"})
+		m.screen = ScreenSession
+		m.width, m.height = w, 24
+		m.leader = true
+		view := m.whichKeyView()
+		if h := lipgloss.Height(view); h != 1 {
+			t.Errorf("width=%d: whichKeyView height=%d, want 1 (strip must not wrap). content:\n%s", w, h, stripANSI(view))
+		}
+	}
+}
+
+// TestWhichKeyOverlay_TruncatesAtNarrowWidths asserts the strip truncates
+// with " …" when the chord list doesn't fit, and that the most frequent
+// chords are shown first (whichKeyChords is ordered by frequency). At a
+// narrow width (e.g. 40 cols) the strip shows fewer chords than at a wide
+// width (e.g. 320 cols, where all 24 chords fit).
+func TestWhichKeyOverlay_TruncatesAtNarrowWidths(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m.screen = ScreenSession
+	m.leader = true
+
+	m.width, m.height = 40, 24
+	narrow := stripANSI(m.whichKeyView())
+	if !strings.Contains(narrow, "…") {
+		t.Errorf("at width=40 the strip should truncate with '…'; got:\n%s", narrow)
+	}
+
+	m.width, m.height = 320, 24
+	wide := stripANSI(m.whichKeyView())
+	if strings.Contains(wide, "…") {
+		t.Errorf("at width=320 the strip should show all chords (no '…'); got:\n%s", wide)
+	}
+
+	// The narrow strip should show fewer chords than the wide strip. We
+	// count " · " separators as a proxy for the chord count.
+	narrowCount := strings.Count(narrow, " · ")
+	wideCount := strings.Count(wide, " · ")
+	if narrowCount >= wideCount {
+		t.Errorf("narrow strip should show fewer chords than wide: narrow=%d wide=%d", narrowCount, wideCount)
+	}
+}
+
 // TestWhichKeyOverlay_Position asserts the overlay layer is positioned at the
 // bottom of the screen (Y = height - 1) and X = 0.
 func TestWhichKeyOverlay_Position(t *testing.T) {
@@ -252,6 +302,24 @@ func TestHelpModal_ContainsAllKeybinds(t *testing.T) {
 	} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("help modal missing %q in:\n%s", want, plain)
+		}
+	}
+}
+
+// TestHelpModal_NoRowWraps asserts every helpRow fits within the modal panel's
+// inner width (52 cols) so the surfaceRow Width(52) doesn't wrap a row into
+// multiple lines (which would break the panel layout with stray wrapped rows).
+// This pins helpRows() against the panel width budget — a row > 52 chars
+// wraps under lipgloss Width(52) and shows as an extra line.
+func TestHelpModal_NoRowWraps(t *testing.T) {
+	const innerWidth = 52 // modal panel width (56) minus 2×Padding(1,2)
+	for i, row := range helpRows() {
+		// The rendered row is " "+row (modalView prepends a leading space).
+		// lipgloss.Width counts visible runes; ANSI escapes (none in
+		// helpRows — it's plain text) would not count.
+		w := lipgloss.Width(" " + row)
+		if w > innerWidth {
+			t.Errorf("helpRows[%d] width %d > innerWidth %d (would wrap): %q", i, w, innerWidth, row)
 		}
 	}
 }

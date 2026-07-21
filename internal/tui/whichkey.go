@@ -67,6 +67,14 @@ var whichKeyChords = []whichKeyChord{
 // strip is height-1 + a leading "ctrl+x — " prefix so the user sees what
 // armed the overlay.
 //
+// When the chord list doesn't fit the screen width (24 chords is a lot for a
+// narrow terminal), the strip is truncated to the chords that fit and ends
+// with an ellipsis — a which-key overlay must be a single line (it replaces
+// the status bar's row), and truncation is cleaner than wrapping (a wrapped
+// strip would overlap the composer and break the layer-height-1 assumption).
+// The most frequent chords are listed first (whichKeyChords is ordered by
+// frequency), so narrow terminals still see the most useful chords.
+//
 // Returns "" when the leader is not armed (the caller gates the layer on
 // m.leader, but this guard makes whichKeyView safe to call unconditionally).
 func (m Model) whichKeyView() string {
@@ -74,25 +82,60 @@ func (m Model) whichKeyView() string {
 		return ""
 	}
 	s := m.styles
+	prefix := s.Base.Render("ctrl+x") + s.Faint.Render(" — ")
+	// Build "key label" pairs joined by " · " until the next pair would
+	// overflow the screen width. The strip is prefixed by "ctrl+x — " and
+	// suffixed by a possible " …" truncation marker, so the budget is
+	// width - prefixWidth - ellipsisWidth. Each pair is "key label" (the
+	// key + a space + the label); the separator is " · ".
+	width := m.width
+	if width < 1 {
+		width = 1
+	}
+	ellipsis := s.Faint.Render(" …")
+	prefixW := lipgloss.Width(prefix)
+	ellipsisW := lipgloss.Width(ellipsis)
+	if prefixW+ellipsisW >= width {
+		// Too narrow for even the prefix + ellipsis — just render the
+		// prefix truncated to the width. The overlay still reads as
+		// "ctrl+x — …" (a hint that the leader is armed, even if the
+		// chord list can't be shown).
+		return s.Surface(s.P.BgElev).Width(width).Render(prefix)
+	}
 	var b strings.Builder
-	b.WriteString(s.Base.Render("ctrl+x"))
-	b.WriteString(s.Faint.Render(" — "))
+	b.WriteString(prefix)
+	shown := 0
 	for i, c := range whichKeyChords {
+		pair := s.Base.Render(c.key) + s.Faint.Render(" ") + s.Base.Render(c.label)
+		sep := ""
 		if i > 0 {
-			b.WriteString(s.Faint.Render(" · "))
+			sep = s.Faint.Render(" · ")
 		}
-		b.WriteString(s.Base.Render(c.key))
-		b.WriteString(s.Faint.Render(" "))
-		b.WriteString(s.Base.Render(c.label))
+		// The truncation ellipsis (" …") is appended when we stop, so the
+		// budget for the last shown pair must include it (unless we're
+		// showing every chord, in which case no ellipsis is appended).
+		// For the first pair we also require the ellipsis budget when more
+		// chords remain (which is always true for the first pair — the
+		// table has 24 entries, so showing only the first means truncation).
+		withPair := lipgloss.Width(b.String()) + lipgloss.Width(sep) + lipgloss.Width(pair)
+		needEllipsis := i < len(whichKeyChords)-1
+		if needEllipsis && withPair+ellipsisW > width {
+			break
+		}
+		if !needEllipsis && withPair > width {
+			break
+		}
+		b.WriteString(sep)
+		b.WriteString(pair)
+		shown++
+	}
+	if shown < len(whichKeyChords) {
+		b.WriteString(ellipsis)
 	}
 	row := b.String()
 	// Surface fill: paint every cell with BgElev so the strip reads as an
 	// owned overlay on any terminal (plan 08c M8 Tier 0 fill rule). Width is
 	// the full screen so the strip replaces the status bar's row cleanly.
-	width := m.width
-	if width < 1 {
-		width = 1
-	}
 	return s.Surface(s.P.BgElev).Width(width).Render(row)
 }
 
