@@ -107,10 +107,13 @@ func TestSubagentFooter_ChildAndParent(t *testing.T) {
 	m := withSubagents()
 	m.width, m.height = 100, 30
 
-	// Parent view: an invitation to descend.
+	// Parent view: a recent-count label + an invitation to descend. The
+	// children have no status info (no task parts, no loaded messages), so
+	// activeCount is 0 and the label falls back to "N recent" — matching
+	// opencode's two-count model (plan 17 §E1).
 	pf := m.subagentFooterView(80)
-	if !strings.Contains(pf, "2 sub-agents") || !strings.Contains(pf, "enter") {
-		t.Fatalf("parent footer = %q, want '2 sub-agents … enter'", pf)
+	if !strings.Contains(pf, "2 recent") || !strings.Contains(pf, "enter") {
+		t.Fatalf("parent footer = %q, want '2 recent … enter'", pf)
 	}
 
 	// Child view: label + position among siblings + parent nav.

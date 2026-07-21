@@ -245,6 +245,8 @@ func (m Model) sidebarView() string {
 				glyph, col = frame, s.P.Accent()
 			case "error":
 				glyph, col = "✗", s.P.Red
+			case "cancelled":
+				glyph, col = "○", s.P.FgFaint
 			case "completed":
 				glyph, col = "✓", s.P.Green
 			default:
