@@ -61,6 +61,7 @@ type diffState struct {
 	err      error
 	source   diffSource         // session (default) or working tree (ctrl+x s)
 	leader   bool               // ctrl+x pressed inside the reviewer, awaiting the chord key
+	gen      int                // load generation: a stale diffLoadedMsg (from a prior source/toggle) is discarded
 	files    []SnapshotFileDiff // sorted by path on load
 	treeRows []diffRow          // flattened tree, cached on load (files-only dependency)
 	sel      int                // selected file index (into files)
@@ -70,7 +71,11 @@ type diffState struct {
 }
 
 // diffLoadedMsg carries a diff (session or working-tree) into the reviewer.
+// gen ties the response to the load that issued it so a stale fetch (e.g. from
+// a prior source before a ctrl+x s toggle) is discarded rather than populating
+// the reviewer with the wrong source's files.
 type diffLoadedMsg struct {
+	gen   int
 	files []SnapshotFileDiff
 	err   error
 }
@@ -80,8 +85,9 @@ type diffLoadedMsg struct {
 // source is sourceWorkingTree it fetches GET /vcs/diff?directory=<dir>&mode=git
 // instead (plan 08e §E1); directory comes from the resolved config and may be
 // empty (the daemon falls back to its cwd). Both paths return the same
-// SnapshotFileDiff shape, so the loaded handler is unchanged.
-func loadDiffCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID, directory string, source diffSource) tea.Cmd {
+// SnapshotFileDiff shape, so the loaded handler is unchanged. gen stamps the
+// returned msg so the handler can discard a stale fetch (from a prior source).
+func loadDiffCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID, directory string, source diffSource, gen int) tea.Cmd {
 	return func() tea.Msg {
 		var files []SnapshotFileDiff
 		var err error
@@ -91,7 +97,7 @@ func loadDiffCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionI
 		default:
 			err = c.GetJSON(ctx, "/session/"+sessionID+"/diff", &files)
 		}
-		return diffLoadedMsg{files: files, err: err}
+		return diffLoadedMsg{gen: gen, files: files, err: err}
 	}
 }
 
@@ -102,18 +108,21 @@ func (m Model) openDiff() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.diff = diffState{open: true, loading: true, source: sourceSession, showTree: !m.diffTreeHidden, folded: map[int]bool{}}
-	return m, loadDiffCmd(m.ctx, m.client, m.cfg.SessionID, m.cfg.Directory, sourceSession)
+	m.diff.gen = 1
+	return m, loadDiffCmd(m.ctx, m.client, m.cfg.SessionID, m.cfg.Directory, sourceSession, m.diff.gen)
 }
 
 // reloadDiff re-fetches the reviewer's current source (used after a source
-// toggle). The reviewer must already be open.
+// toggle). The reviewer must already be open. Bumps gen so a fetch in flight
+// from the prior source is discarded on arrival.
 func (m Model) reloadDiff() (Model, tea.Cmd) {
+	m.diff.gen++
 	m.diff.loading = true
 	m.diff.err = nil
 	m.diff.files = nil
 	m.diff.treeRows = nil
 	m.diff.sel, m.diff.scroll = 0, 0
-	return m, loadDiffCmd(m.ctx, m.client, m.cfg.SessionID, m.cfg.Directory, m.diff.source)
+	return m, loadDiffCmd(m.ctx, m.client, m.cfg.SessionID, m.cfg.Directory, m.diff.source, m.diff.gen)
 }
 
 // handleDiffKey routes keys while the diff reviewer is open.

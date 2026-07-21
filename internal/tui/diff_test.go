@@ -143,6 +143,24 @@ func TestDiffLoaded_Error(t *testing.T) {
 	}
 }
 
+// TestDiffLoaded_DiscardsStaleGen asserts a diffLoadedMsg whose gen does not
+// match m.diff.gen is discarded — the correctness guard for a rapid ctrl+x s
+// toggle where a fetch from the prior source is still in flight (plan 08e §E1).
+func TestDiffLoaded_DiscardsStaleGen(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m.diff = diffState{open: true, loading: true, source: sourceSession, gen: 2, folded: map[int]bool{}}
+	// A response stamped with the prior gen (1) must not populate the reviewer.
+	m, _ = step(t, m, diffLoadedMsg{gen: 1, files: []SnapshotFileDiff{{File: "stale.go"}}})
+	if len(m.diff.files) != 0 || !m.diff.loading {
+		t.Fatalf("stale-gen load should be discarded: files=%d loading=%v", len(m.diff.files), m.diff.loading)
+	}
+	// A response with the current gen (2) populates as usual.
+	m, _ = step(t, m, diffLoadedMsg{gen: 2, files: []SnapshotFileDiff{{File: "fresh.go"}}})
+	if len(m.diff.files) != 1 || m.diff.files[0].File != "fresh.go" {
+		t.Fatalf("current-gen load should populate: %+v", m.diff.files)
+	}
+}
+
 func TestOpenDiff_RequiresSession(t *testing.T) {
 	m := New(Config{URL: "http://x"}) // no session
 	nm, cmd := m.openDiff()
@@ -600,7 +618,7 @@ func TestLoadDiffCmd_WorkingTree(t *testing.T) {
 	defer rs.srv.Close()
 	c, _ := opcode42client.New(rs.srv.URL, opcode42client.Options{HTTPClient: rs.srv.Client()})
 
-	cmd := loadDiffCmd(context.Background(), c, "ses_1", "/repo", sourceWorkingTree)
+	cmd := loadDiffCmd(context.Background(), c, "ses_1", "/repo", sourceWorkingTree, 1)
 	msg := cmd()
 	loaded, ok := msg.(diffLoadedMsg)
 	if !ok {
@@ -624,7 +642,7 @@ func TestLoadDiffCmd_Session(t *testing.T) {
 	defer rs.srv.Close()
 	c, _ := opcode42client.New(rs.srv.URL, opcode42client.Options{HTTPClient: rs.srv.Client()})
 
-	cmd := loadDiffCmd(context.Background(), c, "ses_1", "/repo", sourceSession)
+	cmd := loadDiffCmd(context.Background(), c, "ses_1", "/repo", sourceSession, 1)
 	msg := cmd()
 	loaded, ok := msg.(diffLoadedMsg)
 	if !ok {
