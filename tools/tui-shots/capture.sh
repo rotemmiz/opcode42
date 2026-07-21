@@ -78,6 +78,12 @@ echo "▶ setting up opencode daemon + fixture …"
 ensure_fixture
 start_daemon
 
+# 00-splash.tape points opcode-tui at a separate empty daemon (port 4200) with
+# --dir ./fixture-empty so no session auto-opens. fixture-empty is a gitignored
+# dir marker (see .gitignore); create it so the TUI's working-directory probe
+# doesn't fail. The empty daemon's XDG dirs are inline in the tape.
+mkdir -p fixture-empty
+
 # ── 3. Capture each mode ─────────────────────────────────────────────────────
 for MODE in "${MODES[@]}"; do
   echo "▶ capturing mode=$MODE"
