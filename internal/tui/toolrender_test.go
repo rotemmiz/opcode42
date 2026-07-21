@@ -206,37 +206,158 @@ func TestToggleToolCollapse_FlipsState(t *testing.T) {
 
 // ── 4. Reasoning fold ─────────────────────────────────────────────────────────
 
-func TestThinking_CollapsedOneLiner(t *testing.T) {
+// TestThinking_HideCollapsesReasoning asserts that hide mode (hideThinking ==
+// true, the default) renders a 1-line "+ Thought" header without the body, and
+// that ctrl+x f expands the body under the header (plan 17 §D1 acceptance).
+func TestThinking_HideCollapsesReasoning(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.width = 80
+	// hide mode is the default; make it explicit for test clarity.
+	m.view.hideThinking = true
 	m.view.expandedThinking = false
-	out := m.thinking("This is my reasoning\nsecond line\nthird line")
-	// Collapsed: should start with ▸ Thought and only show the first line.
-	if !strings.Contains(out, "▸ Thought") {
-		t.Errorf("collapsed thinking should contain '▸ Thought', got: %q", out)
+	p := Part{
+		ID:   "prt_r1",
+		Type: "reasoning",
+		Text: "This is my reasoning\nsecond line\nthird line",
+		Time: PartTime{Start: 1000, End: 2500},
 	}
-	if !strings.Contains(out, "This is my reasoning") {
-		t.Errorf("collapsed thinking should show first line, got: %q", out)
+	out := m.renderReasoning(p)
+	plain := stripANSI(out)
+	// Hide mode + collapsed: should start with "+ Thought" and show the
+	// duration in the header. The body should NOT appear.
+	if !strings.Contains(plain, "+ Thought") {
+		t.Errorf("hide-mode reasoning should contain '+ Thought' header, got: %q", plain)
 	}
-	// Must NOT contain the second line in collapsed mode.
-	if strings.Contains(out, "second line") {
-		t.Errorf("collapsed thinking should NOT show second line, got: %q", out)
+	if !strings.Contains(plain, "1.5s") {
+		t.Errorf("hide-mode reasoning should show duration '1.5s' in header, got: %q", plain)
+	}
+	// Body should NOT appear in hide mode + collapsed.
+	if strings.Contains(plain, "second line") {
+		t.Errorf("hide-mode collapsed reasoning should NOT show body, got: %q", plain)
+	}
+
+	// ctrl+x f flips expandedThinking — body should now appear under the
+	// header (still in hide mode).
+	m.view.expandedThinking = true
+	out2 := m.renderReasoning(p)
+	plain2 := stripANSI(out2)
+	if !strings.Contains(plain2, "+ Thought") {
+		t.Errorf("hide-mode expanded reasoning should still contain '+ Thought' header, got: %q", plain2)
+	}
+	if !strings.Contains(plain2, "second line") {
+		t.Errorf("hide-mode expanded reasoning should show body, got: %q", plain2)
 	}
 }
 
-func TestThinking_ExpandedShowsFullText(t *testing.T) {
+// TestThinking_ShowModeShowsBody asserts that show mode (hideThinking == false)
+// always renders the header + body regardless of expandedThinking (plan 17 §D1
+// acceptance — opencode's full-TUI showThinking = createMemo(() => true)).
+func TestThinking_ShowModeShowsBody(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.width = 80
-	m.view.expandedThinking = true
-	out := m.thinking("First thought\nSecond thought\nThird thought")
-	// Expanded: ▾ header + full body.
-	if !strings.Contains(out, "▾ Thought") {
-		t.Errorf("expanded thinking should contain '▾ Thought', got: %q", out)
+	m.view.hideThinking = false
+	m.view.expandedThinking = false
+	p := Part{
+		ID:   "prt_r1",
+		Type: "reasoning",
+		Text: "First thought\nSecond thought\nThird thought",
+		Time: PartTime{Start: 1000, End: 2500},
+	}
+	out := m.renderReasoning(p)
+	plain := stripANSI(out)
+	if !strings.Contains(plain, "+ Thought") {
+		t.Errorf("show-mode reasoning should contain '+ Thought' header, got: %q", plain)
 	}
 	for _, want := range []string{"First thought", "Second thought", "Third thought"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("expanded thinking should contain %q, got: %q", want, out)
+		if !strings.Contains(plain, want) {
+			t.Errorf("show-mode reasoning should contain %q in body, got: %q", want, plain)
 		}
+	}
+}
+
+// TestThinking_ShowsDurationWhenDone asserts that a finalized reasoning part
+// (Time.End != 0) renders the duration in the header (plan 17 §D4 acceptance).
+// Covers each Locale.duration branch (ms, s, m+s, h+m) so a regression in
+// formatDuration is caught at the boundary.
+func TestThinking_ShowsDurationWhenDone(t *testing.T) {
+	cases := []struct {
+		name string
+		ms   int64
+		want string
+	}{
+		{"milliseconds", 500, "500ms"},
+		{"seconds", 1500, "1.5s"},
+		{"minutes+seconds", 65_000, "1m 5s"},
+		{"hours+minutes", 3_600_000 + 5*60_000, "1h 5m"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := New(Config{URL: "http://x"})
+			m.width = 80
+			m.view.hideThinking = false
+			p := Part{
+				ID:   "prt_r1",
+				Type: "reasoning",
+				Text: "Reasoned about the prompt.",
+				Time: PartTime{Start: 0, End: tc.ms},
+			}
+			out := m.renderReasoning(p)
+			plain := stripANSI(out)
+			if !strings.Contains(plain, "+ Thought") {
+				t.Errorf("done reasoning should contain '+ Thought' header, got: %q", plain)
+			}
+			if !strings.Contains(plain, tc.want) {
+				t.Errorf("done reasoning header should contain duration %q, got: %q", tc.want, plain)
+			}
+		})
+	}
+}
+
+// TestThinking_StreamShowsSpinner asserts that a streaming reasoning part
+// (Time.End == 0) renders the "Thinking" spinner header rather than the static
+// "Thought · duration" header (plan 17 §D4 acceptance).
+func TestThinking_StreamShowsSpinner(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m.width = 80
+	m.view.hideThinking = false
+	p := Part{
+		ID:   "prt_r1",
+		Type: "reasoning",
+		Text: "Reasoning in progress…",
+		// Time.End == 0 → still streaming.
+		Time: PartTime{Start: 1000},
+	}
+	out := m.renderReasoning(p)
+	plain := stripANSI(out)
+	if !strings.Contains(plain, "Thinking") {
+		t.Errorf("streaming reasoning should contain 'Thinking' header, got: %q", plain)
+	}
+	// A streaming part should not show the static "Thought" header or a
+	// duration yet — those only appear when the part finalizes.
+	if strings.Contains(plain, "+ Thought") {
+		t.Errorf("streaming reasoning should NOT show the static '+ Thought' header, got: %q", plain)
+	}
+}
+
+// TestReasoning_RedactedStripped asserts that [REDACTED] placeholders are
+// stripped from the reasoning body before rendering (plan 17 §D5 acceptance).
+func TestReasoning_RedactedStripped(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m.width = 80
+	m.view.hideThinking = false
+	p := Part{
+		ID:   "prt_r1",
+		Type: "reasoning",
+		Text: "Some [REDACTED] reasoning [REDACTED] text.",
+		Time: PartTime{Start: 1000, End: 2000},
+	}
+	out := m.renderReasoning(p)
+	plain := stripANSI(out)
+	if strings.Contains(plain, "[REDACTED]") {
+		t.Errorf("[REDACTED] should be stripped from reasoning, got: %q", plain)
+	}
+	if !strings.Contains(plain, "Some") || !strings.Contains(plain, "reasoning") || !strings.Contains(plain, "text") {
+		t.Errorf("non-redacted text should remain, got: %q", plain)
 	}
 }
 

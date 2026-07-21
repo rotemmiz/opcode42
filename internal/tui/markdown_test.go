@@ -24,6 +24,7 @@ package tui
 // in TTY but gracefully skip when lipgloss disables color (TERM=dumb / CI).
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -302,5 +303,175 @@ func TestBuildStyleConfig_NoNilPointerPanic(t *testing.T) {
 				t.Errorf("theme %q: Document.BackgroundColor is nil (expected Bg color)", named.Name)
 			}
 		})
+	}
+}
+
+// TestSplitMarkdownBlocks covers the incremental cache's block splitter
+// (plan 17 §D3). A "stable block" is one or more non-blank lines followed by
+// a blank line; the trailing partial block (no trailing blank line) is the
+// "streaming block". Empty text yields no blocks and no streaming tail.
+func TestSplitMarkdownBlocks(t *testing.T) {
+	cases := []struct {
+		name      string
+		text      string
+		stable    []string
+		streaming string
+	}{
+		{
+			name:      "empty",
+			text:      "",
+			stable:    nil,
+			streaming: "",
+		},
+		{
+			name:      "one block streaming",
+			text:      "# H1",
+			stable:    nil,
+			streaming: "# H1",
+		},
+		{
+			name:      "one block finalized",
+			text:      "# H1\n\n",
+			stable:    []string{"# H1"},
+			streaming: "",
+		},
+		{
+			name:      "two blocks one streaming",
+			text:      "# H1\n\nbody para\n\nstill streaming…",
+			stable:    []string{"# H1", "body para"},
+			streaming: "still streaming…",
+		},
+		{
+			name:      "two blocks both streaming",
+			text:      "# H1\n\nbody para",
+			stable:    []string{"# H1"},
+			streaming: "body para",
+		},
+		{
+			name:      "leading blanks collapsed",
+			text:      "\n\n# H1\n\nbody",
+			stable:    []string{"# H1"},
+			streaming: "body",
+		},
+		{
+			name:      "code fence mid-stream",
+			text:      "# H1\n\n```go\nfunc foo() {",
+			stable:    []string{"# H1"},
+			streaming: "```go\nfunc foo() {",
+		},
+		{
+			name: "code fence with internal blank line",
+			text: "# H1\n\n```go\nfunc foo() {\n\nbar()\n}\n```\n\nAfter fence.",
+			// The blank line inside the fence does NOT split it; the whole
+			// fence finalizes as one stable block at the blank line AFTER
+			// the closing ```. The heading is its own stable block (the
+			// blank between "# H1" and the opening ``` is OUTSIDE the
+			// fence). "After fence." is the streaming block.
+			stable:    []string{"# H1", "```go\nfunc foo() {\n\nbar()\n}\n```"},
+			streaming: "After fence.",
+		},
+		{
+			name: "unclosed code fence keeps blank lines in streaming block",
+			text: "```go\nfunc foo() {\n\nbar()\n}\n",
+			// No closing ``` → inFence stays true → no blank-line split →
+			// the whole text is the streaming block (no stable blocks).
+			stable:    nil,
+			streaming: "```go\nfunc foo() {\n\nbar()\n}\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stable, streaming := splitMarkdownBlocks(tc.text)
+			if len(stable) != len(tc.stable) {
+				t.Errorf("stable: got %v, want %v", stable, tc.stable)
+			}
+			for i, want := range tc.stable {
+				if i >= len(stable) || stable[i] != want {
+					t.Errorf("stable[%d]: got %q, want %q", i, stable[i], want)
+				}
+			}
+			if streaming != tc.streaming {
+				t.Errorf("streaming: got %q, want %q", streaming, tc.streaming)
+			}
+		})
+	}
+}
+
+// TestRenderMarkdownStreaming_ServesStableFromCache asserts the incremental
+// streaming path (plan 17 §D3) caches stable blocks and only re-renders the
+// trailing streaming block on each call. A second render of the same growing
+// text should hit the cache for stable blocks; the only re-render is the
+// streaming tail (hashed one-shot in mdCache).
+func TestRenderMarkdownStreaming_ServesStableFromCache(t *testing.T) {
+	m := testModelForTheme(t, "opcode42-dark")
+	const partID = "prt_stream_test"
+	text := "# H1\n\nFirst para.\n\nSecond para."
+	// First call: renders stable "# H1" + streaming "First para.\n\nSecond para.".
+	out1 := m.renderMarkdownStreaming(partID, text)
+	if out1 == "" {
+		t.Fatal("first render returned empty string")
+	}
+	// The cache should now have one stable-block entry (blockIdx=0).
+	if _, ok := m.mdBlockCache[mdBlockCacheKey{partID: partID, blockIdx: 0, width: m.contentWidth(), themeName: m.themeName}]; !ok {
+		t.Error("expected stable block 0 to be cached after first render")
+	}
+	// Second call with grown text: the existing stable block should serve
+	// from cache; the new trailing streaming block re-renders.
+	grown := "# H1\n\nFirst para.\n\nSecond para.\n\nThird para streaming."
+	out2 := m.renderMarkdownStreaming(partID, grown)
+	plain1, plain2 := stripANSI(out1), stripANSI(out2)
+	for _, want := range []string{"H1", "First para", "Second para", "Third para streaming"} {
+		if !strings.Contains(plain2, want) {
+			t.Errorf("grown render missing %q: %q", want, plain2)
+		}
+	}
+	// The first render must not have contained the third para (it wasn't
+	// there yet) — sanity check that the cache key actually changes.
+	if strings.Contains(plain1, "Third para streaming") {
+		t.Error("first render should not contain content appended later")
+	}
+}
+
+// BenchmarkRenderMarkdown_StreamingPart benchmarks the incremental streaming
+// cache (plan 17 §D3) over a growing text — the scenario where the full-text
+// mdCache misses every frame and would produce O(n²) re-parses. We append one
+// stable block per iteration and measure the marginal render cost; sub-
+// quadratic scaling after the incremental cache means the per-iteration time
+// should stay roughly constant (each iteration only re-renders the new
+// streaming block, stable blocks serve from the cache).
+//
+// Run with: go test -bench=BenchmarkRenderMarkdown_StreamingPart ./internal/tui/
+func BenchmarkRenderMarkdown_StreamingPart(b *testing.B) {
+	m := New(Config{URL: "http://x"})
+	m.width = 80
+	m.height = 40
+	m = m.applyThemeByName("opcode42-dark")
+	const partID = "prt_bench"
+	// Build a text that grows by one stable block per iteration. Each
+	// iteration appends "\n\nPara N." so the prior para finalizes as a
+	// stable block and the new para becomes the streaming tail.
+	var text string
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		text += "\n\nPara " + strconv.Itoa(i) + "."
+		_ = m.renderMarkdownStreaming(partID, text)
+	}
+}
+
+// BenchmarkRenderMarkdown_FullTextCache benchmarks the full-text cache path
+// (renderMarkdown) for comparison. The full-text path re-renders the whole
+// text on every cache miss (every delta), so this is the O(n²) baseline the
+// incremental path is meant to avoid. We don't assert a ratio here — the
+// benchmark output itself shows the difference when run head-to-head.
+func BenchmarkRenderMarkdown_FullTextCache(b *testing.B) {
+	m := New(Config{URL: "http://x"})
+	m.width = 80
+	m.height = 40
+	m = m.applyThemeByName("opcode42-dark")
+	var text string
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		text += "\n\nPara " + strconv.Itoa(i) + "."
+		_ = m.renderMarkdown(text)
 	}
 }

@@ -4,17 +4,30 @@ package tui
 // collapse state (plan 08c M7). Timestamps are omitted — the TUI store doesn't
 // carry per-message time — leaving the toggles backed by data the renderer has.
 type viewState struct {
-	hideThinking bool // hide reasoning ("Thought …") lines
-	hideTools    bool // hide tool rows (collapse all tool output)
+	// hideThinking is the opencode full-TUI ThinkingMode toggle
+	// (tui/context/thinking.ts:4 — type ThinkingMode = "show" | "hide").
+	// Default true ("hide"): reasoning parts render as a 1-line header
+	// while the body is hidden, preserving the reasoning's *presence* in the
+	// conversation record (plan 17 §D1 — matching opencode's full TUI, NOT
+	// the run mini-TUI which drops the part entirely).
+	// Toggled by ctrl+x r.
+	hideThinking bool
+
+	// expandedThinking corresponds to opencode's per-ReasoningPart `expanded`
+	// signal (tui/routes/session/index.tsx:1577). In hide mode the body is
+	// collapsed to the 1-line header; expandedThinking flips the body open
+	// (still under the hide-mode header). Toggled by ctrl+x f. In show mode
+	// the body is always shown and expandedThinking is a no-op (show mode
+	// renders header + body unconditionally, like opencode's
+	// !inMinimal() || expanded()).
+	expandedThinking bool
+
+	hideTools bool // hide tool rows (collapse all tool output)
 
 	// collapsedTools tracks tool part IDs whose output panel is collapsed.
 	// Keys are Part.ID strings; an absent entry means "expanded" (default).
 	// Populated by toggleToolCollapse (plan 08c M7).
 	collapsedTools map[string]bool
-
-	// expandedThinking, when true, shows the full reasoning text instead of
-	// the one-liner "Thought …" summary (plan 08c M7). Default is collapsed.
-	expandedThinking bool
 
 	// bgPulse toggles the ambient background pulse behind the splash logo
 	// (plan 08e §B2). On by default for the splash; turned off when the

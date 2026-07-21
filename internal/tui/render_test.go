@@ -43,7 +43,21 @@ func seededSessionModel(t *testing.T) Model {
 }
 
 func TestRenderSession_ShowsAllBlockKinds(t *testing.T) {
-	out := seededSessionModel(t).renderView()
+	m := seededSessionModel(t)
+	// Plan 17 §D1: reasoning now always renders a header (hide mode) or
+	// header+body (show mode). Set show mode explicitly so the test asserts
+	// the body content ("Thought" header is always present; the body is the
+	// distinguishing factor between hide and show). The seeded reasoning
+	// part has no Time.End so it renders as a streaming spinner — set a
+	// finalized Time so the static "+ Thought" header shows.
+	m.view.hideThinking = false
+	for i, p := range m.store.parts["msg_2"] {
+		if p.Type == "reasoning" {
+			p.Time = PartTime{Start: 1000, End: 2500}
+			m.store.parts["msg_2"][i] = p
+		}
+	}
+	out := m.renderView()
 	// Strip ANSI escapes before substring search: prose() now renders via
 	// glamour which emits SGR codes in TTY environments.  The text content is
 	// still present; stripping lets Contains find it reliably.
@@ -52,7 +66,7 @@ func TestRenderSession_ShowsAllBlockKinds(t *testing.T) {
 	for _, want := range []string{
 		"Fix the bug",          // session title
 		"fix the failing test", // user turn
-		"Thought",              // reasoning line (collapsed one-liner header)
+		"Thought",              // reasoning header (show mode: "+ Thought")
 		"Read",                 // tool header (per-tool name, capitalised by toolHeader)
 		"main_test.go",         // salient arg extracted from input.filePath
 		"All green now.",       // assistant prose

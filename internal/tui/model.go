@@ -191,7 +191,20 @@ type Model struct {
 	// Key: (SHA-256 of text, content width, theme name).  Invalidated naturally
 	// by the theme name component: a theme switch produces cache misses and new
 	// entries for the new theme; old entries become unreachable and are GC'd.
+	// Also hosts the trailing streaming-block entries used by the incremental
+	// streaming path (renderMarkdownStreaming) — the streaming block is hashed
+	// per-frame and cached for the duration of one delta.
 	mdCache mdCache
+
+	// mdBlockCache is the per-stable-block incremental cache for streaming
+	// markdown (plan 17 §D3). Key: (partID, blockIdx, width, theme). A growing
+	// part's text is split into stable blocks (blank-line-terminated) + a
+	// trailing streaming block; stable blocks are rendered once and served
+	// from this cache, only the streaming block re-renders each frame. This
+	// mirrors opencode's commitMarkdownBlocks + _stableBlockCount
+	// (run/scrollback.surface.ts:287-305) and avoids the O(n²) re-parse a
+	// full-text cache would incur on every delta.
+	mdBlockCache mdBlockCache
 
 	// diffCache is the rendered inline-diff cache for completed edit/apply_patch
 	// tools (plan 17 Workstream C). Diffs arrive complete at phase=final and are
@@ -300,6 +313,12 @@ func New(cfg Config) Model {
 	// sessionCreatedMsg / sessionsLoadedMsg / forkedMsg) and back on when
 	// all sessions are closed (sessionDeletedMsg re-enters the splash).
 	m.view.bgPulse = true
+	// hideThinking defaults to true (collapsed) — matches opencode's full
+	// TUI default ("hide", tui/context/thinking.ts:36). Reasoning parts
+	// still render a 1-line "+ Thought: <title> · <duration>" header so the
+	// user sees that reasoning happened; the body is hidden until toggled
+	// (plan 17 §D1).
+	m.view.hideThinking = true
 	// --no-anim: freeze the logo and bg-pulse at their peak frame for
 	// deterministic screenshot capture (tools/tui-shots) and accessibility.
 	m.noAnim = cfg.NoAnim
@@ -996,6 +1015,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(listenCmd(m.stream), reconcilePendingCmd(m.ctx, m.client))
 
 	case sseEventMsg:
+		// Plan 17 §D2 — deferred token write is event-driven, NOT a 100ms
+		// tick: SSE deltas accumulate in store.Part.Text between View() calls,
+		// and Bubble Tea re-renders on each sseEventMsg (event-driven). The
+		// deferral is the event-loop batching between renders, NOT the 100ms
+		// animTick — the animTick (spinner.go) drives only animation (spinner,
+		// logo, toasts), not token flush. No explicit coalescing queue is
+		// needed because Bubble Tea's event-driven re-render already batches
+		// whatever arrived. opencode's coalescing drain is `queueMicrotask`
+		// (run/footer.ts:560) — sub-millisecond; the effective streaming
+		// cadence is "as fast as the event loop + surface settle allow."
 		m.eventCount++
 		prevQ := questionID(m.pendingQuestion())
 		// Plan 08e §E4: when a local question reply is in flight (qReplying),
@@ -1449,12 +1478,28 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.status = "nothing to copy"
 		return m, nil
 	case "r":
+		// ctrl+x r toggles the ThinkingMode collapse/expand (plan 17 §D1):
+		// hideThinking == true → "hide" mode (1-line "Thought" header, body
+		// hidden); false → "show" mode (header + body always render). This is
+		// NOT a hard drop — reasoning parts always render at least the header
+		// (matching opencode's full TUI showThinking = createMemo(() => true),
+		// tui/routes/session/index.tsx:254). The status hint uses the
+		// opencode ThinkingMode vocabulary ("show" / "hide") rather than the
+		// on/off toggle style other display toggles use.
 		m.view.hideThinking = !m.view.hideThinking
-		m.status = toggleHint("thinking", !m.view.hideThinking)
+		if m.view.hideThinking {
+			m.status = "thinking: hide"
+		} else {
+			m.status = "thinking: show"
+		}
 		return m, nil
 	case "f":
-		// Toggle the expanded/collapsed state of the reasoning block (plan 08c M7).
-		// ctrl+x r hides thinking entirely; ctrl+x f expands/collapses the full text.
+		// ctrl+x f toggles the per-reasoning expanded signal (plan 17 §D1):
+		// in hide mode the body is collapsed to the 1-line header; flipping
+		// expandedThinking opens the body under the hide-mode header. In
+		// show mode the body always renders and this toggle is a no-op
+		// (opencode's ReasoningHeader ignores `open` when toggleable is
+		// false — index.tsx:1594-1597, 1657-1659).
 		m.view.expandedThinking = !m.view.expandedThinking
 		if m.view.expandedThinking {
 			m.status = "thought: expanded"
