@@ -164,7 +164,10 @@ func (m Model) recordLocalAnsweredQuestion(id string) Model {
 	}
 	// Build the full answers: durable prior steps + the current step's
 	// selection. finalAnswers leaves qAnswers untouched, so this is safe even
-	// if the caller goes on to resetQuestion().
+	// if the caller goes on to resetQuestion(). The curQuestion() == nil branch
+	// is defensive (qIdx out of range); shouldn't happen on the reply path, but
+	// if it does we keep the durably-recorded prior steps plus an empty final
+	// step (mirrors stepAnswer's nil return when qSel is out of range).
 	var answers [][]string
 	if info := m.curQuestion(); info != nil {
 		answers = m.finalAnswers(info)
@@ -188,7 +191,7 @@ func (m Model) recordLocalAnsweredQuestion(id string) Model {
 // to the answered-state card). Blue accent matches the overlay border.
 func (m Model) questionCardView() string {
 	q := m.pendingQuestion()
-	if q == nil {
+	if q == nil || len(q.Questions) == 0 {
 		return ""
 	}
 	s := m.styles
@@ -197,11 +200,9 @@ func (m Model) questionCardView() string {
 	if width > cw {
 		width = cw
 	}
-	var lines []string
-	for _, info := range q.Questions {
-		lines = append(lines, m.questionCardLines(info, width)...)
-		break // the pending card shows the first (current) sub-question only
-	}
+	// The pending card shows the first (current) sub-question only — the
+	// overlay handles stepping through the rest.
+	lines := m.questionCardLines(q.Questions[0], width)
 	lines = append(lines, s.Faint.Render("enter to answer · r reject"))
 	card := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
