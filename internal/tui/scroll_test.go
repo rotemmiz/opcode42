@@ -41,7 +41,7 @@ func frameRows(s string) []string { return strings.Split(s, "\n") }
 func TestView_NeverExceedsViewport(t *testing.T) {
 	m := longSessionModel(t)
 	for _, off := range []int{0, 3, 9, 1000} {
-		m.scrollOffset = off
+		m.scroll.Offset = off
 		rows := frameRows(m.renderView())
 		if len(rows) != m.height {
 			t.Fatalf("scrollOffset=%d: got %d rows, want exactly %d (overflow → terminal scrolls everything)", off, len(rows), m.height)
@@ -58,14 +58,11 @@ func TestView_NeverExceedsViewport(t *testing.T) {
 // bottom row regardless of scroll position (it must not scroll with the stream).
 func TestView_FooterPinnedAcrossScroll(t *testing.T) {
 	m := longSessionModel(t)
-	// The status bar contains the connection state; use a stable marker from it.
-	wantMarker := stripANSI(m.statusBarView(m.leftColumnWidth()))
-	wantMarker = strings.TrimSpace(strings.SplitN(wantMarker, "·", 2)[0]) // e.g. "connecting…"/dot+state
-	if wantMarker == "" {
-		t.Skip("no stable status marker to assert")
-	}
+	// The status bar always ends with the command hint; assert on that stable
+	// token rather than spacing that shifts with the column's inner width.
+	const wantMarker = "ctrl+p commands"
 	bottomFor := func(off int) string {
-		m.scrollOffset = off
+		m.scroll.Offset = off
 		rows := frameRows(m.renderView())
 		// Search the last 3 rows (composer + status bar live at the very bottom).
 		return stripANSI(strings.Join(rows[len(rows)-3:], "\n"))
@@ -80,9 +77,9 @@ func TestView_FooterPinnedAcrossScroll(t *testing.T) {
 // earlier transcript rows that the live-tail view does not.
 func TestView_ScrollChangesStreamContent(t *testing.T) {
 	m := longSessionModel(t)
-	m.scrollOffset = 0
+	m.scroll.Offset = 0
 	tail := stripANSI(m.renderView())
-	m.scrollOffset = 1000 // large offset → clamped to the top of the transcript
+	m.scroll.Offset = 1000 // large offset → clamped to the top of the transcript
 	back := stripANSI(m.renderView())
 	if tail == back {
 		t.Fatal("scrolling changed nothing — stream is not scrollable")
@@ -94,5 +91,41 @@ func TestView_ScrollChangesStreamContent(t *testing.T) {
 	}
 	if !strings.Contains(back, early) {
 		t.Errorf("scrolled-to-top view does not reveal the earliest row %q", early)
+	}
+}
+
+// TestKeyScroll_PageAndCtrlArrowsScroll verifies the stream scrolls on keys the
+// composer never consumes (pgup/pgdn, ctrl+↑/↓), and that ↓ can't pass the tail.
+func TestKeyScroll_PageAndCtrlArrowsScroll(t *testing.T) {
+	m := longSessionModel(t)
+	m, _ = step(t, m, key("pgup"))
+	m, _ = step(t, m, key("ctrl+up"))
+	if m.scroll.Offset != 2*scrollStep {
+		t.Fatalf("pgup+ctrl+up: Offset=%d want %d", m.scroll.Offset, 2*scrollStep)
+	}
+	m, _ = step(t, m, key("pgdown"))
+	if m.scroll.Offset != scrollStep {
+		t.Fatalf("pgdown: Offset=%d want %d", m.scroll.Offset, scrollStep)
+	}
+	m, _ = step(t, m, key("ctrl+down"))
+	m, _ = step(t, m, key("ctrl+down"))
+	if m.scroll.Offset != 0 || !m.scroll.AtTail() {
+		t.Fatalf("ctrl+down past tail: Offset=%d want 0", m.scroll.Offset)
+	}
+}
+
+// TestKeyScroll_PlainArrowsAreInputBoxOnly pins the constraint that the input box
+// is untouched: plain ↑/↓ drive history recall / the composer, never the stream
+// scroll.
+func TestKeyScroll_PlainArrowsAreInputBoxOnly(t *testing.T) {
+	m := longSessionModel(t)
+	m.history = []string{"earlier prompt"}
+	m.histIdx = -1
+	m, _ = step(t, m, key("up"))
+	if m.scroll.Offset != 0 {
+		t.Fatalf("plain ↑ scrolled the stream: Offset=%d want 0 (input box only)", m.scroll.Offset)
+	}
+	if m.input.Value() != "earlier prompt" {
+		t.Fatalf("plain ↑ did not recall history: got %q", m.input.Value())
 	}
 }

@@ -17,6 +17,7 @@ import (
 
 	"github.com/rotemmiz/opcode42/internal/mdns"
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
+	"github.com/rotemmiz/opcode42/scrollregion"
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
@@ -146,19 +147,19 @@ type Model struct {
 	ac       autocomplete // composer "/" popup state
 
 	// Chrome.
-	agent          string      // active agent (status bar "mode"); empty → default
-	agents         []agentItem // selectable agents (GET /agent)
-	themeName      string      // active theme name (theme switcher)
-	sidebarHidden  bool        // right sidebar visibility (toggle: ctrl+x b)
-	streamWidth    int         // transient: stream column width when the sidebar is shown
-	leader         bool        // ctrl+x leader pressed, awaiting the chord key
-	tasksOpen      bool        // tasks dock visibility (toggle: ctrl+x t)
-	todos          []Todo      // current session's todos (tasks dock)
-	scrollOffset   int         // stream scrollback: lines hidden below the viewport (0 = live tail)
-	view           viewState   // display toggles (timestamps, tool output, thinking)
-	history        []string    // submitted prompts (persisted; recalled with up/down when empty)
-	histIdx        int         // browse cursor into history (-1 = not browsing)
-	persistEnabled bool        // gate local-KV reads/writes (off in tests; on via Restore)
+	agent          string              // active agent (status bar "mode"); empty → default
+	agents         []agentItem         // selectable agents (GET /agent)
+	themeName      string              // active theme name (theme switcher)
+	sidebarHidden  bool                // right sidebar visibility (toggle: ctrl+x b)
+	streamWidth    int                 // transient: stream column width when the sidebar is shown
+	leader         bool                // ctrl+x leader pressed, awaiting the chord key
+	tasksOpen      bool                // tasks dock visibility (toggle: ctrl+x t)
+	todos          []Todo              // current session's todos (tasks dock)
+	scroll         scrollregion.Region // stream scrollback viewport (0 == live tail)
+	view           viewState           // display toggles (timestamps, tool output, thinking)
+	history        []string            // submitted prompts (persisted; recalled with up/down when empty)
+	histIdx        int                 // browse cursor into history (-1 = not browsing)
+	persistEnabled bool                // gate local-KV reads/writes (off in tests; on via Restore)
 
 	// Diff reviewer (plan 08b §1).
 	diff           diffState // full-screen diff reviewer (open == active)
@@ -498,13 +499,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+t":
 			return m.cycleVariant(), nil // cycle model variants (opencode variant_cycle)
 		case "ctrl+up", "pgup":
-			m.scrollOffset += scrollStep
+			// Scroll the stream. These keys never reach the composer, so the
+			// input box behaviour (plain ↑/↓ below) is untouched.
+			m.scroll.Back(scrollStep)
 			return m, nil
 		case "ctrl+down", "pgdown", "pgdn":
-			m.scrollOffset -= scrollStep
-			if m.scrollOffset < 0 {
-				m.scrollOffset = 0
-			}
+			m.scroll.Forward(scrollStep)
 			return m, nil
 		case "up":
 			if nm, ok := m.historyRecall(-1); ok {
@@ -1432,14 +1432,14 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	}
 	m.input.SetValue("")
 	m = m.resizeComposer() // collapse back to one row
-	m.scrollOffset = 0     // a new prompt snaps the stream back to the live tail
+	m.scroll.ToTail()      // a new prompt snaps the stream back to the live tail
 	if m.cfg.SessionID == "" {
 		return m, createSessionCmd(m.ctx, m.client, text)
 	}
 	return m, promptCmd(m.ctx, m.client, m.cfg.SessionID, text, m.model, m.agent)
 }
 
-// scrollStep is the lines moved per scrollback keypress.
+// scrollStep is the lines moved per scrollback keypress (and per wheel notch).
 const scrollStep = 3
 
 // historyRecall walks the prompt history with up (dir -1, older) / down (dir +1,
