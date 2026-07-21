@@ -21,6 +21,7 @@ class CommandDispatchTest {
             TerminalCommand to "openTerminal",
             InfoCommand to "openInfo",
             DiffCommand to "openDiffViewer",
+            TimelineCommand to "openTimeline",
             RenameCommand to "renameSession",
             ForkCommand to "forkSession",
             SummarizeCommand to "summarize",
@@ -45,8 +46,9 @@ class CommandDispatchTest {
     }
 
     @Test
-    fun comingSoonCommandsDoNothing() {
-        for (command in listOf(TimelineCommand)) {
+    fun unimplementedCommandsAreNoOps() {
+        val comingSoon = builtinCommands.filter { !it.implemented }
+        for (command in comingSoon) {
             val rec = RecordingCommandActions()
             command.execute(rec)
             assertTrue("${command.name} should be a no-op", rec.calls.isEmpty())

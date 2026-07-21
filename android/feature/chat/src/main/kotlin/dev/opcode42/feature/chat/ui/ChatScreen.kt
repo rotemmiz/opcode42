@@ -165,6 +165,7 @@ fun ChatScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showArchiveConfirm by remember { mutableStateOf(false) }
     var showDiffViewer by remember { mutableStateOf(false) }
+    var showTimelineSheet by remember { mutableStateOf(false) }
     var showStashSheet by remember { mutableStateOf(false) }
     // The composer's current text, mirrored from PromptInput so the StashSheet can
     // stash it ("Add current") without hoisting the field's voice/attachment state.
@@ -188,6 +189,7 @@ fun ChatScreen(
         override fun openTerminal() { sessionDirectory?.let { onOpenTerminal(it) } }
         override fun openInfo() { showInfoSheet = true }
         override fun openDiffViewer() { showDiffViewer = true }
+        override fun openTimeline() { showTimelineSheet = true }
         override fun renameSession() { showRenameDialog = true }
         override fun forkSession() = viewModel.forkSession { newId -> onNavigateToSession(newId) }
         override fun summarize() = viewModel.summarize()
@@ -728,6 +730,17 @@ fun ChatScreen(
                 diffs = uiState.diffs,
                 changedFiles = uiState.changedFiles,
                 onDismiss = { showDiffViewer = false },
+            )
+        }
+
+        if (showTimelineSheet) {
+            TimelineSheet(
+                messages = uiState.messages,
+                onRevert = { messageId ->
+                    viewModel.revertToMessage(messageId)
+                    showTimelineSheet = false
+                },
+                onDismiss = { showTimelineSheet = false },
             )
         }
 

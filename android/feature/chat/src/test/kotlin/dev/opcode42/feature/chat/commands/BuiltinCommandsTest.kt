@@ -1,13 +1,12 @@
 package dev.opcode42.feature.chat.commands
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BuiltinCommandsTest {
 
-    private val comingSoon = setOf("timeline")
+    private val comingSoon = emptySet<String>()
 
     @Test
     fun registryHasNoDuplicateNames() {
@@ -27,13 +26,9 @@ class BuiltinCommandsTest {
     }
 
     @Test
-    fun comingSoonCommandsAreUnimplementedAndRestImplemented() {
+    fun allBuiltinCommandsAreImplemented() {
         for (cmd in builtinCommands) {
-            if (cmd.name in comingSoon) {
-                assertFalse("${cmd.name} should be unimplemented", cmd.implemented)
-            } else {
-                assertTrue("${cmd.name} should be implemented", cmd.implemented)
-            }
+            assertTrue("${cmd.name} should be implemented", cmd.implemented)
         }
     }
 }

@@ -496,6 +496,21 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /**
+     * `/timeline` → Revert to a turn: `POST /session/{id}/revert` undoes the message's
+     * effects and restores the prior state. The returned [Session] is applied to the store
+     * by the repository; we then reload this session's messages so the stream reflects the
+     * truncated transcript rather than the pre-revert history.
+     */
+    fun revertToMessage(messageId: String) {
+        if (isDraft) return
+        viewModelScope.launch {
+            sessionRepo.revert(sessionId, messageId, directory = directory)
+                .onSuccess { loadMessages() }
+                .onFailure { emitError("revert", it) }
+        }
+    }
+
     /** Overflow → Share: publish a link; the returned session (with share.url) updates the store. */
     fun shareSession() {
         viewModelScope.launch {

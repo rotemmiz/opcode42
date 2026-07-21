@@ -385,6 +385,26 @@ class Opcode42Client @Inject constructor(
         directory = directory,
     ) { json -> (json as? JsonPrimitive)?.booleanOrNull ?: false }
 
+    /**
+     * POST /session/{id}/revert — "Revert a specific message in a session, undoing its
+     * effects and restoring the previous state." (openapi.json:7539, `session.revert`).
+     * [messageId] is required (`^msg`); [partId] is optional (`^prt`). Returns the
+     * updated [Session] — the new state after the revert.
+     */
+    suspend fun revertSession(
+        sessionId: String,
+        messageId: String,
+        partId: String? = null,
+        directory: String? = null,
+    ): Session = transport.post(
+        path = "/session/$sessionId/revert",
+        body = buildJsonObject {
+            put("messageID", messageId)
+            partId?.let { put("partID", it) }
+        },
+        directory = directory,
+    ) { json -> Opcode42Json.decodeFromJsonElement(Session.serializer(), json) }
+
     /** POST /session/{id}/share — publish a shareable link. Returns the session with share.url. */
     suspend fun shareSession(sessionId: String, directory: String? = null): Session = transport.post(
         path = "/session/$sessionId/share",

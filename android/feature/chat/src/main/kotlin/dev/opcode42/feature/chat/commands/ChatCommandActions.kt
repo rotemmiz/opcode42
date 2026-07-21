@@ -31,6 +31,8 @@ interface ChatCommandActions {
     fun openInfo()
     /** `/diff` opens the session diff viewer (working-tree changes or session patches). */
     fun openDiffViewer()
+    /** `/timeline` opens the session timeline (per-turn revert to a prior message). */
+    fun openTimeline()
     fun renameSession()
     fun forkSession()
     fun summarize()

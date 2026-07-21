@@ -49,6 +49,13 @@ interface SessionRepository {
     suspend fun unshare(sessionId: String, directory: String? = null): Result<Session>
     suspend fun summarize(sessionId: String, model: ModelRef, directory: String? = null): Result<Unit>
     suspend fun abort(sessionId: String, directory: String? = null): Result<Unit>
+    /**
+     * Revert a specific message in a session, undoing its effects and restoring the
+     * previous state (openapi `session.revert`). Returns the updated session and
+     * applies it to the store; the caller should reload the session's messages to
+     * reflect the truncated transcript.
+     */
+    suspend fun revert(sessionId: String, messageId: String, partId: String? = null, directory: String? = null): Result<Session>
 
     suspend fun replyPermission(requestId: String, reply: String, message: String? = null): Result<Unit>
     suspend fun replyQuestion(requestId: String, answers: List<List<String>>): Result<Unit>
@@ -144,6 +151,12 @@ class DefaultSessionRepository @Inject constructor(
     override suspend fun abort(sessionId: String, directory: String?): Result<Unit> = resultOf {
         client.abortSession(sessionId, directory)
         Unit
+    }
+
+    override suspend fun revert(sessionId: String, messageId: String, partId: String?, directory: String?): Result<Session> = resultOf {
+        client.revertSession(sessionId, messageId, partId, directory).also {
+            store.dispatch(AppEvent.SessionUpdated(it))
+        }
     }
 
     override suspend fun replyPermission(requestId: String, reply: String, message: String?): Result<Unit> = resultOf {

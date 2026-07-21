@@ -2,7 +2,6 @@ package dev.opcode42.feature.chat.commands
 
 import dev.opcode42.core.model.CommandInfo
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -26,11 +25,11 @@ class PaletteEntryTest {
     }
 
     @Test
-    fun comingSoonEntriesAreDisabledWithSoonBadge() {
+    fun timelineEntryIsEnabledNow() {
         val entries = buildPaletteEntries(builtinCommands, emptyList(), RecordingCommandActions())
         val timeline = entries.first { it.name == "timeline" }
-        assertFalse(timeline.enabled)
-        assertEquals("soon", timeline.badge)
+        assertTrue(timeline.enabled)
+        assertNull(timeline.badge)
     }
 
     @Test
