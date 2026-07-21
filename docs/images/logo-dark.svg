@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Opcode42 brand mark — G15²i two-tone dual-arc asterisk (dark variant).
+
+  Canonical geometry from the design's 160×160 space:
+    - Three outlined capsule arms at 0/60/120° (rounded-rect 14×102, rx 7, stroke 6)
+    - Core punched hollow (r 15) via an even-odd mask so arms don't blob
+    - Dual-arc ring (r 12, stroke 4, round caps):
+        solid top→right arc in ink (#F4F6F8 on dark)
+        muted bottom→left arc in OnSurfaceFaint (#5B6168)
+
+  Vector — scales to any size without the raster blur/thickening of the old PNGs.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 160 160">
+  <!-- Arms: capsule (rounded-rect) paths, drawn as strokes. The center circle
+       is punched out via a mask so the arm tips inside the hollow disappear. -->
+  <g mask="url(#corePunch)" fill="none" stroke="#F4F6F8" stroke-width="6" stroke-linejoin="round">
+    <rect x="73" y="29" width="14" height="102" rx="7" ry="7" transform="rotate(0 80 80)" />
+    <rect x="73" y="29" width="14" height="102" rx="7" ry="7" transform="rotate(60 80 80)" />
+    <rect x="73" y="29" width="14" height="102" rx="7" ry="7" transform="rotate(120 80 80)" />
+  </g>
+  <!-- Mask: white = visible everywhere EXCEPT the center circle (black = hidden). -->
+  <defs>
+    <mask id="corePunch" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="160">
+      <rect x="0" y="0" width="160" height="160" fill="white" />
+      <circle cx="80" cy="80" r="15" fill="black" />
+    </mask>
+  </defs>
+  <!-- Dual-arc ring in the hollow; two distinct colors, round caps. -->
+  <g fill="none" stroke-width="4" stroke-linecap="round">
+    <path d="M80,68 A12,12 0 0 1 92,80" stroke="#F4F6F8" />
+    <path d="M80,92 A12,12 0 0 1 68,80" stroke="#5B6168" />
+  </g>
+</svg>
