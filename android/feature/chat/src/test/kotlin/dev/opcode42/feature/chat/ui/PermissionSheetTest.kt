@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import dev.opcode42.core.design.theme.Opcode42Theme
 import dev.opcode42.core.model.PermissionRequest
 import org.junit.Rule
@@ -30,13 +31,13 @@ class PermissionSheetTest {
         always = always,
     )
 
-    private fun render(permission: PermissionRequest, isReplying: Boolean = false): MutableList<String> {
-        val replies = mutableListOf<String>()
+    private fun render(permission: PermissionRequest, isReplying: Boolean = false): MutableList<Pair<String, String?>> {
+        val replies = mutableListOf<Pair<String, String?>>()
         composeRule.setContent {
             Opcode42Theme {
                 PermissionSheetContent(
                     permission = permission,
-                    onReply = { replies += it },
+                    onReply = { reply, message -> replies += reply to message },
                     isReplying = isReplying,
                 )
             }
@@ -74,24 +75,44 @@ class PermissionSheetTest {
     }
 
     @Test
-    fun denyButton_callsOnReplyReject() {
+    fun denyButton_collapsed_expandsFeedbackFieldWithoutReplying() {
         val replies = render(permission())
         composeRule.onNodeWithText("Deny").performClick()
-        org.junit.Assert.assertEquals(listOf("reject"), replies)
+        // Feedback field + Send button now visible.
+        composeRule.onNodeWithText("Send feedback with deny").assertIsDisplayed()
+        composeRule.onNodeWithText("Send").assertIsDisplayed()
+        org.junit.Assert.assertTrue("Deny-tap on collapsed field must NOT reply", replies.isEmpty())
     }
 
     @Test
-    fun allowOnceButton_callsOnReplyOnce() {
+    fun sendButton_withFeedback_callsRejectWithMessage() {
+        val replies = render(permission())
+        composeRule.onNodeWithText("Deny").performClick()
+        composeRule.onNodeWithText("Send feedback with deny").performTextInput("please don't")
+        composeRule.onNodeWithText("Send").performClick()
+        org.junit.Assert.assertEquals(listOf("reject" to "please don't"), replies)
+    }
+
+    @Test
+    fun sendButton_emptyFeedback_callsRejectWithNullMessage() {
+        val replies = render(permission())
+        composeRule.onNodeWithText("Deny").performClick()
+        composeRule.onNodeWithText("Send").performClick()
+        org.junit.Assert.assertEquals(listOf("reject" to null), replies)
+    }
+
+    @Test
+    fun allowOnceButton_callsOnReplyOnceWithNullMessage() {
         val replies = render(permission())
         composeRule.onNodeWithText("Allow once").performClick()
-        org.junit.Assert.assertEquals(listOf("once"), replies)
+        org.junit.Assert.assertEquals(listOf("once" to null), replies)
     }
 
     @Test
-    fun alwaysButton_callsOnReplyAlways() {
+    fun alwaysButton_callsOnReplyAlwaysWithNullMessage() {
         val replies = render(permission(always = listOf("edit_file")))
         composeRule.onNodeWithText("Always").performClick()
-        org.junit.Assert.assertEquals(listOf("always"), replies)
+        org.junit.Assert.assertEquals(listOf("always" to null), replies)
     }
 
     @Test
@@ -103,5 +124,12 @@ class PermissionSheetTest {
         composeRule.onNodeWithText("Allow once").assertDoesNotExist()
         composeRule.onNodeWithText("Always").performClick()
         // No reply emitted — clicking a disabled button is a no-op.
+    }
+
+    @Test
+    fun isReplying_keepsFeedbackFieldHiddenUntilDenyTap() {
+        render(permission(), isReplying = true)
+        composeRule.onNodeWithText("Send feedback with deny").assertDoesNotExist()
+        composeRule.onNodeWithText("Send").assertDoesNotExist()
     }
 }

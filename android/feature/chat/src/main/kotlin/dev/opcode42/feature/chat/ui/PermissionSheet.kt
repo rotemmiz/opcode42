@@ -26,12 +26,17 @@ import dev.opcode42.core.model.QuestionRequest
  * A8 — Non-dismissible modal sheet for permission.asked events.
  * Three-way reply: Deny / Allow once / Always (the last only when [PermissionRequest.always]
  * is non-empty — older daemons without the `always` field get a two-button row).
+ *
+ * I3 — Deny-with-feedback: the Deny button reveals a collapsible `OutlinedTextField`
+ * ("Send feedback with deny") + a "Send" confirmation. The feedback text is passed as the
+ * `message` param of [onReply] (the wire body's optional `message` field, openapi.json:4952).
+ * Allow once / Always send `message = null` (approvals carry no feedback).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PermissionSheet(
     permission: PermissionRequest,
-    onReply: (String) -> Unit,
+    onReply: (reply: String, message: String?) -> Unit,
     isReplying: Boolean,
 ) {
     ModalBottomSheet(
@@ -45,18 +50,20 @@ fun PermissionSheet(
 }
 
 /**
- * The sheet body (icon + title + patterns + 3-way button row), extracted so it can be
- * tested directly without the [ModalBottomSheet] wrapper — Robolectric does not wire click
- * targets through the sheet's Popup, so unit tests exercise [PermissionSheetContent] and the
- * production sheet wraps it unchanged.
+ * The sheet body (icon + title + patterns + 3-way button row + collapsible feedback field),
+ * extracted so it can be tested directly without the [ModalBottomSheet] wrapper — Robolectric
+ * does not wire click targets through the sheet's Popup, so unit tests exercise
+ * [PermissionSheetContent] and the production sheet wraps it unchanged.
  */
 @Composable
 fun PermissionSheetContent(
     permission: PermissionRequest,
-    onReply: (String) -> Unit,
+    onReply: (reply: String, message: String?) -> Unit,
     isReplying: Boolean,
 ) {
     val showAlways = permission.always.isNotEmpty()
+    var feedbackExpanded by remember { mutableStateOf(false) }
+    var feedbackText by remember { mutableStateOf("") }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -90,7 +97,13 @@ fun PermissionSheetContent(
             modifier = Modifier.fillMaxWidth(),
         ) {
             OutlinedButton(
-                onClick = { onReply("reject") },
+                onClick = {
+                    if (feedbackExpanded) {
+                        onReply("reject", feedbackText.takeIf { it.isNotBlank() })
+                    } else {
+                        feedbackExpanded = true
+                    }
+                },
                 modifier = Modifier.weight(1f),
                 enabled = !isReplying,
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Error),
@@ -106,7 +119,7 @@ fun PermissionSheetContent(
                 }
             }
             Button(
-                onClick = { onReply("once") },
+                onClick = { onReply("once", null) },
                 modifier = Modifier.weight(1f),
                 enabled = !isReplying,
             ) {
@@ -122,10 +135,39 @@ fun PermissionSheetContent(
             }
             if (showAlways) {
                 Button(
-                    onClick = { onReply("always") },
+                    onClick = { onReply("always", null) },
                     modifier = Modifier.weight(1f),
                     enabled = !isReplying,
                 ) { Text("Always") }
+            }
+        }
+        if (feedbackExpanded) {
+            Spacer(Modifier.height(16.dp))
+            OutlinedTextField(
+                value = feedbackText,
+                onValueChange = { feedbackText = it },
+                label = { Text("Send feedback with deny") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 1,
+                maxLines = 4,
+                enabled = !isReplying,
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = { onReply("reject", feedbackText.takeIf { it.isNotBlank() }) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isReplying,
+                colors = ButtonDefaults.buttonColors(contentColor = Error),
+            ) {
+                if (isReplying) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = OnPrimary,
+                    )
+                } else {
+                    Text("Send")
+                }
             }
         }
     }
