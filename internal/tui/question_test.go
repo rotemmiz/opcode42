@@ -280,6 +280,34 @@ func TestQuestionRepliedMsg_DedupsWithSSEEvent(t *testing.T) {
 	}
 }
 
+// TestQuestionRepliedMsg_LocalRejectRecordsSkipped asserts the local reject
+// path (r/esc → rejectQuestionCmd → questionRepliedMsg success) records an
+// answered card with Skipped=true, NOT the highlighted-but-not-submitted
+// labels (plan 08e §E4). The qRejecting flag distinguishes the in-flight
+// action so recordLocalAnsweredQuestion records Skipped for a reject.
+func TestQuestionRepliedMsg_LocalRejectRecordsSkipped(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
+		{Question: "Q", Options: []QuestionOption{opt("a"), opt("b")}},
+	}))
+	// Move to "b" (highlighting it) but reject — the highlight must NOT be
+	// recorded as the answer.
+	m, _ = step(t, m, key("down"))
+	m, _ = step(t, m, key("r")) // reject (qReplying=true, qRejecting=true)
+	m, _ = step(t, m, questionRepliedMsg{id: "qst_1"})
+	got := m.store.answeredQuestions["ses_1"]
+	if len(got) != 1 {
+		t.Fatalf("one answered card expected; got %+v", got)
+	}
+	if !got[0].Skipped {
+		t.Fatal("a local reject should record Skipped=true")
+	}
+	if len(got[0].Answers) != 0 {
+		t.Fatalf("a local reject should not record answers; got %+v", got[0].Answers)
+	}
+}
+
 // TestQuestionRepliedMsg_SSEArrivesFirst_UpgradesWithLabels asserts the
 // out-of-order edge case: if the SSE question.replied event arrives BEFORE the
 // local questionRepliedMsg, the SSE event is deferred (not applied) so the

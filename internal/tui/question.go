@@ -84,6 +84,7 @@ func (m Model) handleQuestionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "r", "esc":
 		m.qReplying = true
+		m.qRejecting = true // plan 08e §E4: record Skipped=true on success
 		return m, rejectQuestionCmd(m.ctx, m.client, q.ID)
 	case "enter":
 		if len(info.Options) == 0 {
@@ -139,7 +140,7 @@ func (m Model) stepAnswer(info *QuestionInfo) []string {
 
 // resetQuestion clears the per-request answer state (after a reply/reject lands).
 func (m Model) resetQuestion() Model {
-	m.qIdx, m.qSel, m.qChecked, m.qAnswers, m.qReplying = 0, 0, nil, nil, false
+	m.qIdx, m.qSel, m.qChecked, m.qAnswers, m.qReplying, m.qRejecting = 0, 0, nil, nil, false, false
 	return m
 }
 
@@ -168,14 +169,19 @@ func (m Model) recordLocalAnsweredQuestion(id string) Model {
 	if q == nil {
 		return m // already gone (e.g. a concurrent reconcile cleared it); nothing to record
 	}
-	// Build the full answers: durable prior steps + the current step's
-	// selection. finalAnswers leaves qAnswers untouched, so this is safe even
-	// if the caller goes on to resetQuestion(). The curQuestion() == nil branch
-	// is defensive (qIdx out of range); shouldn't happen on the reply path, but
-	// if it does we keep the durably-recorded prior steps plus an empty final
-	// step (mirrors stepAnswer's nil return when qSel is out of range).
+	// A reject records Skipped=true (the selected labels are not submitted).
+	// A reply records the specific selected labels (durable prior steps + the
+	// current step's selection). finalAnswers leaves qAnswers untouched, so
+	// this is safe even if the caller goes on to resetQuestion(). The
+	// curQuestion() == nil branch is defensive (qIdx out of range); shouldn't
+	// happen on the reply path, but if it does we keep the durably-recorded
+	// prior steps plus an empty final step (mirrors stepAnswer's nil return
+	// when qSel is out of range).
 	var answers [][]string
-	if info := m.curQuestion(); info != nil {
+	var skipped bool
+	if m.qRejecting {
+		skipped = true
+	} else if info := m.curQuestion(); info != nil {
 		answers = m.finalAnswers(info)
 	} else {
 		answers = append(append([][]string{}, m.qAnswers...), nil)
@@ -183,6 +189,7 @@ func (m Model) recordLocalAnsweredQuestion(id string) Model {
 	m.store = m.store.recordAnsweredQuestion(AnsweredQuestion{
 		ID:        q.ID,
 		SessionID: q.SessionID,
+		Skipped:   skipped,
 		Answers:   answers,
 		Questions: append([]QuestionInfo(nil), q.Questions...),
 	})

@@ -98,6 +98,12 @@ type Model struct {
 	qChecked  []bool     // multi-select toggles for the current question
 	qAnswers  [][]string // accumulated answers (one []label per answered question)
 	qReplying bool       // a question reply/reject is in flight
+	// qRejecting distinguishes the in-flight action: true when the user pressed
+	// r/esc (reject), false when the user pressed enter on the final step
+	// (reply). questionRepliedMsg is the same type for both; this flag tells
+	// recordLocalAnsweredQuestion whether to record the selected labels (reply)
+	// or Skipped=true (reject) — plan 08e §E4.
+	qRejecting bool
 	// qDeferredSSE holds an SSE question.replied/rejected event for OUR own
 	// pending question that arrived while qReplying was true (plan 08e §E4).
 	// The event is deferred so the local reply path (questionRepliedMsg) can
