@@ -49,12 +49,13 @@ import (
 
 // z-ordering for the compositor. Lower draws first (underneath).
 const (
-	zBase    = 0 // the Bg fill
-	zPane    = 1 // sidebar, stream body, footer, composer, dock
-	zPopup   = 2 // autocomplete popup (above the composer, below modals)
-	zOverlay = 5 // in-stream cards (subagent, question) — above panes
-	zToast   = 10
-	zModal   = 20 // modals, permission, question, diff reviewer
+	zBase     = 0 // the Bg fill
+	zPane     = 1 // sidebar, stream body, footer, composer, dock
+	zPopup    = 2 // autocomplete popup (above the composer, below modals)
+	zOverlay  = 5 // in-stream cards (subagent, question) — above panes
+	zToast    = 10
+	zWhichKey = 15 // ctrl+x leader which-key strip (plan 08e §F2) — above toasts, below modals
+	zModal    = 20 // modals, permission, question, diff reviewer
 )
 
 // composeView is the v2 canvas render root, replacing the old renderView +
@@ -107,8 +108,7 @@ func (m Model) composeCanvas() *lipgloss.Canvas {
 	// switch, which never rendered the body under a modal. Only the base Bg
 	// fill + the overlay layers compose, so the fully-covered body work is
 	// avoided and no stale body cells leak around the modal.
-	modalClassActive := m.pendingPermission() != nil || m.pendingQuestion() != nil ||
-		m.diff.open || m.modal != modalNone
+	modalClassActive := m.modalClassActive()
 	var layers []*lipgloss.Layer
 	if !modalClassActive {
 		for _, l := range m.bodyLayers() {
@@ -184,9 +184,9 @@ func (m Model) bodyLayers() []*lipgloss.Layer {
 }
 
 // overlayLayers returns the top-level overlay layers (modals, permission,
-// question, diff, autocomplete, toasts). Only one modal-class overlay is
-// active at a time; we gate each by its active condition so only the
-// visible ones compose. When any modal-class overlay is active the body
+// question, diff, autocomplete, toasts, which-key). Only one modal-class
+// overlay is active at a time; we gate each by its active condition so only
+// the visible ones compose. When any modal-class overlay is active the body
 // layers are skipped upstream in composeCanvas, matching the v1 renderView
 // switch that never rendered the body under a modal.
 func (m Model) overlayLayers() []*lipgloss.Layer {
@@ -197,6 +197,22 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 	// an open modal hides it.
 	if ac := m.autocompleteView(); ac != "" && m.screen == ScreenSession {
 		layers = append(layers, positionedPopup(ac, m.acPopupX(), m.acPopupY(), zPopup))
+	}
+
+	// Which-key overlay (plan 08e §F2): when the ctrl+x leader is armed,
+	// show the chord-options strip at the bottom of the screen (above the
+	// status bar). Z=15: above toasts, below modals. The overlay is gated
+	// on m.leader AND no modal-class overlay being active — a modal open
+	// during a leader (e.g. ctrl+x then a key that opens a modal) clears
+	// the leader in handleLeaderKey, so the two states are mutually
+	// exclusive in practice; the guard is defensive.
+	if m.leader && !m.modalClassActive() {
+		if wkv := m.whichKeyView(); wkv != "" {
+			layers = append(layers, lipgloss.NewLayer(wkv).
+				X(m.whichKeyLayerX()).
+				Y(m.whichKeyLayerY()).
+				Z(zWhichKey))
+		}
 	}
 
 	// Modals / blocking overlays: each renderer already centers itself via
@@ -231,6 +247,17 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 	}
 
 	return layers
+}
+
+// modalClassActive reports whether any modal-class overlay (permission,
+// question, diff reviewer, or a modal) is currently active. Used by the
+// which-key overlay guard to avoid composing the strip under a modal — the
+// leader and a modal are mutually exclusive in practice (handleLeaderKey
+// clears the leader before opening a modal), but the guard is defensive.
+// Also used by composeCanvas to skip the body layers under a modal.
+func (m Model) modalClassActive() bool {
+	return m.pendingPermission() != nil || m.pendingQuestion() != nil ||
+		m.diff.open || m.modal != modalNone
 }
 
 // sessionLayers returns the layers for the session screen: an optional right

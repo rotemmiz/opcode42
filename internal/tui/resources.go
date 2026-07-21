@@ -95,23 +95,70 @@ func loadSkillsCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cm
 	}
 }
 
-// helpRows is the static keybinding/command reference for the help overlay (§E).
+// helpRows is the static keybinding/command reference for the help overlay
+// (plan 08a §E, expanded in plan 08e §F3 to cover the full keybind surface).
+//
+// The rows are grouped by category (Navigation, Sessions & models, Display,
+// Tools & output, Terminal & drafts, Subagents, Global) so the ~40 keybinds
+// the TUI now has are scannable. The width is bounded by the modal panel
+// (truncate(row, 52) in modalItems); the two-column "chord  description"
+// format keeps each row within that bound. The chord keys match
+// handleLeaderKey (model.go) and whichKeyChords (whichkey.go) — the
+// TestHelpModal_ContainsAllKeybinds test pins the major ones.
 func helpRows() []string {
 	return []string{
-		"enter          send prompt",
-		"!              shell mode (run a command, output → context)",
-		"ctrl+j         newline in composer",
-		"ctrl+p         command palette",
-		"ctrl+x l       sessions      ctrl+x n  new session",
-		"ctrl+x m       model         ctrl+x a  agent",
-		"ctrl+x g       timeline      ctrl+x s  status",
-		"ctrl+x b       sidebar       ctrl+x t  tasks",
-		"j / k          move message cursor (↑/↓ also)",
-		"g / G          first / last message",
-		"y              copy selected message",
-		"ctrl+c         quit",
+		"Navigation",
+		"  ↑/↓          scroll stream / recall history",
+		"  pgup/pgdn    scroll stream by a page",
+		"  g / G        first / last message",
+		"  enter        send prompt",
+		"  !            shell mode (run, output → context)",
+		"  esc          exit shell mode / close overlay",
 		"",
-		"Palette: rename · fork · summarize · interrupt · share/unshare ·",
-		"delete · MCP · skills · themes · refresh",
+		"Sessions & models",
+		"  ctrl+p       command palette",
+		"  ctrl+t       cycle model variant",
+		"  ctrl+x l     sessions list",
+		"  ctrl+x n     new session",
+		"  ctrl+x m     switch model",
+		"  ctrl+x a     switch agent",
+		"  ctrl+x p     palette (alt)",
+		"",
+		"Display",
+		"  ctrl+x b     toggle sidebar",
+		"  ctrl+x t     toggle tasks dock",
+		"  ctrl+x g     timeline (revert to a turn)",
+		"  ctrl+x s     status modal",
+		"  ctrl+x c     connect to daemon (mDNS)",
+		"  ctrl+x y     copy last response",
+		"",
+		"Thinking & tools",
+		"  ctrl+x r     hide/show thinking",
+		"  ctrl+x f     fold/unfold thought",
+		"  ctrl+x o     hide/show tool output",
+		"  ctrl+x v     fold/unfold last tool",
+		"",
+		"Terminal & drafts",
+		"  ctrl+x `     embedded terminal (ctrl+] exit)",
+		"  ctrl+x e     edit composer in $EDITOR",
+		"  ctrl+x d     review session changes (diff)",
+		"  ctrl+x w     stash composer draft",
+		"",
+		"Subagents",
+		"  ctrl+x ↓     descend into first child",
+		"  ctrl+x ↑     return to parent session",
+		"  ctrl+x ]     next sibling subagent",
+		"  ctrl+x [     previous sibling subagent",
+		"",
+		"Help & global",
+		"  F1           this help overlay",
+		"  ctrl+x h     this help overlay (alt)",
+		"  /help        this help overlay (slash)",
+		"  ctrl+c       quit",
+		"",
+		"Slash commands",
+		"  /new /sessions /models /agents /themes",
+		"  /timeline /diff /terminal /variant /stash",
+		"  /status /connect /help",
 	}
 }
