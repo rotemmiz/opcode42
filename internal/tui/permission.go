@@ -198,15 +198,22 @@ func (m Model) permissionView() string {
 	if leftW < 1 {
 		leftW = 1
 	}
+	// Plan 18 §B2 (review fix): the panel renders at the gutter-reduced
+	// innerW so it aligns with the stream surface (canvas places it at
+	// X(streamGutter)). The internal stage lines keep their own 1-col pad.
+	innerW := leftW - 2*streamGutter
+	if innerW < 1 {
+		innerW = 1
+	}
 
 	var lines []string
 	switch m.permState.stage {
 	case permStagePermission:
-		lines = m.permissionStageLines(p, leftW)
+		lines = m.permissionStageLines(p, innerW)
 	case permStageAlways:
-		lines = m.permissionAlwaysStageLines(p, leftW)
+		lines = m.permissionAlwaysStageLines(p, innerW)
 	case permStageReject:
-		lines = m.permissionRejectStageLines(leftW)
+		lines = m.permissionRejectStageLines(innerW)
 	}
 
 	// Hint line (matches opencode's footer hint at footer.permission.tsx:457-466).
@@ -218,13 +225,14 @@ func (m Model) permissionView() string {
 	lines = append(lines, s.Faint.Render(hint))
 
 	body := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	// Panel body: full leftW width, BgElev surface bg. The canvas positions
-	// the panel at the bottom of the screen (overlayLayers).
+	// Panel body: innerW width (gutter-reduced), BgElev surface bg. The
+	// canvas positions the panel at X(streamGutter) so the panel surface
+	// aligns with the stream surface (plan 18 §B2 review fix).
 	// Pad to the target height (plan 17 §B1): panelH = base + PERMISSION_ROWS.
 	// opencode's renderer reserves a fixed height regardless of content
 	// (footer.ts:697-722); Opcode42 pads the body to the same height so
 	// the panel is a stable footer region (not content-sized).
-	panel := s.Surface(s.P.BgElev).Width(leftW).Render(body)
+	panel := s.Surface(s.P.BgElev).Width(innerW).Render(body)
 	if h := m.permissionPanelHeight(); h > lipgloss.Height(panel) {
 		panel = padVertical(panel, h, s.P.BgElev)
 	}
@@ -260,9 +268,12 @@ func permEscHint(stage permStage) string {
 
 // permissionStageLines renders the initial permission stage: the title +
 // detail, the inline diff (when present), and the option buttons.
-func (m Model) permissionStageLines(p *Permission, leftW int) []string {
+// panelW is the already-gutter-reduced panel surface width (plan 18 §B2:
+// the canvas places the panel at X(streamGutter); the stage content wraps
+// at panelW minus the panel's own 1-col internal pad).
+func (m Model) permissionStageLines(p *Permission, panelW int) []string {
 	s := m.styles
-	innerW := leftW - 2 // Padding(0,1) → 1 col each side
+	innerW := panelW - 2 // the panel's own 1-col left/right internal pad
 	if innerW < 1 {
 		innerW = 1
 	}
@@ -286,7 +297,7 @@ func (m Model) permissionStageLines(p *Permission, leftW int) []string {
 	// diff (edit/apply_patch tools), render it inline via the shared
 	// renderUnifiedDiff helper from Workstream C.
 	if diff := permissionDiff(*p); diff != "" {
-		if rendered := renderUnifiedDiff(diff, permissionDiffFile(*p), s.P, leftW); rendered != "" {
+		if rendered := renderUnifiedDiff(diff, permissionDiffFile(*p), s.P, innerW); rendered != "" {
 			lines = append(lines, rendered)
 			lines = append(lines, "")
 		}
@@ -301,9 +312,9 @@ func (m Model) permissionStageLines(p *Permission, leftW int) []string {
 // permissionAlwaysStageLines renders the "always" confirmation stage: the
 // patterns that will be allowed, and the Confirm / Cancel buttons
 // (footer.permission.tsx:401-422, 438-447).
-func (m Model) permissionAlwaysStageLines(p *Permission, leftW int) []string {
+func (m Model) permissionAlwaysStageLines(p *Permission, panelW int) []string {
 	s := m.styles
-	innerW := leftW - 2
+	innerW := panelW - 2 // the panel's own 1-col left/right internal pad
 	if innerW < 1 {
 		innerW = 1
 	}
@@ -324,9 +335,9 @@ func (m Model) permissionAlwaysStageLines(p *Permission, leftW int) []string {
 // permissionRejectStageLines renders the reject stage: the prompt + a
 // textarea-like field for the rejection message
 // (footer.permission.tsx:285-342).
-func (m Model) permissionRejectStageLines(leftW int) []string {
+func (m Model) permissionRejectStageLines(panelW int) []string {
 	s := m.styles
-	innerW := leftW - 2
+	innerW := panelW - 2 // the panel's own 1-col left/right internal pad
 	if innerW < 1 {
 		innerW = 1
 	}

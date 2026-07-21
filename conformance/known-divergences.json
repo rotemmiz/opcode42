@@ -147,5 +147,29 @@
     "phase": "D (plan 17)",
     "reason": "TUI (plan 17 §B6): Opcode42 keeps a separate `answeredQuestions` store (store.go:165) for finalized question cards in the scrollback. opencode renders answered Q&A from the tool's structured snapshot (run/tool.ts:607-622 snapQuestion → run/scrollback.writer.tsx:264-287). This is a structural divergence — acceptable for B (Opcode42's tool-snapshot mechanism is not yet wired); when it lands, migrate the answered-question rendering to the tool snapshot and retire the `answeredQuestions` store. The pending-question in-stream card is dropped (plan 17 §B6 — opencode has no pending card; run/tool.ts:827-829 scrollQuestionStart returns \"\"). The wire shapes (question.asked/replied/rejected) are identical.",
     "track": "structural: separate answeredQuestions store (Opcode42) vs tool snapshot (opencode); plan 17 §B6"
+  },
+  {
+    "scenario": "tui-mouse-cell-motion",
+    "phase": "D (plan 18)",
+    "reason": "TUI (plan 18 §A1): Opcode42 enables `MouseModeCellMotion` on the Bubble Tea v2 View (model.go:View), which grabs the mouse from the terminal (click, release, wheel events). opencode's opentui does the same — it re-implements selection in-app. The trade-off: native terminal click-drag selection requires holding Shift while the TUI is running (standard terminal convention for mouse-reporting apps). This is an intentional divergence from a terminal-default (no mouse reporting), matching opencode's full-TUI choice. No wire/daemon impact; TUI-only.",
+    "track": "intentional: MouseModeCellMotion (Opcode42 + opencode) vs terminal-default (native selection)"
+  },
+  {
+    "scenario": "tui-scroll-tail-sticky-only",
+    "phase": "D (plan 18)",
+    "reason": "TUI (plan 18 §A3-simple): Opcode42 implements tail-sticky auto-follow — when the viewport is at the tail (Offset=0), new SSE content keeps it pinned to the tail (sseEventMsg captures wasAtTail before Reduce, calls ToTail after). When the user has scrolled up (Offset>0), the view does NOT content-anchor (Offset is left untouched, so the tail-anchored model shifts slightly as new content arrives). opencode's `<scrollbox stickyScroll={true} stickyStart=\"bottom\">` (index.tsx:1181-1182) is content-anchored (the viewport stays at its scroll position while content grows below). True content-anchored sticky-scroll would require tracking the first-visible-line ID and re-deriving Offset after body growth — deferred to a follow-up workstream (plan 18 §A3). The primary complaint (footer riding scroll) is fixed by the canvas 3-layer split (already on main); this is the 90% solution for the auto-follow behavior.",
+    "track": "deferred: content-anchored scroll-up stickiness (A3-simple ships now, full A3 later)"
+  },
+  {
+    "scenario": "tui-stream-no-width-cap",
+    "phase": "D (plan 18)",
+    "reason": "TUI (plan 18 §A4): Opcode42 removed the `maxContentWidth = 100` cap on the stream column (render.go:contentWidth). The stream now fills the full left column (leftW = m.width - sidebarWidth when sidebar visible, else m.width). opencode has no such cap — the stream is `flexGrow={1}` filling the left column (index.tsx:1165). The 100-col cap was a readability heuristic from plan 08c that predates the sidebar-aware layout. No wire/daemon impact; TUI-only.",
+    "track": "intentional: no cap (Opcode42 + opencode) vs prior 100-col heuristic (plan 08c)"
+  },
+  {
+    "scenario": "tui-panel-gutter-alignment",
+    "phase": "D (plan 18)",
+    "reason": "TUI (plan 18 §B2 review fix): the permission and question footer panels are gutter-inset to align their SURFACE with the stream surface — both start at col streamGutter (X(streamGutter) on the canvas). The panel retains its own 1-col internal left pad (the leading space on each stage line), so panel CONTENT sits at col streamGutter+1 while stream content sits at col streamGutter. opencode puts the panel INSIDE the same paddingLeft={2} box with no extra internal pad, so opencode panel content is at col 2 (the gutter) with no further inset. Opcode42's 1-col internal pad is a footer-panel affordance (a visible content indent inside the BgElev surface); the 1-col divergence from opencode's flush-left panel content is intentional for readability. The panel surface (BgElev) aligns with the stream surface; only the internal content indent differs by 1 col. TUI-only, no wire/daemon impact.",
+    "track": "intentional: panel surface aligned to gutter; 1-col internal pad retained (Opcode42) vs flush-left (opencode)"
   }
 ]

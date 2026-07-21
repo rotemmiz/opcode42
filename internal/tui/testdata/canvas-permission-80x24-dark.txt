@@ -1,4 +1,4 @@
-Permission session                                                              
+  Permission session                                                            
                                                                                 
                                                                                 
                                                                                 
@@ -10,14 +10,14 @@ Permission session
                                                                                 
                                                                                 
                                                                                 
- △ Permission required                                                          
+   △ Permission required                                                        
                                                                                 
- bash                                                                           
- ls -la                                                                         
+   bash                                                                         
+   ls -la                                                                       
                                                                                 
- Allow once   Allow always   Reject                                             
+   Allow once   Allow always   Reject                                           
                                                                                 
-⇆ select   enter confirm   esc reject                                           
+  ⇆ select   enter confirm   esc reject                                         
                                                                                 
                                                                                 
                                                                                 

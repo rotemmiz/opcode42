@@ -25,9 +25,10 @@ import (
 //   - Stream stays visible above the footer panel (body not hidden).
 
 // TestPermissionView_FooterPanelNotCentered verifies the permission view is
-// NOT centered (the panel is sized to leftW × panelH and the canvas positions
-// it at the bottom). The rendered permissionView string's width is leftW (not
-// the full screen width via Place), and the canvas places it at the bottom rows.
+// NOT centered (the panel is sized to innerW × panelH and the canvas positions
+// it at the bottom). The rendered permissionView string's width is innerW (the
+// gutter-reduced left column, plan 18 §B2 — not the full screen width via
+// Place), and the canvas places it at the bottom rows.
 func TestPermissionView_FooterPanelNotCentered(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
@@ -44,11 +45,12 @@ func TestPermissionView_FooterPanelNotCentered(t *testing.T) {
 	if panel == "" {
 		t.Fatal("permissionView returned empty")
 	}
-	// The panel is sized to leftW (not a full-screen Place). Width should be
-	// the left column width, not 80.
-	leftW := m.leftColumnWidth()
-	if w := lipgloss.Width(panel); w != leftW {
-		t.Fatalf("panel width = %d, want leftW %d (panel should not be full-screen Place'd)", w, leftW)
+	// The panel is sized to innerW (the gutter-reduced left column, plan 18
+	// §B2) — not a full-screen Place. Width should be leftW - 2*streamGutter,
+	// not 80.
+	innerW := m.leftColumnWidth() - 2*streamGutter
+	if w := lipgloss.Width(panel); w != innerW {
+		t.Fatalf("panel width = %d, want innerW %d (panel should not be full-screen Place'd)", w, innerW)
 	}
 	// The panel height should be ≤ the screen height (not the full 24 rows
 	// a centered Place would produce).
@@ -59,7 +61,7 @@ func TestPermissionView_FooterPanelNotCentered(t *testing.T) {
 }
 
 // TestQuestionView_FooterPanelNotCentered verifies the question view is NOT
-// centered (the panel is sized to leftW × panelH and the canvas positions it
+// centered (the panel is sized to innerW × panelH and the canvas positions it
 // at the bottom).
 func TestQuestionView_FooterPanelNotCentered(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
@@ -76,9 +78,9 @@ func TestQuestionView_FooterPanelNotCentered(t *testing.T) {
 	if panel == "" {
 		t.Fatal("questionView returned empty")
 	}
-	leftW := m.leftColumnWidth()
-	if w := lipgloss.Width(panel); w != leftW {
-		t.Fatalf("panel width = %d, want leftW %d (panel should not be full-screen Place'd)", w, leftW)
+	innerW := m.leftColumnWidth() - 2*streamGutter
+	if w := lipgloss.Width(panel); w != innerW {
+		t.Fatalf("panel width = %d, want innerW %d (panel should not be full-screen Place'd)", w, innerW)
 	}
 	panelH := lipgloss.Height(panel)
 	if panelH <= 0 || panelH >= m.height {

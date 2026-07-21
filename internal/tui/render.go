@@ -9,9 +9,6 @@ import (
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
-// contentWidth caps prose width for readability (the design's stream column).
-const maxContentWidth = 100
-
 // renderSession draws the conversation stream for the selected session: a title,
 // the message blocks (user/assistant parts → user-turn/prose/thinking/tool-row),
 // and the status line, scrolled to the newest content.
@@ -31,19 +28,28 @@ func (m Model) renderSession() string {
 	if m.sidebarVisible() {
 		sidebar = m.sidebarView() // width == sidebarWidth (pinned by a test)
 	}
-	m.streamWidth = leftW // narrows the stream/composer wrap to the left column
+	innerW := leftW - 2*streamGutter
+	if innerW < 1 {
+		innerW = 1
+	}
+	m.streamWidth = innerW // narrows the stream/composer wrap to the gutter-reduced left column
 
-	footer := m.buildFooter(leftW)
+	footer := m.buildFooter(innerW)
 	if ac := m.autocompleteView(); ac != "" {
 		footer = ac + "\n" + footer // popup sits just above the composer
 	}
 
 	sid := m.cfg.SessionID
-	header := s.Section.Render(truncate(m.sessionTitle(sid), leftW))
+	header := s.Section.Render(truncate(m.sessionTitle(sid), innerW))
 	blocks := m.sessionStreamBlocks(sid)
 	body := header + "\n\n" + strings.Join(blocks, "\n\n")
 
 	left := m.frame(body, footer)
+	// Apply the 2-col gutter on each side of the stream column (plan 18 §B1).
+	// Width(leftW) keeps the left column exactly leftW wide so the
+	// JoinHorizontal with the sidebar aligns; the padding insets the stream
+	// content by streamGutter cols on each side.
+	left = lipgloss.NewStyle().Width(leftW).Padding(0, streamGutter).Render(left)
 	if sidebar == "" {
 		return left
 	}
@@ -381,9 +387,6 @@ func (m Model) contentWidth() int {
 	w := m.streamWidth // set when a sidebar narrows the stream column
 	if w == 0 {
 		w = m.width
-	}
-	if w == 0 || w > maxContentWidth {
-		w = maxContentWidth
 	}
 	return w
 }

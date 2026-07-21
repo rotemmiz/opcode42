@@ -508,6 +508,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, acCmd = m.refreshAutocomplete()
 		return m, tea.Batch(cmd, acCmd)
 
+	case tea.MouseWheelMsg:
+		// Plan 18 §A2: mouse wheel scrolls the stream. Ignore when an overlay
+		// owns the view (focused PTY, diff reviewer, modal, pending
+		// permission/question) — same guard pattern as the key handlers.
+		if (m.pty.open && m.pty.focused) || m.diff.open || m.modal != modalNone ||
+			m.pendingPermission() != nil || m.pendingQuestion() != nil {
+			return m, nil
+		}
+		switch msg.Button {
+		case tea.MouseWheelUp:
+			m.scroll.Back(scrollStep)
+		case tea.MouseWheelDown:
+			m.scroll.Forward(scrollStep)
+		}
+		return m, nil
+
 	case tea.KeyPressMsg:
 		// A focused terminal captures every key (ctrl+c included, so the shell can
 		// interrupt) — only ctrl+] escapes, handled inside handlePTYKey. A pending
@@ -1111,7 +1127,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if msg.ev.Type != "" {
+			// Plan 18 §A3-simple: capture tail state BEFORE the body grows,
+			// then re-pin to the tail if we were there. When scrolled up
+			// (Offset>0) the offset is left untouched — the simple tail-sticky
+			// model does NOT content-anchor (deferred per the plan).
+			wasAtTail := m.scroll.AtTail()
 			m.store = m.store.Reduce(msg.ev)
+			if wasAtTail {
+				m.scroll.ToTail()
+			}
 		}
 		if questionID(m.pendingQuestion()) != prevQ { // active question cleared/replaced
 			if !m.qBody.replying {
@@ -1775,6 +1799,7 @@ func (m Model) effectiveAgent() string {
 func (m Model) View() tea.View {
 	v := tea.NewView(m.composeView())
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 

@@ -58,6 +58,13 @@ const (
 	zModal    = 20 // modals, permission, question, diff reviewer
 )
 
+// streamGutter is the 2-col blank gutter inset on each side of the stream
+// column, matching opencode's message column `paddingLeft={2} paddingRight={2}`
+// (tui/routes/session/index.tsx:1166). The stream + footer layers are
+// positioned at X(streamGutter) and rendered at leftW - 2*streamGutter; the
+// gutter cells are painted by the canvas base Bg fill.
+const streamGutter = 2
+
 // composeView is the v2 canvas render root, replacing the old renderView +
 // paintBackground + overlayToasts string-splice pipeline.
 //
@@ -232,9 +239,10 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 	//  - Footer panels (permission, question): plan 17 §B1 — opencode renders
 	//    these as a footer-region panel (bottom of screen), NOT a centered
 	//    modal. The body STAYS so the stream is visible above the panel. The
-	//    panel body (sized leftW × panelH, BgElev bg) is placed at
-	//    Y = m.height - panelH so it sits at the bottom; its blank padding
-	//    doesn't paint over the body layer above it.
+	//    panel body (sized innerW × panelH, BgElev bg) is placed at
+	//    X(streamGutter) so the panel surface aligns with the stream surface
+	//    (plan 18 §B2 review fix) and Y = m.height - panelH so it sits at the
+	//    bottom; its blank padding doesn't paint over the body layer above it.
 	//
 	// The renderView priority is preserved (permission > question > diff >
 	// modal); only one is active per the model state.
@@ -246,7 +254,7 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 			if y < 0 {
 				y = 0
 			}
-			layers = append(layers, lipgloss.NewLayer(p).X(0).Y(y).Z(zModal))
+			layers = append(layers, lipgloss.NewLayer(p).X(streamGutter).Y(y).Z(zModal))
 		}
 	case m.pendingQuestion() != nil:
 		if q := m.questionView(); q != "" {
@@ -255,7 +263,7 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 			if y < 0 {
 				y = 0
 			}
-			layers = append(layers, lipgloss.NewLayer(q).X(0).Y(y).Z(zModal))
+			layers = append(layers, lipgloss.NewLayer(q).X(streamGutter).Y(y).Z(zModal))
 		}
 	case m.diff.open:
 		// The diff reviewer is full-screen, not centered — it renders at
@@ -319,13 +327,22 @@ func (m Model) sessionLayers() []*lipgloss.Layer {
 	var layers []*lipgloss.Layer
 
 	leftW := m.leftColumnWidth()
+	innerW := leftW - 2*streamGutter
+	if innerW < 1 {
+		innerW = 1
+	}
+	// Set the stream column's inner width so contentWidth() returns innerW
+	// and the body / footer wrap at the gutter-reduced width. The receiver
+	// is a value copy; this write does NOT mutate the caller's model — it
+	// only affects this render pass (contentWidth is read below).
+	m.streamWidth = innerW
 
 	// Footer: composer + status bar (and the tasks/pty/subagent strips above
 	// the composer when present). Stacked bottom-up via the shared buildFooter
 	// helper (plan 17 §A1) so the fallback path (renderSession) and this path
 	// agree on the stacking order. The autocomplete popup is NOT part of the
 	// footer — it composes as its own overlay layer at zPopup.
-	footer := m.frameFooter(m.buildFooter(leftW))
+	footer := m.frameFooter(m.buildFooter(innerW))
 	footerH := lipgloss.Height(footer)
 	bodyH := m.height - footerH
 	if bodyH < 1 {
@@ -333,26 +350,29 @@ func (m Model) sessionLayers() []*lipgloss.Layer {
 	}
 
 	// Body: the conversation stream, windowed to the stream height. The body
-	// is positioned at the top of the left column; only this layer scrolls,
-	// and the window is computed over the body alone (the footer is not a
+	// is positioned at the top of the left column (offset by streamGutter so
+	// the 2-col left gutter is blank base Bg); only this layer scrolls, and
+	// the window is computed over the body alone (the footer is not a
 	// suffix), so the scroll math never touches the footer.
 	sid := m.cfg.SessionID
-	header := m.styles.Section.Render(truncate(m.sessionTitle(sid), leftW))
+	header := m.styles.Section.Render(truncate(m.sessionTitle(sid), innerW))
 	blocks := m.sessionStreamBlocks(sid)
 	body := header + "\n\n" + strings.Join(blocks, "\n\n")
 	stream := m.frameStream(body, bodyH)
-	layers = append(layers, lipgloss.NewLayer(stream).X(0).Y(0).Z(zPane))
+	layers = append(layers, lipgloss.NewLayer(stream).X(streamGutter).Y(0).Z(zPane))
 
 	// Footer layer: pinned at Y=bodyH so it never moves with the scroll. The
 	// footer string is unchanged across scroll offsets — the only way the
 	// composer/status bar can move is if the footer's own height changes
 	// (e.g. the composer grows to a second row), which re-derives bodyH.
-	layers = append(layers, lipgloss.NewLayer(footer).X(0).Y(bodyH).Z(zPane))
+	// Positioned at X(streamGutter) so the composer + status bar are inset
+	// by the same gutter as the stream (plan 18 §B2).
+	layers = append(layers, lipgloss.NewLayer(footer).X(streamGutter).Y(bodyH).Z(zPane))
 
 	// Sidebar: right column, full height. Its own layer so it z-orders
 	// above the body's trailing cells (the body is width-restricted to
-	// leftW, so there's no overlap; but the sidebar layer's own Bg fills
-	// its column cleanly).
+	// innerW starting at X(streamGutter), so the 2-col right gutter between
+	// the stream and the sidebar at X(leftW) is blank base Bg).
 	if m.sidebarVisible() {
 		sidebar := m.sidebarView()
 		layers = append(layers, lipgloss.NewLayer(sidebar).X(leftW).Y(0).Z(zPane))
