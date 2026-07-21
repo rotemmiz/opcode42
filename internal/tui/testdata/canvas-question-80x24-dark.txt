@@ -1,10 +1,10 @@
+Question session                                                                
                                                                                 
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-       ╭────────────────────────────────────────────────────────────────╮       
+╭──────────────────────────────────────────────────────────────╮                
+│ Pick a file                                                  │                
+│ Which file should the agent edit?                            │                
+│ enter to answer · r reject                                   │                
+╰──────╭────────────────────────────────────────────────────────────────╮       
        │                                                                │       
        │  Pick a file                                                   │       
        │  Which file should the agent edit?                             │       
@@ -20,5 +20,5 @@
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-                                                                                
+┃ Ask anything…                                                                 
+  build                               ● connecting to http://x · ctrl+p commands

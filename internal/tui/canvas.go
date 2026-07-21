@@ -103,11 +103,16 @@ func (m Model) composeCanvas() *lipgloss.Canvas {
 	}
 
 	// Collect body + overlay layers and draw them in z-order onto the canvas.
-	// When a modal-class overlay (permission/question/diff/modal) is active
-	// the session body is skipped entirely — matching the v1 renderView
-	// switch, which never rendered the body under a modal. Only the base Bg
-	// fill + the overlay layers compose, so the fully-covered body work is
-	// avoided and no stale body cells leak around the modal.
+	// When a centered modal-class overlay (diff/modal) is active the session
+	// body is skipped entirely — matching the v1 renderView switch, which
+	// never rendered the body under a modal. Only the base Bg fill + the
+	// overlay layers compose, so the fully-covered body work is avoided and
+	// no stale body cells leak around the modal.
+	//
+	// Plan 17 §A4: permission/question are footer panels, NOT centered
+	// modals — the body STAYS when only a footer panel is up, so the stream
+	// remains visible above the panel (matching opencode). The body is
+	// skipped only when modalClassActive() is true (diff/modal).
 	modalClassActive := m.modalClassActive()
 	var layers []*lipgloss.Layer
 	if !modalClassActive {
@@ -159,7 +164,7 @@ func (m Model) composeCanvas() *lipgloss.Canvas {
 	// would have occupied and SetCell each glyph directly. With --no-anim
 	// (§B3) the frame is the static peak frame (logoStatic), freezing the
 	// shimmer and bg-pulse for deterministic capture / accessibility.
-	if m.screen == ScreenSplash && !modalClassActive {
+	if m.screen == ScreenSplash && !modalClassActive && !m.footerPanelActive() {
 		x0, y0 := m.splashLogoOrigin()
 		frame := m.animFrame
 		if m.noAnim {
@@ -202,11 +207,13 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 	// Which-key overlay (plan 08e §F2): when the ctrl+x leader is armed,
 	// show the chord-options strip at the bottom of the screen (above the
 	// status bar). Z=15: above toasts, below modals. The overlay is gated
-	// on m.leader AND no modal-class overlay being active — a modal open
-	// during a leader (e.g. ctrl+x then a key that opens a modal) clears
-	// the leader in handleLeaderKey, so the two states are mutually
-	// exclusive in practice; the guard is defensive.
-	if m.leader && !m.modalClassActive() {
+	// on m.leader AND no modal-class overlay or footer panel being active
+	// — a modal open during a leader (e.g. ctrl+x then a key that opens a
+	// modal) clears the leader in handleLeaderKey, and a pending
+	// permission/question intercepts keys before the leader check in
+	// Update, so the states are mutually exclusive in practice; the guard
+	// is defensive.
+	if m.leader && !m.modalClassActive() && !m.footerPanelActive() {
 		if wkv := m.whichKeyView(); wkv != "" {
 			layers = append(layers, lipgloss.NewLayer(wkv).
 				X(m.whichKeyLayerX()).
@@ -215,19 +222,40 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 		}
 	}
 
-	// Modals / blocking overlays: each renderer already centers itself via
-	// centerScreen / lipgloss.Place, so we place the already-centered string
-	// directly at (0,0) — no outer Place (that would double-Place). The
-	// renderView priority is preserved (permission > question > diff >
+	// Modals / blocking overlays. Two placement strategies:
+	//
+	//  - Centered modals (diff, modal): each renderer already centers itself
+	//    via centerScreen / lipgloss.Place, so we place the already-centered
+	//    string directly at (0,0) — no outer Place (that would double-Place).
+	//    The body is skipped upstream (modalClassActive) so the full-screen
+	//    Place string doesn't cover a rendered body.
+	//  - Footer panels (permission, question): plan 17 §A4 — opencode keeps
+	//    the stream visible above the footer panel, so the body is NOT
+	//    skipped. To avoid the panel's own blank padding covering the body,
+	//    we render just the CARD (not a full-screen Place) and position it
+	//    at the centered (x,y) via the layer's X/Y. The blank padding of a
+	//    lipgloss.Place would paint over the body at z=20; the card-only
+	//    layer paints only its own cells, leaving the body visible around it.
+	//    (B1 will move these to the footer region instead of centering.)
+	//
+	// The renderView priority is preserved (permission > question > diff >
 	// modal); only one is active per the model state.
 	switch {
 	case m.pendingPermission() != nil:
 		if p := m.permissionView(); p != "" {
-			layers = append(layers, lipgloss.NewLayer(p).X(0).Y(0).Z(zModal))
+			if x, y, ok := centeredCardPos(m.width, m.height, p); ok {
+				layers = append(layers, lipgloss.NewLayer(p).X(x).Y(y).Z(zModal))
+			} else {
+				layers = append(layers, lipgloss.NewLayer(p).X(0).Y(0).Z(zModal))
+			}
 		}
 	case m.pendingQuestion() != nil:
 		if q := m.questionView(); q != "" {
-			layers = append(layers, lipgloss.NewLayer(q).X(0).Y(0).Z(zModal))
+			if x, y, ok := centeredCardPos(m.width, m.height, q); ok {
+				layers = append(layers, lipgloss.NewLayer(q).X(x).Y(y).Z(zModal))
+			} else {
+				layers = append(layers, lipgloss.NewLayer(q).X(0).Y(0).Z(zModal))
+			}
 		}
 	case m.diff.open:
 		// The diff reviewer is full-screen, not centered — it renders at
@@ -249,54 +277,77 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 	return layers
 }
 
-// modalClassActive reports whether any modal-class overlay (permission,
-// question, diff reviewer, or a modal) is currently active. Used by the
-// which-key overlay guard to avoid composing the strip under a modal — the
-// leader and a modal are mutually exclusive in practice (handleLeaderKey
-// clears the leader before opening a modal), but the guard is defensive.
-// Also used by composeCanvas to skip the body layers under a modal.
+// modalClassActive reports whether any centered modal-class overlay (diff
+// reviewer, or a modal) is currently active. Used by the which-key overlay
+// guard to avoid composing the strip under a modal — the leader and a modal
+// are mutually exclusive in practice (handleLeaderKey clears the leader
+// before opening a modal), but the guard is defensive. Also used by
+// composeCanvas to skip the body layers under a centered modal.
+//
+// Plan 17 §A4: permission/question footer panels are NOT in this set. They
+// are footer panels (footerPanelActive), not centered modals — opencode
+// keeps the stream visible above the footer panel, so the body must NOT be
+// skipped when only a footer panel is up. Only true centered modals (diff,
+// sessions, help, palette, etc.) hide the body.
 func (m Model) modalClassActive() bool {
-	return m.pendingPermission() != nil || m.pendingQuestion() != nil ||
-		m.diff.open || m.modal != modalNone
+	return m.diff.open || m.modal != modalNone
+}
+
+// footerPanelActive reports whether a footer-region panel (permission or
+// question) is currently active. Plan 17 §A4: these are NOT centered modals
+// — opencode renders them as a footer panel with the stream still visible
+// above it, so composeCanvas keeps the body layers when only a footer panel
+// is up. This is a prerequisite for Workstream B (the footer-panel render of
+// permission/question); for now the overlayLayers path still places them at
+// (0,0) via centerScreen, but the body is no longer hidden behind them.
+func (m Model) footerPanelActive() bool {
+	return m.pendingPermission() != nil || m.pendingQuestion() != nil
 }
 
 // sessionLayers returns the layers for the session screen: an optional right
 // sidebar and a left column (stream body + footer + composer + dock). Each
 // is positioned at its (x,y) so the canvas composes them without overlap.
+//
+// Plan 17 §A1: the stream body and the footer are now SEPARATE layers. The
+// stream layer (Y=0, height = screen height - footer height) is the only
+// layer that goes through the scroll window, so the footer stays pinned at
+// Y=bodyH across every scroll offset. The prior form joined body+footer and
+// ran the window over the joined string, which made the footer a suffix of
+// the scrollable content — the root cause of bug #1 (composer/status bar
+// rode the scroll).
 func (m Model) sessionLayers() []*lipgloss.Layer {
 	var layers []*lipgloss.Layer
 
 	leftW := m.leftColumnWidth()
 
 	// Footer: composer + status bar (and the tasks/pty/subagent strips above
-	// the composer when present). Stacked bottom-up; the composer is the
-	// lowest row of the footer.
-	footer := m.composerView() + "\n" + m.statusBarView(leftW)
-	footerParts := []string{footer}
-	// When the autocomplete popup is open it renders above the composer;
-	// it is composed as its own overlay layer (see overlayLayers), so the
-	// composer itself stays in the footer.
-	if dock := m.tasksDockView(leftW); dock != "" {
-		footerParts = append([]string{dock}, footerParts...)
+	// the composer when present). Stacked bottom-up via the shared buildFooter
+	// helper (plan 17 §A1) so the fallback path (renderSession) and this path
+	// agree on the stacking order. The autocomplete popup is NOT part of the
+	// footer — it composes as its own overlay layer at zPopup.
+	footer := m.frameFooter(m.buildFooter(leftW))
+	footerH := lipgloss.Height(footer)
+	bodyH := m.height - footerH
+	if bodyH < 1 {
+		bodyH = 1
 	}
-	if sf := m.subagentFooterView(leftW); sf != "" {
-		footerParts = append([]string{sf}, footerParts...)
-	}
-	if pty := m.ptyPaneView(leftW); pty != "" {
-		footerParts = append([]string{pty}, footerParts...)
-	}
-	footer = strings.Join(footerParts, "\n")
 
-	// Body: the conversation stream, scrolled. The body is a single string
-	// that we position at the top of the left column; the footer is at the
-	// bottom. The body's height is the screen height minus the footer's
-	// height; the existing frame() helper does the scroll windowing.
+	// Body: the conversation stream, windowed to the stream height. The body
+	// is positioned at the top of the left column; only this layer scrolls,
+	// and the window is computed over the body alone (the footer is not a
+	// suffix), so the scroll math never touches the footer.
 	sid := m.cfg.SessionID
 	header := m.styles.Section.Render(truncate(m.sessionTitle(sid), leftW))
 	blocks := m.sessionStreamBlocks(sid)
 	body := header + "\n\n" + strings.Join(blocks, "\n\n")
-	scrolled := m.frame(body, footer)
-	layers = append(layers, lipgloss.NewLayer(scrolled).X(0).Y(0).Z(zPane))
+	stream := m.frameStream(body, bodyH)
+	layers = append(layers, lipgloss.NewLayer(stream).X(0).Y(0).Z(zPane))
+
+	// Footer layer: pinned at Y=bodyH so it never moves with the scroll. The
+	// footer string is unchanged across scroll offsets — the only way the
+	// composer/status bar can move is if the footer's own height changes
+	// (e.g. the composer grows to a second row), which re-derives bodyH.
+	layers = append(layers, lipgloss.NewLayer(footer).X(0).Y(bodyH).Z(zPane))
 
 	// Sidebar: right column, full height. Its own layer so it z-orders
 	// above the body's trailing cells (the body is width-restricted to

@@ -15,7 +15,10 @@ import (
 // StatusBar/Sidebar). Both read from the mirrored store; nothing is fabricated —
 // fields the daemon hasn't reported simply render as zero.
 
-const sidebarWidth = 28
+// sidebarWidth is the right sidebar's column count, matching opencode's full
+// TUI (tui/routes/session/sidebar.tsx:31 `width={42}`). Plan 17 §A2 corrected
+// the prior 28-col constant to the source-grounded 42.
+const sidebarWidth = 42
 
 // currentSession returns the open session (or nil).
 func (m Model) currentSession() *Session {
@@ -36,9 +39,13 @@ func (m Model) modeName() string {
 }
 
 // sidebarVisible reports whether the right sidebar is shown: only on the session
-// screen, when enabled, and when the terminal is wide/tall enough.
+// screen, when enabled, and when the terminal is wide/tall enough. Plan 17 §A2:
+// the width threshold is >= 121, matching opencode's `width > 120`
+// (tui/routes/session/index.tsx:263) — the sidebar is a "wide" affordance, not
+// a "narrow" one, so it appears only when there's room for a 42-col sidebar
+// plus a usable stream column.
 func (m Model) sidebarVisible() bool {
-	return m.screen == ScreenSession && !m.sidebarHidden && m.width >= 80 && m.height >= 10
+	return m.screen == ScreenSession && !m.sidebarHidden && m.width >= 121 && m.height >= 10
 }
 
 // leftColumnWidth is the width available to the stream + composer + status bar —

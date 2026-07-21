@@ -34,6 +34,14 @@ func key(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl}
 	case "ctrl+c":
 		return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
+	case "ctrl+g":
+		return tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl}
+	case "ctrl+alt+u":
+		return tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl | tea.ModAlt}
+	case "ctrl+alt+d":
+		return tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl | tea.ModAlt}
+	case "ctrl+alt+g":
+		return tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl | tea.ModAlt}
 	case "tab":
 		return tea.KeyPressMsg{Code: tea.KeyTab}
 	case "enter":
@@ -44,6 +52,14 @@ func key(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyDown}
 	case "up":
 		return tea.KeyPressMsg{Code: tea.KeyUp}
+	case "home":
+		return tea.KeyPressMsg{Code: tea.KeyHome}
+	case "end":
+		return tea.KeyPressMsg{Code: tea.KeyEnd}
+	case "pgup":
+		return tea.KeyPressMsg{Code: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyPressMsg{Code: tea.KeyPgDown}
 	default:
 		r := []rune(s)
 		var code rune

@@ -13,6 +13,13 @@ const maxContentWidth = 100
 // renderSession draws the conversation stream for the selected session: a title,
 // the message blocks (user/assistant parts → user-turn/prose/thinking/tool-row),
 // and the status line, scrolled to the newest content.
+//
+// This is the pre-resize fallback (the canvas path lives in sessionLayers).
+// It composes the body + footer into a single joined string — the join is
+// acceptable here because the fallback runs only when m.height <= 0, so the
+// scroll math never engages. The production canvas path splits the stream and
+// footer into separate layers (plan 17 §A1) so the footer stays pinned across
+// scroll.
 func (m Model) renderSession() string {
 	s := m.styles
 
@@ -24,18 +31,9 @@ func (m Model) renderSession() string {
 	}
 	m.streamWidth = leftW // narrows the stream/composer wrap to the left column
 
-	footer := m.composerView() + "\n" + m.statusBarView(leftW)
+	footer := m.buildFooter(leftW)
 	if ac := m.autocompleteView(); ac != "" {
 		footer = ac + "\n" + footer // popup sits just above the composer
-	}
-	if dock := m.tasksDockView(leftW); dock != "" {
-		footer = dock + "\n" + footer // tasks dock above the composer area
-	}
-	if sf := m.subagentFooterView(leftW); sf != "" {
-		footer = sf + "\n" + footer // sub-agent context strip (plan 08b §9)
-	}
-	if pty := m.ptyPaneView(leftW); pty != "" {
-		footer = pty + "\n" + footer // embedded terminal split (plan 08b §2)
 	}
 
 	sid := m.cfg.SessionID
@@ -48,6 +46,27 @@ func (m Model) renderSession() string {
 		return left
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, sidebar)
+}
+
+// buildFooter stacks the pinned bottom chrome: the tasks dock, sub-agent strip,
+// embedded PTY pane, composer, and status bar — bottom-up, so the composer +
+// status bar are the lowest rows. Shared by the canvas path (sessionLayers,
+// plan 17 §A1) and the pre-resize fallback (renderSession) so the two paths
+// don't duplicate the stacking order. The autocomplete popup is NOT part of
+// this stack — on the canvas it composes as its own overlay layer at zPopup,
+// and in the fallback it is prepended by the caller.
+func (m Model) buildFooter(leftW int) string {
+	footerParts := []string{m.composerView() + "\n" + m.statusBarView(leftW)}
+	if dock := m.tasksDockView(leftW); dock != "" {
+		footerParts = append([]string{dock}, footerParts...)
+	}
+	if sf := m.subagentFooterView(leftW); sf != "" {
+		footerParts = append([]string{sf}, footerParts...)
+	}
+	if pty := m.ptyPaneView(leftW); pty != "" {
+		footerParts = append([]string{pty}, footerParts...)
+	}
+	return strings.Join(footerParts, "\n")
 }
 
 // sessionStreamBlocks builds the chat-stream block list for a session: the
@@ -414,13 +433,18 @@ func (m Model) statusLine() string {
 // frame tail-scrolls body to the lines that fit above footer and pins footer to
 // the bottom (padding a short body so the composer/status bar stay anchored).
 //
+// This is the pre-resize fallback join: it returns the body + footer as a
+// single joined string. The canvas path (sessionLayers, plan 17 §A1) does NOT
+// use this join — it composes the stream and footer as separate layers so the
+// footer stays pinned across scroll (the join is the original root cause of
+// bug #1: the scroll math treated the footer as a suffix of the body). frame is
+// retained for the fallback path and for direct callers that want the joined
+// form (e.g. tests).
+//
 // The clamp/window math lives in the scrollregion package (plan 08e §A3): the
 // Region is tail-anchored (0 == live tail), and Window both clamps the offset
 // against [0, MaxOffset] and pads a short body so the footer stays pinned to
-// the bottom row. The canvas renders the resulting windowed string as the body
-// layer at zPane — the scroll viewport is the canvas region the body layer
-// occupies, and scrollregion.Window is the math that decides which rows of the
-// full stream land in that region.
+// the bottom row.
 func (m Model) frame(body, footer string) string {
 	if m.height <= 0 {
 		return body + "\n" + footer
@@ -432,6 +456,27 @@ func (m Model) frame(body, footer string) string {
 	lines := m.scroll.Window(strings.Split(body, "\n"), avail)
 	return strings.Join(lines, "\n") + "\n" + footer
 }
+
+// frameStream returns the body windowed to the available stream height — the
+// scrollable layer of the canvas split (plan 17 §A1). Unlike frame, this does
+// NOT join the footer: the footer composes as its own pinned layer at
+// Y=bodyH, so the scroll math operates on the body alone and the footer is
+// immune to scroll position. bodyH is the height reserved for the stream
+// (screen height minus the footer's height); the scrollregion.Window call
+// both clamps the offset and pads a short body so the stream region is always
+// exactly bodyH rows.
+func (m Model) frameStream(body string, bodyH int) string {
+	if bodyH <= 0 {
+		return body
+	}
+	lines := m.scroll.Window(strings.Split(body, "\n"), bodyH)
+	return strings.Join(lines, "\n")
+}
+
+// frameFooter returns the footer unchanged. The split exists to name the
+// layer roles in sessionLayers (plan 17 §A1) — the footer is the pinned layer
+// at Y=bodyH and never goes through the scroll window.
+func (m Model) frameFooter(footer string) string { return footer }
 
 func firstLine(s string) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
@@ -448,6 +493,26 @@ func centerScreen(width, height int, body string) string {
 		return body
 	}
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, body)
+}
+
+// centeredCardPos returns the (x, y) layer position that centers a card of the
+// given content within a width×height canvas, mirroring lipgloss.Place's Center
+// math without producing a full-screen padded string. Used by overlayLayers
+// (plan 17 §A4) to place footer-panel cards (permission/question) as card-only
+// layers — so the blank padding of a full-screen Place doesn't paint over the
+// body layer at z=1. Returns ok=false when either dimension is zero or the card
+// is larger than the canvas (caller falls back to 0,0).
+func centeredCardPos(width, height int, card string) (x, y int, ok bool) {
+	if width == 0 || height == 0 {
+		return 0, 0, false
+	}
+	cw, ch := lipgloss.Width(card), lipgloss.Height(card)
+	if cw > width || ch > height {
+		return 0, 0, false
+	}
+	x = (width - cw) / 2
+	y = (height - ch) / 2
+	return x, y, true
 }
 
 // windowAround returns the [start,end) slice of count rows that fits height
