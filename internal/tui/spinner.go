@@ -61,6 +61,21 @@ func animTickCmd() tea.Cmd {
 	return tea.Tick(animPeriod, func(time.Time) tea.Msg { return animTickMsg{} })
 }
 
+// exitPeriod is how long the two-press ctrl+c exit guard stays armed before
+// auto-cancelling. Matches opencode's armExitTimer 5s timeout (footer.ts:954-961).
+const exitPeriod = 5 * time.Second
+
+// exitTickMsg cancels the armed exit guard (m.exiting → false) when it fires,
+// mirroring opencode's armExitTimer expiry patching exit back to 0.
+type exitTickMsg struct{}
+
+// exitTickCmd arms the one-shot exit-guard timeout. Returned alongside the
+// ctrl+c that sets m.exiting so the guard self-clears if the user doesn't
+// follow through with a second ctrl+c.
+func exitTickCmd() tea.Cmd {
+	return tea.Tick(exitPeriod, func(time.Time) tea.Msg { return exitTickMsg{} })
+}
+
 // ── animating predicate ────────────────────────────────────────────────────────
 
 // animating reports whether any animation is currently in progress.  The tick

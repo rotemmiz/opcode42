@@ -111,5 +111,17 @@
     "phase": "D",
     "reason": "TUI scroll keybinds (plan 17 §A3). Opcode42 matches opencode's full scroll keymap for home/end (ctrl+g,home → first; ctrl+alt+g,end → last), half-page (ctrl+alt+u/d), and page (pgup/pgdown, ctrl+alt+b/f). ONE intentional divergence on LINE scroll: Opcode42 uses ctrl+up/ctrl+down for line-by-line scroll (its own pre-existing convention), while opencode uses ctrl+alt+y/ctrl+alt+e (tui/config/keybind.ts:136-137). Opcode42 keeps ctrl+up/down because they predate plan 17 and users expect them; opencode's ctrl+alt+y/e are not bound (a future workstream could add them as aliases). This is a TUI-only divergence, not a wire/daemon divergence, and is not exercised by any conformance scenario.",
     "track": "intentional: ctrl+up/down (Opcode42) vs ctrl+alt+y/e (opencode) for line scroll"
+  },
+  {
+    "scenario": "tui-composer-statusbar-surface",
+    "phase": "D (plan 17)",
+    "reason": "Plan 17 Workstream F1/F3: Opcode42's composer paints a SOLID BgElev surface and the status bar a solid BgPanel, where opencode's run mini-TUI paints a SEMI-OPAQUE `surface` (theme.ts:512, a fade of backgroundMenu over background at 0.18/0.76/0.9) and a tinted `status` (theme.ts:514-519). Solid fills read cleanly on transparent/alpha terminals (the semi-opaque fade assumes an opaque terminal bg); BgElev is Opcode42's solid elevated token and BgPanel its solid tinted-lift token, so the two chrome rows still read as distinct surfaces (the visual hierarchy is preserved). The composer left accent (ThickBorder in Blue/Red) matches opencode's `█` accent intent (footer.view.tsx:642-655). TUI-only, no wire/daemon impact, not exercised by any conformance scenario.",
+    "track": "intentional: solid BgElev/BgPanel (Opcode42) vs semi-opaque surface/status (opencode run mini-TUI) for the composer + status bar chrome"
+  },
+  {
+    "scenario": "tui-statusbar-mode-label",
+    "phase": "D (plan 17)",
+    "reason": "Plan 17 Workstream F2: Opcode42 shows the mode chip label Title-cased and full-TUI-style — the active agent Title-cased (falling back to \"Build\"), \"Shell\" in shell mode, \"Exit\" while the two-press ctrl+c guard is armed — following opencode's full TUI (tui/component/prompt/index.tsx:1442-1444, Locale.titlecase(agent().name)) rather than the run mini-TUI's uppercase BUILD/SHELL/EXIT (footer.view.tsx:384-390). The chip background is a neutral BgSel lift (opencode's statusAccent ≈ a near-white tint of the footer bg) with a mode-colored FOREGROUND (blue/amber/red, opencode footer.view.tsx:824-827, 391-401). The provider is dropped from the model status (opencode footer.view.tsx:430-435, \"Prefer without provider\"); the variant, when set, is a bold amber suffix (footer.view.tsx:872-878). TUI-only, no wire/daemon impact.",
+    "track": "intentional: full-TUI Title-cased mode label + dropped provider (Opcode42) vs run-mini-TUI uppercase BUILD + provider"
   }
 ]

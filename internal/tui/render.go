@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // contentWidth caps prose width for readability (the design's stream column).
@@ -413,8 +415,8 @@ func (m Model) composerView() string {
 	bar := lipgloss.NewStyle().
 		Border(lipgloss.ThickBorder(), false, false, false, true).
 		BorderForeground(accent).
-		BorderBackground(m.styles.P.Bg). // paint the border cell too (no terminal bleed)
-		Background(m.styles.P.Bg).       // fill the composer row so it owns its bg
+		BorderBackground(m.styles.P.BgElev). // paint the border cell too (no terminal bleed)
+		Background(m.styles.P.BgElev).       // composer surface (opencode "surface"; BgElev is solid)
 		PaddingLeft(1).
 		Width(m.barWidth()) // -1: the left border renders outside Width
 	view := bar.Render(m.input.View())
@@ -424,6 +426,13 @@ func (m Model) composerView() string {
 	}
 	return view
 }
+
+// composerBackground is the surface background the composer paints — opencode's
+// "surface" token (a semi-opaque fade), here the solid BgElev. Exposed so a
+// test can assert the composer owns an elevated surface distinct from the
+// status bar (plan 17 §F1/F3) without relying on ANSI color emission (lipgloss
+// emits no escapes in the no-TTY test environment).
+func (m Model) composerBackground() theme.Color { return m.styles.P.BgElev }
 
 // statusLine is the bottom status: connection state plus the active model.
 func (m Model) statusLine() string {

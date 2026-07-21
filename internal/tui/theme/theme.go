@@ -489,8 +489,6 @@ type Styles struct {
 	Section lipgloss.Style
 	// Selection is the canonical cursor row: full-width amber bar, dark bold text.
 	Selection lipgloss.Style
-	// ModeChip is the status-bar mode chip: accent bg, dark bold text.
-	ModeChip lipgloss.Style
 	// Accent is accent-colored text (prompt accent, agent mode).
 	Accent lipgloss.Style
 }
@@ -505,7 +503,6 @@ func New(p Palette) Styles {
 		Ghost:     lipgloss.NewStyle().Foreground(p.FgGhost),
 		Section:   lipgloss.NewStyle().Foreground(p.Purple).Bold(true),
 		Selection: lipgloss.NewStyle().Background(p.SelBg).Foreground(p.SelFg).Bold(true),
-		ModeChip:  lipgloss.NewStyle().Background(p.Accent()).Foreground(p.SelFg).Bold(true).Padding(0, 1),
 		Accent:    lipgloss.NewStyle().Foreground(p.Accent()),
 	}
 }
