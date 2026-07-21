@@ -119,13 +119,6 @@ func (m Model) whichKeyLayerY() int {
 // strip spans the full width, matching the status bar).
 func (m Model) whichKeyLayerX() int { return 0 }
 
-// whichKeyLayerZ is the z-order for the which-key overlay: above toasts
-// (zToast=10), below modals (zModal=20). A leader-armed state is not a
-// modal — the user is still in the session screen, just with a transient
-// hint — so zModal would over-block (hide the body). zToast is too low (a
-// toast popping in would draw over the hint). 15 is the natural middle.
-const whichKeyLayerZ = 15
-
 // ensure whichKeyView/whichKeyLayerX/Y are used by the canvas (compile-time
 // guard against a future refactor dropping the calls).
 var _ = lipgloss.NewLayer

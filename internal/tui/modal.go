@@ -656,9 +656,17 @@ func (m Model) modalView() string {
 	title, rows, footer := m.modalItems()
 
 	// Window long lists around the selection so a provider with hundreds of
-	// models (or many sessions) can't overflow the panel.
+	// models (or many sessions) can't overflow the panel. The help overlay
+	// (plan 08e §F3) is excepted: it lists the full keybind surface (~40
+	// rows) and the value is discoverability — windowing would hide most of
+	// the keybinds the user wants to discover. The panel grows to fit (up
+	// to the screen height; centerScreen clamps it).
 	const maxRows = 12
-	start, end := windowAround(m.modalSel, len(rows), maxRows)
+	windowMax := maxRows
+	if m.modal == modalHelp {
+		windowMax = len(rows)
+	}
+	start, end := windowAround(m.modalSel, len(rows), windowMax)
 
 	var lines []string
 

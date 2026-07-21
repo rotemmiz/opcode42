@@ -49,10 +49,10 @@ import (
 
 // z-ordering for the compositor. Lower draws first (underneath).
 const (
-	zBase     = 0  // the Bg fill
-	zPane     = 1  // sidebar, stream body, footer, composer, dock
-	zPopup    = 2  // autocomplete popup (above the composer, below modals)
-	zOverlay  = 5  // in-stream cards (subagent, question) — above panes
+	zBase     = 0 // the Bg fill
+	zPane     = 1 // sidebar, stream body, footer, composer, dock
+	zPopup    = 2 // autocomplete popup (above the composer, below modals)
+	zOverlay  = 5 // in-stream cards (subagent, question) — above panes
 	zToast    = 10
 	zWhichKey = 15 // ctrl+x leader which-key strip (plan 08e §F2) — above toasts, below modals
 	zModal    = 20 // modals, permission, question, diff reviewer

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -56,7 +57,7 @@ func TestWhichKeyOverlay_RendersOnLeader(t *testing.T) {
 	layers := m.overlayLayers()
 	var found bool
 	for _, l := range layers {
-		if l.Z == zWhichKey {
+		if l.GetZ() == zWhichKey {
 			found = true
 			break
 		}
@@ -151,15 +152,15 @@ func TestWhichKeyOverlay_MatchesLeaderKey(t *testing.T) {
 		default:
 			msg = tea.KeyPressMsg{Code: rune(c.key[0]), Text: c.key}
 		}
-		next, _ := m.handleLeaderKey(msg)
-		// The dispatch must produce SOME state change (modal, sidebar, status,
-		// …) — a completely unchanged model means the chord fell through (no
-		// case). We detect "unchanged" by comparing the fields a chord can
-		// mutate. This is a conservative check: a chord that legitimately
-		// does nothing would fail, but the current table has no such chord
-		// (every entry maps to an action).
-		if chordUnchanged(before, next.(Model)) {
-			t.Errorf("whichKeyChords lists %q (%q) but handleLeaderKey did not change any state — stale entry or missing case?", c.key, c.label)
+		next, cmd := m.handleLeaderKey(msg)
+		// The dispatch must produce SOME observable effect: either a state
+		// change (modal/sidebar/view/status) or a non-nil command (e.g. "n"
+		// dispatches newSessionCmd, "e" dispatches openEditorCmd, "`"
+		// dispatches the PTY dial). A completely unchanged model AND a nil
+		// cmd means the chord fell through (no case in the switch), which
+		// means the whichKeyChords entry is stale.
+		if chordUnchanged(before, next.(Model)) && cmd == nil {
+			t.Errorf("whichKeyChords lists %q (%q) but handleLeaderKey did not change any state and returned no cmd — stale entry or missing case?", c.key, c.label)
 		}
 	}
 }
@@ -169,11 +170,12 @@ func TestWhichKeyOverlay_MatchesLeaderKey(t *testing.T) {
 // sidebarHidden, tasksOpen, view (toggles), status. A chord that produces no
 // observable change is a fall-through (no case in the switch), which means
 // the whichKeyChords entry is stale (lists a key that doesn't do anything).
+// viewState contains a map so it's compared with reflect.DeepEqual.
 func chordUnchanged(a, b Model) bool {
 	return a.modal == b.modal &&
 		a.sidebarHidden == b.sidebarHidden &&
 		a.tasksOpen == b.tasksOpen &&
-		a.view == b.view &&
+		reflect.DeepEqual(a.view, b.view) &&
 		a.status == b.status
 }
 
@@ -181,7 +183,7 @@ func chordUnchanged(a, b Model) bool {
 // layer (the which-key overlay).
 func hasWhichKeyLayer(layers []*lipgloss.Layer) bool {
 	for _, l := range layers {
-		if l.Z == zWhichKey {
+		if l.GetZ() == zWhichKey {
 			return true
 		}
 	}
