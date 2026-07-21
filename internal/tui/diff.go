@@ -114,7 +114,9 @@ func (m Model) openDiff() (Model, tea.Cmd) {
 
 // reloadDiff re-fetches the reviewer's current source (used after a source
 // toggle). The reviewer must already be open. Bumps gen so a fetch in flight
-// from the prior source is discarded on arrival.
+// from the prior source is discarded on arrival. Resets sel/scroll/folded
+// because the file set changes entirely between sources (a stale folded[idx]
+// would wrongly collapse the new set's same-indexed file).
 func (m Model) reloadDiff() (Model, tea.Cmd) {
 	m.diff.gen++
 	m.diff.loading = true
@@ -122,6 +124,7 @@ func (m Model) reloadDiff() (Model, tea.Cmd) {
 	m.diff.files = nil
 	m.diff.treeRows = nil
 	m.diff.sel, m.diff.scroll = 0, 0
+	m.diff.folded = map[int]bool{}
 	return m, loadDiffCmd(m.ctx, m.client, m.cfg.SessionID, m.cfg.Directory, m.diff.source, m.diff.gen)
 }
 
