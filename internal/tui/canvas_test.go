@@ -27,7 +27,20 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 )
+
+// colorEqual reports whether two color.Color values have the same RGBA.
+// Used to compare canvas cell Fg/Bg (color.Color interface) against theme.Color
+// (a string type that implements color.Color) without relying on type identity.
+func colorEqual(a, b interface{ RGBA() (r, g, b, a uint32) }) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
+}
 
 // TestCanvas_FullFill_NoTransparentCell asserts that composeView() renders a
 // frame where every cell carries a background style — no transparent cell
@@ -209,4 +222,211 @@ func TestCanvas_CellAt_OutOfBounds(t *testing.T) {
 	if c := m.cellAt(canvas, 100, 100); c != nil {
 		t.Error("cellAt(100,100) should return nil for a 10×5 canvas")
 	}
+}
+
+// ── Plan 08e §B1-B3: logo canvas paint, bg-pulse, --no-anim ──────────────────
+
+// splashLogoModel builds a splash-screen model at the given terminal size with
+// the named theme, ready for canvas logo-paint assertions.
+func splashLogoModel(themeName string, w, h int) Model {
+	m := New(Config{URL: "http://x"})
+	m.width, m.height = w, h
+	return m.applyThemeByName(themeName)
+}
+
+// logoCellAt returns the canvas cell at glyph coordinate (col, row) within the
+// logo's bounding box, or nil if out of bounds. col ∈ [0, logoWidth), row ∈
+// [0, len(opcode42Glyph)).
+func logoCellAt(canvas *lipgloss.Canvas, x0, y0, col, row int) *uv.Cell {
+	return canvas.CellAt(x0+col, y0+row)
+}
+
+// TestCanvas_LogoCellsHaveShimmerColor asserts that the splash logo is painted
+// per-cell onto the canvas (plan 08e §B1), and that each filled glyph cell's
+// Fg is the shimmer color computed by columnColor for its column. This is the
+// structural test that the render path moved from string-splice to SetCell:
+// remove the paintLogoOnCanvas call and this test fails (the logo region would
+// be blank base-Bg cells, not shimmer-colored block glyphs).
+func TestCanvas_LogoCellsHaveShimmerColor(t *testing.T) {
+	for _, tn := range []string{"opcode42-dark", "opcode42-light"} {
+		t.Run(tn, func(t *testing.T) {
+			m := splashLogoModel(tn, 80, 24)
+			m.animFrame = 7 // arbitrary non-peak frame so shimmer is visibly moving
+			canvas := m.composeCanvas()
+			if canvas == nil {
+				t.Fatal("composeCanvas returned nil")
+			}
+			x0, y0 := m.splashLogoOrigin()
+			p := m.styles.P
+			// Scan the logo's bounding box and verify each filled cell.
+			filledCells := 0
+			for row, line := range opcode42Glyph {
+				runes := []rune(line)
+				for x := 0; x < logoWidth; x++ {
+					c := logoCellAt(canvas, x0, y0, x, row)
+					if c == nil {
+						continue
+					}
+					isFilled := x < len(runes) && runes[x] == '█'
+					if isFilled {
+						filledCells++
+						want := columnColor(x, m.animFrame, p)
+						if !colorEqual(c.Style.Fg, want) {
+							t.Errorf("logo cell (%d,%d) Fg = %v, want shimmer color %q (columnColor)",
+								x, row, c.Style.Fg, want)
+						}
+						if c.Content != "█" {
+							t.Errorf("logo cell (%d,%d) content = %q, want %q", x, row, c.Content, "█")
+						}
+					}
+				}
+			}
+			if filledCells == 0 {
+				t.Error("no filled logo cells found on canvas — paintLogoOnCanvas did not run")
+			}
+		})
+	}
+}
+
+// TestCanvas_BgPulse_TintsLogoRowBg asserts the bg-pulse field (plan 08e §B2):
+// with view.bgPulse = true, the logo row cells carry a breath-tinted Bg (not
+// the plain theme Bg); with view.bgPulse = false, the Bg is the plain theme Bg.
+// The tint is subtle (a lerp toward the accent by a fraction of the breath),
+// so we compare against the computed bgPulseColor rather than a hard-coded hex.
+func TestCanvas_BgPulse_TintsLogoRowBg(t *testing.T) {
+	m := splashLogoModel("opcode42-dark", 80, 24)
+	m.animFrame = logoPeakFrame // peak breath so the tint is maximally visible
+	x0, y0 := m.splashLogoOrigin()
+	p := m.styles.P
+	wantTinted := bgPulseColor(m.animFrame, p)
+
+	// bgPulse on (default for splash): Bg should be the breath-tinted color.
+	m.view.bgPulse = true
+	canvas := m.composeCanvas()
+	c := logoCellAt(canvas, x0, y0, 12, 2) // a filled cell near the wordmark center
+	if c == nil {
+		t.Fatal("nil logo cell")
+	}
+	if !colorEqual(c.Style.Bg, wantTinted) {
+		t.Errorf("bgPulse=on: logo cell Bg = %v, want tinted %q", c.Style.Bg, wantTinted)
+	}
+	if colorEqual(c.Style.Bg, p.Bg) {
+		t.Errorf("bgPulse=on: logo cell Bg == plain Bg %q (no tint applied)", p.Bg)
+	}
+
+	// bgPulse off: Bg should be the plain theme Bg.
+	m.view.bgPulse = false
+	canvas2 := m.composeCanvas()
+	c2 := logoCellAt(canvas2, x0, y0, 12, 2)
+	if c2 == nil {
+		t.Fatal("nil logo cell (bgPulse off)")
+	}
+	if !colorEqual(c2.Style.Bg, p.Bg) {
+		t.Errorf("bgPulse=off: logo cell Bg = %v, want plain Bg %q", c2.Style.Bg, p.Bg)
+	}
+}
+
+// TestCanvas_NoAnim_UsesStaticLogo asserts that with --no-anim (m.noAnim = true)
+// the splash logo is painted at the static peak frame (logoPeakFrame), not the
+// animated m.animFrame (plan 08e §B3). We verify by setting m.animFrame to a
+// non-peak frame and checking that the painted cells match the peak frame's
+// shimmer colors, not the animated frame's.
+func TestCanvas_NoAnim_UsesStaticLogo(t *testing.T) {
+	m := splashLogoModel("opcode42-dark", 80, 24)
+	m.animFrame = 5        // a non-peak animated frame
+	m.noAnim = true        // --no-anim: freeze at peak frame
+	m.view.bgPulse = false // disable bg-pulse so only Fg (shimmer) is compared
+	canvas := m.composeCanvas()
+	x0, y0 := m.splashLogoOrigin()
+	p := m.styles.P
+
+	// At least one filled cell's Fg must match columnColor at logoPeakFrame,
+	// not at m.animFrame (5). Pick a column where the two frames differ.
+	for x := 0; x < logoWidth; x++ {
+		animCol := columnColor(x, m.animFrame, p)
+		peakCol := columnColor(x, logoPeakFrame, p)
+		if animCol == peakCol {
+			continue // frames agree here; not a useful probe
+		}
+		// Find a filled row at this column.
+		for row, line := range opcode42Glyph {
+			runes := []rune(line)
+			if x < len(runes) && runes[x] == '█' {
+				c := logoCellAt(canvas, x0, y0, x, row)
+				if c == nil {
+					continue
+				}
+				if !colorEqual(c.Style.Fg, peakCol) {
+					t.Errorf("noAnim: logo cell (%d,%d) Fg = %v, want peak-frame color %q (not anim-frame %q)",
+						x, row, c.Style.Fg, peakCol, animCol)
+				}
+				return // one mismatch is enough to prove noAnim uses the peak frame
+			}
+		}
+	}
+	// If every column agreed between frame 5 and the peak, the test is vacuous;
+	// verify the noAnim flag at least produces a renderable canvas.
+	if canvas == nil {
+		t.Fatal("noAnim produced a nil canvas")
+	}
+}
+
+// TestCanvas_NoAnim_BgPulseHeldAtPeak asserts that with --no-anim the bg-pulse
+// is held at its peak tint (not animated), matching the "frozen" contract.
+// Since m.view.bgPulse is the toggle and noAnim forces the paint to use the
+// peak frame, the Bg should be the peak-frame bgPulseColor when bgPulse is on
+// — but we explicitly disable the bg-pulse under noAnim (composeCanvas passes
+// `m.view.bgPulse && !m.noAnim`), so the Bg is the plain Bg. This test pins
+// that contract: noAnim ⇒ no animated bg-pulse (the tint is frozen off, not
+// breathing).
+func TestCanvas_NoAnim_BgPulseHeldAtPeak(t *testing.T) {
+	m := splashLogoModel("opcode42-dark", 80, 24)
+	m.animFrame = 5
+	m.noAnim = true
+	m.view.bgPulse = true // even with bgPulse on, noAnim freezes it off
+	canvas := m.composeCanvas()
+	x0, y0 := m.splashLogoOrigin()
+	p := m.styles.P
+	c := logoCellAt(canvas, x0, y0, 12, 2)
+	if c == nil {
+		t.Fatal("nil logo cell")
+	}
+	// noAnim disables the bg-pulse tint — the Bg is the plain theme Bg.
+	if !colorEqual(c.Style.Bg, p.Bg) {
+		t.Errorf("noAnim+bgPulse: logo cell Bg = %v, want plain Bg %q (noAnim freezes the pulse off)",
+			c.Style.Bg, p.Bg)
+	}
+}
+
+// TestCanvas_LogoOriginCentered asserts that splashLogoOrigin computes a
+// position that actually centers the logo on the canvas (the logo's midpoint
+// is near the canvas's midpoint). This guards the centering math against
+// drift in lipgloss's Place/Align rounding.
+func TestCanvas_LogoOriginCentered(t *testing.T) {
+	for _, wh := range []struct{ w, h int }{{80, 24}, {120, 40}, {60, 20}} {
+		m := splashLogoModel("opcode42-dark", wh.w, wh.h)
+		x0, y0 := m.splashLogoOrigin()
+		// Horizontal: logo center should be within 1 cell of canvas center.
+		logoCenterX := x0 + logoWidth/2
+		canvasCenterX := wh.w / 2
+		if abs(logoCenterX-canvasCenterX) > 1 {
+			t.Errorf("w=%d: logo center x %d not near canvas center %d (x0=%d)", wh.w, logoCenterX, canvasCenterX, x0)
+		}
+		// Vertical: logo should be in the upper portion of the body (the body
+		// is logo + composer + hint + status, centered as a block). The logo's
+		// y0 should be >= 0 and the logo should fit on the canvas.
+		if y0 < 0 {
+			t.Errorf("h=%d: logo y0 %d < 0", wh.h, y0)
+		}
+		if y0+len(opcode42Glyph) > wh.h {
+			t.Errorf("h=%d: logo bottom row %d exceeds canvas height", wh.h, y0+len(opcode42Glyph))
+		}
+	}
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }

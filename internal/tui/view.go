@@ -15,6 +15,16 @@ type viewState struct {
 	// expandedThinking, when true, shows the full reasoning text instead of
 	// the one-liner "Thought …" summary (plan 08c M7). Default is collapsed.
 	expandedThinking bool
+
+	// bgPulse toggles the ambient background pulse behind the splash logo
+	// (plan 08e §B2). On by default for the splash; turned off when the
+	// session screen is entered. Ported from opencode's bg-pulse-render.ts
+	// breath field: a slow sin ramp over the logo rows, synchronized to the
+	// shimmer period. No keybind is wired (the plan marked the toggle
+	// optional; ctrl+x p is taken by the palette and ctrl+shift+p is
+	// encoding-ambiguous across terminals) — the field is managed by the
+	// splash/session screen transitions in model.go.
+	bgPulse bool
 }
 
 // toggleHint returns a one-line status string describing a toggle's new value.

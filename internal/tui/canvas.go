@@ -40,6 +40,7 @@ package tui
 //     underneath is untouched.
 
 import (
+	"math"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -147,6 +148,24 @@ func (m Model) composeCanvas() *lipgloss.Canvas {
 				}
 			}
 		}
+	}
+
+	// Splash logo: paint the block-pixel wordmark per-cell onto the canvas
+	// (plan 08e §B1 — the native opentui idiom, replacing the v1 string-splice
+	// render path). Each glyph cell carries the shimmer Fg and, when the
+	// bg-pulse toggle is on (§B2), the breath-tinted Bg. splashContent left
+	// 5 blank rows where the logo goes so the body's centered geometry is
+	// preserved; we compute the same (x0, y0) the string-based wordmark
+	// would have occupied and SetCell each glyph directly. With --no-anim
+	// (§B3) the frame is the static peak frame (logoStatic), freezing the
+	// shimmer and bg-pulse for deterministic capture / accessibility.
+	if m.screen == ScreenSplash && !modalClassActive {
+		x0, y0 := m.splashLogoOrigin()
+		frame := m.animFrame
+		if m.noAnim {
+			frame = logoPeakFrame
+		}
+		paintLogoOnCanvas(canvas, x0, y0, frame, m.styles.P, m.view.bgPulse && !m.noAnim)
 	}
 
 	return canvas
@@ -267,6 +286,14 @@ func (m Model) sessionLayers() []*lipgloss.Layer {
 // splashLayers returns the layers for the splash screen: a centered wordmark
 // + composer + status. Each is its own layer so the canvas positions them
 // without the v1 lipgloss.Place whole-frame-centering hack.
+//
+// The wordmark itself is NOT in the layer string — splashContent leaves 5
+// blank rows where the logo goes so the body's centered geometry is
+// preserved, and composeCanvas paints the logo directly onto the canvas via
+// per-cell SetCell (plan 08e §B1: the native opentui idiom, and the only way
+// to set a per-cell Bg for the bg-pulse field §B2). The string-based logo
+// render is retained only for the pre-resize fallback (viewSplash →
+// splashContent with w<=0, which renders the glyph text plainly).
 func (m Model) splashLayers() []*lipgloss.Layer {
 	w, h := m.width, m.height
 	if w <= 0 || h <= 0 {
@@ -279,6 +306,13 @@ func (m Model) splashLayers() []*lipgloss.Layer {
 // splashContent builds the splash screen body (wordmark, blank, composer,
 // blank, hint, blank, status) and centers it on a w×h frame. Shared by
 // splashLayers (the canvas path) and viewSplash (the pre-resize fallback).
+//
+// On the canvas path (w>0, h>0) the wordmark rows are blank — the actual logo
+// is painted per-cell by composeCanvas via paintLogoOnCanvas (plan 08e §B1).
+// The 5 blank rows preserve the body's centered geometry so the logo lands at
+// the correct (x0, y0). For the pre-resize fallback (w<=0) the wordmark is the
+// plain "opcode42" text (no shimmer, no canvas) so something renders before
+// the first WindowSizeMsg.
 func (m Model) splashContent(w, h int) string {
 	s := m.styles
 	if w <= 0 {
@@ -288,12 +322,15 @@ func (m Model) splashContent(w, h int) string {
 			s.Faint.Render("enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit"))
 	}
 
-	logoRows := logoFrame(m.animFrame, s.P)
-	logoLines := make([]string, len(logoRows))
-	for i, row := range logoRows {
-		logoLines[i] = lipgloss.NewStyle().Width(w).Align(lipgloss.Center).Render(row)
+	// Logo rows: 5 blank full-width rows. The canvas path paints the actual
+	// block-pixel wordmark per-cell onto these rows (plan 08e §B1). Keeping
+	// the rows in the body preserves the centered geometry so the paint
+	// lands at the same (x0, y0) the string-based wordmark would have.
+	logoRows := make([]string, len(opcode42Glyph))
+	for i := range logoRows {
+		logoRows[i] = lipgloss.NewStyle().Width(w).Render("")
 	}
-	wordmark := lipgloss.JoinVertical(lipgloss.Left, logoLines...)
+	wordmark := lipgloss.JoinVertical(lipgloss.Left, logoRows...)
 
 	composer := m.composerView()
 	composer = lipgloss.PlaceHorizontal(w, lipgloss.Center, composer)
@@ -311,6 +348,38 @@ func (m Model) splashContent(w, h int) string {
 		return body
 	}
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, body)
+}
+
+// splashLogoOrigin returns the canvas (x0, y0) of the logo's top-left corner,
+// matching the centering math of splashContent so the per-cell paint lands
+// exactly where the string-based wordmark would have. Used by composeCanvas
+// to paint the logo via SetCell (plan 08e §B1).
+//
+// Horizontal: the logo row is Width(w).Align(Center) on the 19-wide glyph, so
+// the glyph's left padding is (w - logoWidth) / 2 (integer floor; remainder on
+// the right — lipgloss align.go Center case).
+// Vertical: the body is Place'd with PlaceVertical Center, which pads
+// `gap - round(gap*0.5)` blank rows above (lipgloss position.go), where
+// gap = h - bodyHeight. The logo is the top 5 rows of the body, so its y0 is
+// the top padding. bodyHeight = 5 (logo) + 1 (blank) + composerH + 1 + 1 + 1
+// + 1 = 10 + composerH.
+func (m Model) splashLogoOrigin() (int, int) {
+	w, h := m.width, m.height
+	x0 := (w - logoWidth) / 2
+	if x0 < 0 {
+		x0 = 0
+	}
+	composerH := lipgloss.Height(m.composerView())
+	bodyHeight := len(opcode42Glyph) + 1 + composerH + 1 + 1 + 1 + 1 // 10 + composerH
+	gap := h - bodyHeight
+	if gap < 0 {
+		gap = 0
+	}
+	y0 := gap - int(math.Round(float64(gap)*0.5))
+	if y0 < 0 {
+		y0 = 0
+	}
+	return x0, y0
 }
 
 // bodyContent returns the unpositioned body string for the pre-resize fallback

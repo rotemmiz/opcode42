@@ -6,6 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // TestAlwaysPaintsBackground verifies that View() always wraps content in the
@@ -281,5 +283,62 @@ func TestSidebar_BackgroundFill(t *testing.T) {
 		if got := lipgloss.Width(line); got != sidebarWidth {
 			t.Errorf("sidebar line %d: visible width %d, want %d", i, got, sidebarWidth)
 		}
+	}
+}
+
+// ── Plan 08e §B4: footer micro-logo ───────────────────────────────────────────
+
+// TestFooterMicroLogo_DerivedFromGlyph asserts that footerMicroLogo returns a
+// 3-block mark derived from opcode42Glyph's "o" letter (cols 4-6 of the mid
+// row), which renders as "███" — the compact 1-row micro-mark that replaces
+// the plain "•" bullet in the sidebar footer version chip.
+func TestFooterMicroLogo_DerivedFromGlyph(t *testing.T) {
+	// Build the expected mark directly from the glyph: cols 4-6 of row 2.
+	row := []rune(opcode42Glyph[2])
+	var wantRunes []rune
+	for _, x := range []int{4, 5, 6} {
+		if x < len(row) && row[x] == '█' {
+			wantRunes = append(wantRunes, '█')
+		} else {
+			wantRunes = append(wantRunes, ' ')
+		}
+	}
+	wantPlain := string(wantRunes)
+
+	for _, named := range theme.Palettes() {
+		got := footerMicroLogo(named.Palette)
+		plain := stripANSI(got)
+		if plain != wantPlain {
+			t.Errorf("palette=%s: footerMicroLogo = %q, want %q", named.Name, plain, wantPlain)
+		}
+		if lipgloss.Width(plain) != 3 {
+			t.Errorf("palette=%s: footerMicroLogo width %d, want 3 (compact 1-row mark)", named.Name, lipgloss.Width(plain))
+		}
+	}
+}
+
+// TestSidebar_FooterHasMicroLogo asserts the sidebar footer version chip
+// renders the block-pixel micro-mark (plan 08e §B4) and the "Opcode42" name.
+// The micro-mark replaces the old "•" bullet; "Opcode42" text is unchanged so
+// existing substring assertions stay green.
+func TestSidebar_FooterHasMicroLogo(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	m.width, m.height = 120, 24
+	m.store.sessions = []Session{{ID: "ses_1", Title: "S"}}
+	out := m.sidebarView()
+	plain := stripANSI(out)
+	// The micro-mark is "███" (3 full blocks); at least one block glyph must
+	// be present in the footer line (the version chip).
+	if !strings.Contains(plain, "█") {
+		t.Errorf("sidebar footer missing the block-pixel micro-mark (no █ glyph)\n%s", plain)
+	}
+	// The "Opcode42" name must still be present (unchanged).
+	if !strings.Contains(plain, "Opcode42") {
+		t.Errorf("sidebar footer missing 'Opcode42' name\n%s", plain)
+	}
+	// The old "• Opcode42" bullet form should NOT be present (replaced by the mark).
+	// Note: "•" may appear elsewhere (LSP dot), so we check the specific chip form.
+	if strings.Contains(plain, "• Opcode42") {
+		t.Errorf("sidebar footer still has the old '• Opcode42' bullet form — micro-mark not applied\n%s", plain)
 	}
 }

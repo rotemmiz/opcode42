@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
@@ -202,6 +203,11 @@ func columnColor(x int, frame int, p theme.Palette) theme.Color {
 // transparent-cell bleed on light terminals (plan 08c Tier 0 invariant).
 //
 // frame is m.animFrame (monotonic, incremented per animTickMsg at 10fps).
+//
+// On the v2 canvas (plan 08e §B1) the preferred render path is paintLogoOnCanvas,
+// which SetCell's each glyph cell directly with the shimmer color — the native
+// opentui idiom. logoFrame is retained for the pre-resize fallback (viewSplash)
+// and for callers that want a string (the status modal, static captures).
 func logoFrame(frame int, p theme.Palette) []string {
 	rows := make([]string, len(opcode42Glyph))
 	for row, line := range opcode42Glyph {
@@ -220,4 +226,106 @@ func logoFrame(frame int, p theme.Palette) []string {
 		rows[row] = sb.String()
 	}
 	return rows
+}
+
+// ── Static logo (plan 08e §B3) ───────────────────────────────────────────────
+
+// logoPeakFrame is the animation frame at which the shimmer's ambient bell
+// peaks (the brightest overall frame across the wordmark). phase=ambientCenter
+// at frame = ambientCenter * shimmerPeriodFrames = 0.5 * 46 = 23. At this frame
+// the ambient term is maximal and ring 0's head sits at the mid-span, so the
+// full wordmark reads as uniformly "lit" with a bright core — the frame that
+// most resembles the classic opencode splash still.
+const logoPeakFrame = 23
+
+// logoStatic returns the brightest-frame wordmark as a string slice (one row
+// per glyph row) for non-animated contexts: the tools/tui-shots screenshot
+// captures (deterministic), the status / about modal, and any caller that
+// wants the logo as a string without the shimmer animation. The animated path
+// (logoFrame) is unchanged; logoStatic simply calls it at the peak frame
+// (logoPeakFrame). The --no-anim flag's canvas path uses logoPeakFrame
+// directly (via paintLogoOnCanvas) because it paints per-cell rather than via
+// strings; logoStatic is the string-based API for the same peak frame.
+// (plan 08e §B3 — one function, returns the brightest-frame wordmark.)
+func logoStatic(p theme.Palette) []string {
+	return logoFrame(logoPeakFrame, p)
+}
+
+// ── Bg-pulse breath (plan 08e §B2) ───────────────────────────────────────────
+
+// breathAt returns the ambient breath strength at the given frame, in [0,1].
+// This is the same ambient + breath-floor path computed inside
+// shimmerBrightness (logo.go:148-162), factored out so the bg-pulse field can
+// reuse the exact numerics the column brightness already feeds on — the bg
+// breath is synchronized to the shimmer period by construction (both are
+// 46-frame periodic, both peak at phase=ambientCenter=0.5).
+//
+//	opencode's bg-pulse-render.ts:302 computes `breath = (0.5 + 0.5*sin(t*BREATH_SPEED)) * BREATH_AMP`
+//	with BREATH_AMP=0.05, BREATH_SPEED=0.0008 (a slow ~7.85s sinusoid in ms-space).
+//	We instead reuse logo.go's existing ambient bell (ambientAmp=0.36,
+//	ambientCenter=0.5, ambientWidth=0.34, breathBase=0.04) so the bg-pulse
+//	breathes in lockstep with the shimmer sweep — no fabricated numbers, the
+//	numerics are already vetted against logo.tsx.
+func breathAt(frame int) float64 {
+	const ambientAmp = 0.36
+	const ambientCenter = 0.5
+	const ambientWidth = 0.34
+	const breathBase = 0.04
+
+	phase := math.Mod(float64(frame%shimmerPeriodFrames)/float64(shimmerPeriodFrames), 1.0)
+	d := (phase - ambientCenter) / ambientWidth
+	var ambient float64
+	if math.Abs(d) < 1 {
+		ambient = (1 - d*d) * (1 - d*d) * ambientAmp
+	}
+	return clamp01(ambient + breathBase)
+}
+
+// bgPulseColor returns the background tint for a logo-row cell at the given
+// frame. It lerps from the theme base Bg toward the accent (Blue) by a fraction
+// of the breath strength — a subtle ambient glow, not a loud color shift. The
+// 0.3 factor keeps the tint faint (matching opencode's `* 0.7` post-clamp
+// scaling in bg-pulse-render.ts:339, adjusted for our lighter breath curve).
+func bgPulseColor(frame int, p theme.Palette) theme.Color {
+	b := breathAt(frame)
+	return lerpHex(string(p.Bg), string(p.Accent()), b*0.3)
+}
+
+// ── Canvas logo paint (plan 08e §B1+B2) ──────────────────────────────────────
+
+// paintLogoOnCanvas renders the block-pixel "opcode42" wordmark directly onto
+// the canvas via per-cell SetCell, the native opentui idiom (plan 08e §B1).
+// Each glyph cell carries the shimmer color as its Fg; when bgPulse is true
+// (plan 08e §B2) the cell's Bg is the breath-tinted color from bgPulseColor,
+// otherwise the theme base Bg. Empty (space) cells within the logo's bounding
+// box are painted as the bg color only (no glyph) — they carry the bg-pulse
+// tint so the wordmark reads as sitting in a softly breathing field rather
+// than floating on the bare splash background.
+//
+// x0/y0 is the top-left canvas coordinate of the logo's bounding box (the
+// 19×5 region). frame is m.animFrame. The caller is responsible for computing
+// the centered x0/y0 from the canvas dimensions (mirroring splashContent).
+func paintLogoOnCanvas(canvas *lipgloss.Canvas, x0, y0, frame int, p theme.Palette, bgPulse bool) {
+	if canvas == nil {
+		return
+	}
+	bg := theme.Color(string(p.Bg))
+	if bgPulse {
+		bg = bgPulseColor(frame, p)
+	}
+	for row, line := range opcode42Glyph {
+		padded := line
+		for len([]rune(padded)) < logoWidth {
+			padded += " "
+		}
+		runes := []rune(padded)
+		for x, r := range runes {
+			cx, cy := x0+x, y0+row
+			cell := &uv.Cell{Content: string(r), Width: 1, Style: uv.Style{Bg: bg}}
+			if r != ' ' {
+				cell.Style.Fg = columnColor(x, frame, p)
+			}
+			canvas.SetCell(cx, cy, cell)
+		}
+	}
 }
