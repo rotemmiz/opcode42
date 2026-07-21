@@ -577,6 +577,16 @@ func (m Model) renderMarkdownStreaming(partID, text string) string {
 // partial block (or "" when the text ends on a blank line — nothing is
 // currently streaming).
 //
+// Fence-aware: a line starting with ``` (3+ backticks) opens a fenced code
+// block; blank lines INSIDE the fence do NOT finalize the block. Without this
+// guard, a code fence with an internal blank line (e.g. a function with a
+// blank line between statements) would be split mid-fence, and the two pieces
+// would each render as broken markdown (an unclosed fence + a stray closing
+// fence). The fence is tracked by counting ``` openings: an odd count means
+// we're inside a fence; the closing ``` flips it back. This is a simple
+// heuristic (it doesn't honor indented code blocks or tilde fences) but
+// covers the common case for streaming assistant output.
+//
 // Example:
 //
 //	"# H1\n\nbody para\n\nstill streaming…" →
@@ -589,17 +599,27 @@ func splitMarkdownBlocks(text string) (stable []string, streaming string) {
 		return nil, ""
 	}
 	// Walk the text line-by-line, grouping non-blank runs into blocks. A
-	// block is finalized when a blank line is seen; the block (including any
-	// intra-block blank lines that are part of a multi-line construct like a
-	// code fence) becomes a stable block.
+	// block is finalized when a blank line is seen OUTSIDE a code fence; the
+	// block (including any intra-block blank lines that are part of a
+	// multi-line construct like a code fence) becomes a stable block.
 	lines := strings.Split(text, "\n")
 	var blocks []string
 	var cur []string
+	inFence := false
 	for _, ln := range lines {
-		if strings.TrimSpace(ln) == "" {
-			// Blank line. If we have content in cur, this blank finalizes it
-			// as a stable block; otherwise it's a leading/inter-block blank
-			// (collapsed — opencode strips leading blanks before commit too).
+		trimmed := strings.TrimSpace(ln)
+		// A line starting with ``` (possibly with a language tag) toggles the
+		// fence state. We count openings so a stray ``` inside a non-fence
+		// paragraph still toggles — heuristic, but covers the common case.
+		if strings.HasPrefix(trimmed, "```") {
+			inFence = !inFence
+		}
+		isBlank := trimmed == ""
+		if isBlank && !inFence {
+			// Blank line outside a fence. If we have content in cur, this
+			// blank finalizes it as a stable block; otherwise it's a
+			// leading/inter-block blank (collapsed — opencode strips leading
+			// blanks before commit too).
 			if len(cur) > 0 {
 				blocks = append(blocks, strings.Join(cur, "\n"))
 				cur = nil
@@ -611,7 +631,10 @@ func splitMarkdownBlocks(text string) (stable []string, streaming string) {
 	if len(cur) > 0 {
 		// Trailing non-blank content with no following blank line: this is
 		// the streaming block. It is NOT appended to `blocks` (the stable
-		// list) — it is returned separately.
+		// list) — it is returned separately. (If a code fence is still open,
+		// the streaming block carries the open fence — glamour will render it
+		// as an in-progress code block, which is the desired streaming
+		// behavior.)
 		return blocks, strings.Join(cur, "\n")
 	}
 	// Text ends on a blank line: no streaming block.

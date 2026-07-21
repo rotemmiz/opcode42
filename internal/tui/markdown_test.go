@@ -359,6 +359,25 @@ func TestSplitMarkdownBlocks(t *testing.T) {
 			stable:    []string{"# H1"},
 			streaming: "```go\nfunc foo() {",
 		},
+		{
+			name: "code fence with internal blank line",
+			text: "# H1\n\n```go\nfunc foo() {\n\nbar()\n}\n```\n\nAfter fence.",
+			// The blank line inside the fence does NOT split it; the whole
+			// fence finalizes as one stable block at the blank line AFTER
+			// the closing ```. The heading is its own stable block (the
+			// blank between "# H1" and the opening ``` is OUTSIDE the
+			// fence). "After fence." is the streaming block.
+			stable:    []string{"# H1", "```go\nfunc foo() {\n\nbar()\n}\n```"},
+			streaming: "After fence.",
+		},
+		{
+			name: "unclosed code fence keeps blank lines in streaming block",
+			text: "```go\nfunc foo() {\n\nbar()\n}\n",
+			// No closing ``` → inFence stays true → no blank-line split →
+			// the whole text is the streaming block (no stable blocks).
+			stable:    nil,
+			streaming: "```go\nfunc foo() {\n\nbar()\n}\n",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
