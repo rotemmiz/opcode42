@@ -490,6 +490,51 @@ Any divergence not in this registry causes a CI failure. Adding to the registry
 requires a PR with a tracking issue. The registry shrinks over time as features
 are implemented.
 
+### Audit pass (2026-07-21) — plan 08e (TUI finish line) workstream sweep
+
+Plan 08e (`plans/08e-tui-finish-line.md` §F5) required an audit of every workstream it spawned
+(PR #201 through #212) for intentional divergences to record here. The audit verified each PR's
+claimed wire surface against the merged code and against `conformance/openapi-reference.json`. **No
+new entries were added to `conformance/known-divergences.json`** — every 08e workstream is either
+additive client-only behavior or a reuse of existing endpoints, so none introduces a wire-level
+divergence that the conformance gate would surface. The workstream-by-workstream findings:
+
+| PR | Workstream | Wire surface | Divergence | Finding |
+|---|---|---|---|---|
+| #201 | A1+A2 canvas + layered overlays | none (client render path) | none | Pure client-side render root swap (v1 string composite → v2 `lipgloss.NewCanvas` + `Layer.Z`). No endpoint, SSE, PTY, auth, or routing change. |
+| #202 | D1 mDNS client browser | none (client-side mDNS browse) | none — additive | `internal/mdns/discover.go` reuses `grandcat/zeroconf` (already vendored by the daemon's publisher) to *browse* `_http._tcp` + `_opencode._tcp`. The daemon already publishes compatibly (`internal/mdns/mdns.go:66,79`); browsing is the client-side mirror. No HTTP/SSE endpoint touched. |
+| #203 | E3 reconcile-on-reconnect | `GET /permission`, `GET /question` (existing) | none — additive client behavior | `internal/tui/reconcile.go` fires both GETs in parallel on `streamOpenedMsg` (reconnect) and on `session.status → idle` for the open session, REPLACE-ing the store's slices (matches Android `StoreReducer.kt:115-116`). Reply-endpoint 404s are swallowed (plan 16 Bug 1). Both endpoints already exist on the daemon; no new endpoint, no shape change. |
+| #204 | E4 in-stream question card | none (client-side store + render) | none | `questionCardView` / `answeredQuestionCardView` render from the existing `Question` wire shape and the `question.replied`/`rejected` SSE events already consumed by the store. No new endpoint or event type. |
+| #205 | E1 VCS working-tree diff source | `GET /vcs/diff`, `GET /vcs/status` (existing in the frozen reference) | none — additive client behavior; **daemon-side gap flagged below** | `sdk/go/opcode42client.go` `VCSDiff`/`VCSStatus` wrap the existing `GetJSON` escape hatch. Both paths are in `openapi-reference.json` (`/vcs/diff` at :2262, `/vcs/status` at :2204). The opcode42 daemon exposes them as 501 stubs today (`internal/server/server.go` spec-driven 501 loop); the TUI's working-tree source works against a real opencode daemon now and against opcode42 once a real VCS handler lands. **This is a pre-existing daemon-side gap, NOT a TUI divergence and NOT introduced by 08e** — see "Flagged for follow-up" below. |
+| #206 | E5 context gauge fix | none (client-side token read) | none | `ingestHistory` backfills the session's aggregated `Tokens` from the last assistant message's `tokens` (mirrors opencode's sidebar context plugin reading `msg().findLast(...).tokens`). Reads existing `AssistantMessage.tokens` fields (`openapi.json:16325-16356`) and `Model.limit.context` (`:21747-21762`). No wire change. |
+| #207 | D2-D4 connect overlay + first-run | `GET /global/health` (existing) | none — additive client behavior | `modalConnect` reuses D1's `mdns.Browse` + the existing `healthCmd` (`GET /global/health`) + `openSSECmd` path; `connectTo` rebuilds the SDK client with the picked URL. First-run flow keys off empty `--url` + no KV-pinned `server_url`. No new endpoint. |
+| #208 | B1-B4 logo & graphics | none (client render path) | none | Per-cell `SetCell` logo paint, bg-pulse field, static logo asset, footer micro-mark — all client-only. No wire surface touched. |
+| #209 | A3 scroll reconciliation | none (client render path) | none | Re-seats the stdlib-only `scrollregion` package onto the v2 canvas viewport. The DECSET-1007 native-copy `Guard`/`EnableSeq`/`DisableSeq` API ships; the one-line `main.go` wiring is a follow-up. No wire surface touched. |
+| #210 | C1-C4 subagent support | `GET /session/{id}/children`, `GET /session/{id}/message` (existing) | none — additive client behavior | The in-stream subagent card loads the child transcript via `loadChildMessagesCmd` → `GET /session/{childId}/message` (`internal/tui/subagent.go:56`); the sidebar TASKS section + sessions-modal subtree read children already mirrored in the store via `childrenLoadedMsg` → `GET /session/{id}/children` (`subagent.go:42`). Both endpoints are in the frozen reference and already used by 08b's parent/child/sibling nav. Child-id parsing reads `metadata.sessionId` / the `<task id="…">` wrapper (opencode `task.ts:171-176,72`) — no new wire field. |
+| #211 | E2 image parts (Sixel/iTerm2) | none (client-only escape emission) | none — additive, opt-in | `internal/tui/image.go` emits Sixel (`DCS … ST`) or iTerm2 inline-image (`ESC ]1337;File=inline=1:… ST`) escapes **only** when `viewState.images` is ON (ctrl+x i) AND a capability probe succeeds (TERM_PROGRAM / `--sixel` / `OPCODE42_SIXEL` / `$TERM`). Image bytes are read from the existing `Part.url` data-URL field (`packages/tui/.../index.tsx:1246`, `packages/opencode/src/image/image.ts:148`). The placeholder glyph is always safe. No wire change; no new dep (in-package sixel encoder). |
+| #212 | F2-F3 which-key + help overlay | none (client render path) | none | `whichKeyView` is a `Layer.Z(15)` strip; `modalHelp` lists ~50 keybinds from `helpRows()`. Pure client UX. No wire surface touched. |
+
+**`GET /command` non-deterministic-ordering exclusion (plan 08 §U12).** Unchanged. The `command-list`
+entry in `conformance/known-divergences.json` (lines 32-36) already records that ordering is **no
+longer a divergence** (masterplan decision #6: Opcode42 sorts by name; the `command-list` scenario
+compares the body order-insensitively via `orderInsensitiveListPath`), and that the remaining
+(opcode42-vs-opencode-only) divergence is content — opencode's command SET is a superset (built-in /
+MCP / skill commands Opcode42 doesn't surface). Plan 08e does not touch `/command` and does not alter
+this entry.
+
+### Flagged for follow-up (NOT 08e divergences, NOT added to the registry as intentional)
+
+- **`/vcs/diff` + `/vcs/status` daemon-side 501 stubs (PR #205, E1).** The opcode42 daemon registers
+  these as 501 stubs via the spec-driven stub loop in `internal/server/server.go` (pre-existing; the
+  stub loop has been there since the plan 06 M10 handler↔spec conformance work, #113). The TUI's
+  working-tree diff source (E1) consumes the endpoints correctly and works against a real opencode
+  daemon; against opcode42 it surfaces `"diff failed: GET /vcs/diff: status 501"` in the reviewer.
+  This is a **daemon-side implementation gap**, not a TUI-side divergence and not introduced by plan
+  08e. It is not added to `known-divergences.json` as "intentional" because it is not an intentional
+  divergence — it is an unfinished daemon handler. Track: plan 01/02 follow-up to implement real VCS
+  handlers for `/vcs/diff`, `/vcs/status`, `/vcs/diff/raw`, `/vcs/apply` (all present in
+  `openapi-reference.json` at :2150-2440).
+
 ---
 
 ## Review pass (2026-06-03) — what the gate actually proves; reconcile strictness
