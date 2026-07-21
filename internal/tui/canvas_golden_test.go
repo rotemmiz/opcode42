@@ -283,7 +283,7 @@ func TestCanvas_Golden_Permission(t *testing.T) {
 		Metadata:   []byte(`{"command":"ls -la"}`),
 		Tool:       []byte(`{"name":"bash"}`),
 	}}
-	m.permSel = 0
+	m.permState = newPermissionState()
 	out := m.composeView()
 	assertGolden(t, "canvas-permission-80x24-dark.txt", stripANSI(out))
 }
@@ -314,8 +314,7 @@ func TestCanvas_Golden_Question(t *testing.T) {
 			Multiple: false,
 		}},
 	}}
-	m.qIdx, m.qSel = 0, 0
-	m.qChecked = nil
+	m.qBody = questionBodyState{}
 	out := m.composeView()
 	assertGolden(t, "canvas-question-80x24-dark.txt", stripANSI(out))
 }

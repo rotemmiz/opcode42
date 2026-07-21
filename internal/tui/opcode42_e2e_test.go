@@ -271,8 +271,10 @@ func TestOpcode42Parity_PermissionRoundTrip(t *testing.T) {
 		t.Fatal("permission overlay did not render")
 	}
 
-	// Reject it ("r") — the TUI POSTs /permission/{id}/reply over the wire.
-	d.inject(key("r"))
+	// Reject it: plan 17 §B2 — esc transitions to the reject stage, then
+	// enter sends the reject reply over the wire (the new 3-stage flow).
+	d.inject(key("esc"))
+	d.inject(key("enter"))
 
 	// The daemon's Ask() must unblock with a denial (reject -> DeniedError).
 	select {
@@ -326,7 +328,8 @@ func TestOpcode42Parity_QuestionRoundTrip(t *testing.T) {
 		}
 	}
 
-	d.inject(key("r"))
+	// Reject it: plan 17 §B2 — esc rejects (opencode uses esc, not r).
+	d.inject(key("esc"))
 
 	select {
 	case err := <-askDone:

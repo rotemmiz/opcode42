@@ -8,24 +8,39 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
-// U10 — permission overlay. A `permission.asked` SSE event yields a pending
-// Permission in the store; the TUI blocks on it with an allow-once / allow-always
-// / reject overlay and replies via POST /permission/:id/reply. The daemon's
-// `permission.replied` event clears it (we also clear optimistically).
-
-// permChoices are the reply options, in display order; the value is the wire
-// `reply` field for POST /permission/:id/reply.
-var permChoices = []struct {
-	label string
-	reply string
-}{
-	{"Allow once", "once"},
-	{"Allow always", "always"},
-	{"Reject", "reject"},
-}
+// permission.go — Plan 17 §B: the permission footer panel.
+//
+// opencode renders permission as a footer-region panel (bottom of screen),
+// NOT a centered modal (run/footer.view.tsx:778-794). The panel body carries
+// the theme's surface background (BgElev, Opcode42's equivalent of opencode's
+// `surface`); the outer footer container is transparent when a panel is
+// active (footer.view.tsx:663) and the left accent border is removed
+// (footer.view.tsx:645).
+//
+// The panel has a 3-stage state machine (permission.shared.ts:22-23):
+//
+//	permission → Allow once / Allow always / Reject options
+//	always     → confirmation step (Confirm / Cancel) showing the patterns
+//	             that will be allowed until OpenCode is restarted
+//	reject     → text input for the rejection message
+//
+// Keyboard (footer.permission.tsx:214-257):
+//
+//	tab / shift+tab / left / h / right / l — shift selection
+//	return / enter                         — confirm selected
+//	esc                                    — escape (→ reject stage, or cancel
+//	                                         from always stage)
+//
+// No y/n shortcuts, no 1/2/3 digit shortcuts. Selection is tab/arrows + enter
+// (plan 17 §B2 — matching opencode, replacing the prior a/s/r shortcuts).
+//
+// For edit/apply_patch permissions, the panel shows the unified diff inline
+// (footer.permission.tsx:373-391) using the shared renderUnifiedDiff helper
+// from Workstream C (diffrender.go).
 
 // pendingPermission is the permission currently awaiting a reply (the oldest), or
 // nil when there is none.
@@ -42,95 +57,315 @@ type permissionRepliedMsg struct {
 	err error
 }
 
-// replyPermissionCmd answers a permission request.
-func replyPermissionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id, reply string) tea.Cmd {
+// replyPermissionCmd answers a permission request. The message is included
+// when non-empty (the reject stage's textarea content); opencode's wire
+// accepts an optional `message` field (PermissionReplyJSONBody.message).
+func replyPermissionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id, reply, message string) tea.Cmd {
 	return func() tea.Msg {
-		err := c.PostJSON(ctx, "/permission/"+id+"/reply", map[string]string{"reply": reply}, nil)
+		body := map[string]string{"reply": reply}
+		if strings.TrimSpace(message) != "" {
+			body["message"] = strings.TrimSpace(message)
+		}
+		err := c.PostJSON(ctx, "/permission/"+id+"/reply", body, nil)
 		return permissionRepliedMsg{id: id, err: err}
 	}
 }
 
-// handlePermissionKey drives the blocking overlay: ↑/↓ move, enter sends the
-// selection, and a/s/r are shortcuts (allow once / allow always / reject).
+// handlePermissionKey drives the 3-stage footer panel. The state machine
+// lives in m.permState (permission_state.go); the key path applies pure
+// transitions and dispatches the reply when a final option is confirmed.
+//
+// Keys (matching opencode footer.permission.tsx:214-257):
+//   - tab / shift+tab / left / h / right / l — shift selection
+//   - return / enter — confirm selected (permRun)
+//   - esc — escape (permEscape): always stage → permission; otherwise → reject stage
+//   - in the reject stage the textarea owns the keys (only esc cancels)
+//
+// The reject stage's textarea content is captured in m.permState.message;
+// enter from the reject stage sends the reject reply with the message.
 func (m Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	p := m.pendingPermission()
-	if p == nil || m.permReplying { // ignore keys while a reply is in flight
+	if p == nil || m.permState.replying {
 		return m, nil
 	}
+	// Reset the state when the active pending permission changed (so a stale
+	// state from a prior request doesn't bleed into a new one).
+	if p.ID != m.permRequestID {
+		m.permState = newPermissionState()
+		m.permRequestID = p.ID
+	}
+
+	if m.permState.stage == permStageReject {
+		return m.handlePermissionRejectKey(msg, p)
+	}
+
 	switch msg.String() {
-	case "up", "k":
-		if m.permSel > 0 {
-			m.permSel--
-		}
+	case "tab":
+		m.permState = permShift(m.permState, +1)
 		return m, nil
-	case "down", "j":
-		if m.permSel < len(permChoices)-1 {
-			m.permSel++
-		}
+	case "shift+tab":
+		m.permState = permShift(m.permState, -1)
 		return m, nil
-	case "a":
-		return m.replyPermission(p.ID, "once")
-	case "s":
-		return m.replyPermission(p.ID, "always")
-	case "r", "esc":
-		return m.replyPermission(p.ID, "reject")
+	case "left", "h":
+		m.permState = permShift(m.permState, -1)
+		return m, nil
+	case "right", "l":
+		m.permState = permShift(m.permState, +1)
+		return m, nil
 	case "enter":
-		return m.replyPermission(p.ID, permChoices[m.permSel].reply)
+		return m.permissionConfirm(p, m.permState.selected)
+	case "esc":
+		m.permState = permEscape(m.permState)
+		return m, nil
 	}
 	return m, nil
 }
 
-// replyPermission sends the reply. The request is NOT removed yet: the overlay
-// stays up through the round-trip so a failed POST can't silently drop a request
-// the daemon is still blocked on — it's cleared on success (or by the
-// permission.replied SSE event).
-func (m Model) replyPermission(id, reply string) (tea.Model, tea.Cmd) {
-	m.permReplying = true
-	return m, replyPermissionCmd(m.ctx, m.client, id, reply)
+// handlePermissionRejectKey handles keys in the reject stage (the textarea
+// owns the keys). enter sends the reject reply with the typed message; esc
+// cancels back to the permission stage.
+func (m Model) handlePermissionRejectKey(msg tea.KeyMsg, p *Permission) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		m.permState = permSetReplying(m.permState, true)
+		reply := "reject"
+		message := m.permState.message
+		return m, replyPermissionCmd(m.ctx, m.client, p.ID, reply, message)
+	case "esc":
+		m.permState = permCancelReject(m.permState)
+		return m, nil
+	default:
+		// Append printable characters to the reject message. This is a
+		// minimal textarea; opencode uses a real TextareaRenderable with
+		// word-wrap and a 3-row max height (footer.permission.tsx:97-128).
+		// Opcode42 keeps a single-line string; backspace deletes the last
+		// rune.
+		switch msg.String() {
+		case "backspace", "backspace2":
+			if len(m.permState.message) > 0 {
+				r := []rune(m.permState.message)
+				m.permState = permSetMessage(m.permState, string(r[:len(r)-1]))
+			}
+			return m, nil
+		}
+		k := msg.Key()
+		if k.Text != "" && k.Code >= 32 {
+			m.permState = permSetMessage(m.permState, m.permState.message+k.Text)
+		}
+		return m, nil
+	}
 }
 
-// permissionView renders the blocking overlay (centered card).
+// permSetReplying marks the permState as replying without changing other
+// fields (the pure transitions handle it, but the reject-send path is
+// dispatched from the key handler directly).
+func permSetReplying(s permissionState, replying bool) permissionState {
+	s.replying = replying
+	return s
+}
+
+// permissionConfirm confirms the selected option in the current stage. For
+// options that transition (always → always stage; reject → reject stage) the
+// state is updated and no reply is sent. For final options (once, confirm in
+// always stage) the reply is dispatched.
+func (m Model) permissionConfirm(p *Permission, opt permOption) (tea.Model, tea.Cmd) {
+	next, reply := permRun(m.permState, opt)
+	m.permState = next
+	if reply == "" {
+		return m, nil
+	}
+	m.permState = permSetReplying(m.permState, true)
+	return m, replyPermissionCmd(m.ctx, m.client, p.ID, reply, "")
+}
+
+// permissionView renders the footer panel (plan 17 §B1): the panel body,
+// sized leftW × panelH, styled with BgElev background. The panel is positioned
+// at the bottom of the screen by the canvas (overlayLayers). The 3-stage
+// flow renders different content per stage (permission/always/reject).
 func (m Model) permissionView() string {
 	p := m.pendingPermission()
 	if p == nil {
 		return ""
 	}
+	// Reset the state when the active pending permission changed (mirrors
+	// handlePermissionKey's reset, for the render path).
+	if p.ID != m.permRequestID {
+		m.permState = newPermissionState()
+		m.permRequestID = p.ID
+	}
 	s := m.styles
-	width := 60
+	leftW := m.leftColumnWidth()
+	if leftW < 1 {
+		leftW = 1
+	}
 
 	var lines []string
-	lines = append(lines, lipgloss.NewStyle().Foreground(s.P.Amber).Bold(true).Render("Permission required"), "")
-	lines = append(lines, s.Base.Render(truncate(permissionTitle(*p), width-2)))
-	if detail := permissionDetail(*p); detail != "" {
-		lines = append(lines, s.Faint.Render(truncate(detail, width-2)))
+	switch m.permState.stage {
+	case permStagePermission:
+		lines = m.permissionStageLines(p, leftW)
+	case permStageAlways:
+		lines = m.permissionAlwaysStageLines(p, leftW)
+	case permStageReject:
+		lines = m.permissionRejectStageLines(leftW)
+	}
+
+	// Hint line (matches opencode's footer hint at footer.permission.tsx:457-466).
+	hint := "⇆ select   enter confirm   esc " + permEscHint(m.permState.stage)
+	if m.permState.replying {
+		hint = "Waiting for permission event..."
 	}
 	lines = append(lines, "")
-	for i, c := range permChoices {
-		if i == m.permSel {
-			lines = append(lines, s.Selection.Width(width-4).Render(" "+c.label)) // -4: fits inside Padding(1,2)
-		} else {
-			lines = append(lines, s.Base.Render(" "+c.label))
+	lines = append(lines, s.Faint.Render(hint))
+
+	body := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	// Panel body: full leftW width, BgElev surface bg. The canvas positions
+	// the panel at the bottom of the screen (overlayLayers).
+	// Pad to the target height (plan 17 §B1): panelH = base + PERMISSION_ROWS.
+	// opencode's renderer reserves a fixed height regardless of content
+	// (footer.ts:697-722); Opcode42 pads the body to the same height so
+	// the panel is a stable footer region (not content-sized).
+	panel := s.Surface(s.P.BgElev).Width(leftW).Render(body)
+	if h := m.permissionPanelHeight(); h > lipgloss.Height(panel) {
+		panel = padVertical(panel, h, s.P.BgElev)
+	}
+	return panel
+}
+
+// padVertical pads a rendered block to the target height by appending
+// BgElev-styled blank rows. Used by the footer panels to hit the fixed
+// panel height (base + ROWS).
+func padVertical(block string, targetH int, bg theme.Color) string {
+	h := lipgloss.Height(block)
+	if h >= targetH {
+		return block
+	}
+	rows := strings.Split(block, "\n")
+	pad := lipgloss.NewStyle().Background(bg).Render(strings.Repeat(" ", lipgloss.Width(block)))
+	for h < targetH {
+		rows = append(rows, pad)
+		h++
+	}
+	return strings.Join(rows, "\n")
+}
+
+// permEscHint returns the esc-action label for the hint line
+// (footer.permission.tsx:464): "cancel" from the always stage, "reject"
+// otherwise.
+func permEscHint(stage permStage) string {
+	if stage == permStageAlways {
+		return "cancel"
+	}
+	return "reject"
+}
+
+// permissionStageLines renders the initial permission stage: the title +
+// detail, the inline diff (when present), and the option buttons.
+func (m Model) permissionStageLines(p *Permission, leftW int) []string {
+	s := m.styles
+	innerW := leftW - 2 // Padding(0,1) → 1 col each side
+	if innerW < 1 {
+		innerW = 1
+	}
+	var lines []string
+	lines = append(lines, "")
+	// Title row: △ + title (footer.permission.tsx:271-273).
+	title := "Permission required"
+	lines = append(lines, " "+lipgloss.NewStyle().Foreground(s.P.Amber).Bold(true).Render("△")+" "+
+		lipgloss.NewStyle().Foreground(s.P.Fg).Render(title))
+	lines = append(lines, "")
+
+	// Info lines: the tool title + detail (footer.permission.tsx:277-283).
+	infoTitle := permissionTitle(*p)
+	lines = append(lines, " "+s.Base.Render(truncate(infoTitle, innerW)))
+	if detail := permissionDetail(*p); detail != "" {
+		lines = append(lines, " "+s.Faint.Render(truncate(detail, innerW)))
+	}
+	lines = append(lines, "")
+
+	// Inline diff (plan 17 §B4): when the permission metadata carries a
+	// diff (edit/apply_patch tools), render it inline via the shared
+	// renderUnifiedDiff helper from Workstream C.
+	if diff := permissionDiff(*p); diff != "" {
+		if rendered := renderUnifiedDiff(diff, permissionDiffFile(*p), s.P, leftW); rendered != "" {
+			lines = append(lines, rendered)
+			lines = append(lines, "")
 		}
 	}
-	hint := "a allow · s always · r reject · enter select"
-	if m.permReplying {
-		hint = "sending…"
+
+	// Option buttons (footer.permission.tsx:438-447): a row of padded cells,
+	// the selected one with the highlight bg.
+	lines = append(lines, m.permissionButtons(permStageOptions(permStagePermission), innerW))
+	return lines
+}
+
+// permissionAlwaysStageLines renders the "always" confirmation stage: the
+// patterns that will be allowed, and the Confirm / Cancel buttons
+// (footer.permission.tsx:401-422, 438-447).
+func (m Model) permissionAlwaysStageLines(p *Permission, leftW int) []string {
+	s := m.styles
+	innerW := leftW - 2
+	if innerW < 1 {
+		innerW = 1
 	}
-	lines = append(lines, "", s.Faint.Render(hint))
+	var lines []string
+	lines = append(lines, "")
+	title := "Always allow"
+	lines = append(lines, " "+lipgloss.NewStyle().Foreground(s.P.Amber).Bold(true).Render("△")+" "+
+		lipgloss.NewStyle().Foreground(s.P.Fg).Render(title))
+	lines = append(lines, "")
+	for _, l := range permAlwaysLines(p.Always, p.Permission) {
+		lines = append(lines, " "+s.Base.Render(truncate(l, innerW)))
+	}
+	lines = append(lines, "")
+	lines = append(lines, m.permissionButtons(permStageOptions(permStageAlways), innerW))
+	return lines
+}
 
-	card := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(s.P.Amber).
-		Padding(1, 2).
-		Width(width + 2). // v2: +2 for the border cols Width now includes
-		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+// permissionRejectStageLines renders the reject stage: the prompt + a
+// textarea-like field for the rejection message
+// (footer.permission.tsx:285-342).
+func (m Model) permissionRejectStageLines(leftW int) []string {
+	s := m.styles
+	innerW := leftW - 2
+	if innerW < 1 {
+		innerW = 1
+	}
+	var lines []string
+	lines = append(lines, "")
+	title := "Reject permission"
+	lines = append(lines, " "+lipgloss.NewStyle().Foreground(s.P.Red).Bold(true).Render("△")+" "+
+		lipgloss.NewStyle().Foreground(s.P.Fg).Render(title))
+	lines = append(lines, "")
+	lines = append(lines, " "+s.Faint.Render("Tell OpenCode what to do differently"))
+	lines = append(lines, "")
+	// The reject-message field: a single-line input rendered as a BgPanel-
+	// filled row with the current message text (or a placeholder).
+	msg := m.permState.message
+	style := s.Surface(s.P.BgPanel).Width(innerW)
+	if msg == "" {
+		lines = append(lines, " "+style.Foreground(s.P.FgGhost).Render("enter feedback (optional)"))
+	} else {
+		lines = append(lines, " "+style.Foreground(s.P.Fg).Render(truncate(msg, innerW)))
+	}
+	return lines
+}
 
-	// Plan 17 §A4: return the card only — the canvas layer positions it at
-	// the centered (x,y) via centeredCardPos, so the card's blank padding
-	// doesn't paint over the body layer (the stream stays visible around the
-	// panel). The pre-resize fallback (bodyContent) also gets the card, which
-	// is correct since dimensions are 0 then.
-	return card
+// permissionButtons renders the option buttons as a single-row, each cell
+// padded; the selected one uses the selection style (highlight bg)
+// (footer.permission.tsx:37-66).
+func (m Model) permissionButtons(opts []permOption, innerW int) string {
+	s := m.styles
+	cells := make([]string, 0, len(opts))
+	for _, o := range opts {
+		label := permOptLabel(o)
+		if o == m.permState.selected {
+			cells = append(cells, s.Selection.Render(" "+label+" "))
+		} else {
+			cells = append(cells, s.Base.Render(" "+label+" "))
+		}
+	}
+	row := strings.Join(cells, " ")
+	return s.Surface(s.P.BgElev).Width(innerW).Render(row)
 }
 
 // permissionTitle is a human line for the request (the action + tool).
@@ -158,4 +393,58 @@ func permissionDetail(p Permission) string {
 		}
 	}
 	return ""
+}
+
+// permissionDiff extracts the inline diff from the permission metadata when
+// present (plan 17 §B4). opencode's permEdit puts the diff in
+// `metadata.diff` (tool.ts:927); the engine populates it for edit/apply_patch
+// permissions. Returns "" when no diff is present.
+func permissionDiff(p Permission) string {
+	if len(p.Metadata) == 0 {
+		return ""
+	}
+	var meta map[string]any
+	if json.Unmarshal(p.Metadata, &meta) != nil {
+		return ""
+	}
+	if v, ok := meta["diff"]; ok {
+		if str, ok := v.(string); ok && strings.TrimSpace(str) != "" {
+			return str
+		}
+	}
+	return ""
+}
+
+// permissionDiffFile extracts the filename for syntax-highlighting the inline
+// diff (the file the edit/apply_patch is patching). opencode's permEdit sets
+// `file` from input.filePath (tool.ts:922); Opcode42 reads the same field from
+// the permission metadata.
+func permissionDiffFile(p Permission) string {
+	if len(p.Metadata) == 0 {
+		return ""
+	}
+	var meta map[string]any
+	if json.Unmarshal(p.Metadata, &meta) != nil {
+		return ""
+	}
+	for _, k := range []string{"filePath", "path", "file"} {
+		if v, ok := meta[k]; ok {
+			if str, ok := v.(string); ok && strings.TrimSpace(str) != "" {
+				return str
+			}
+		}
+	}
+	return ""
+}
+
+// permissionPanelHeight returns the panel height for the permission footer
+// panel (plan 17 §B1): base + PERMISSION_ROWS, where base is the non-textarea
+// chrome height (the status bar's rendered height). Mirrors opencode's
+// applyHeight (footer.ts:697-722) with PERMISSION_ROWS=12.
+func (m Model) permissionPanelHeight() int {
+	base := lipgloss.Height(m.statusBarView(m.leftColumnWidth()))
+	if base < 1 {
+		base = 1
+	}
+	return base + 12
 }

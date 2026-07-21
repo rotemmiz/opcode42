@@ -3,22 +3,22 @@ Permission session
                                                                                 
                                                                                 
                                                                                 
-         ╭────────────────────────────────────────────────────────────╮         
-         │                                                            │         
-         │  Permission required                                       │         
-         │                                                            │         
-         │  bash                                                      │         
-         │  ls -la                                                    │         
-         │                                                            │         
-         │   Allow once                                               │         
-         │   Allow always                                             │         
-         │   Reject                                                   │         
-         │                                                            │         
-         │  a allow · s always · r reject · enter select              │         
-         │                                                            │         
-         ╰────────────────────────────────────────────────────────────╯         
                                                                                 
                                                                                 
                                                                                 
-┃ Ask anything... "Fix a TODO in the                                            
- Build                                ● connecting to http://x · ctrl+p commands
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ △ Permission required                                                          
+                                                                                
+ bash                                                                           
+ ls -la                                                                         
+                                                                                
+ Allow once   Allow always   Reject                                             
+                                                                                
+⇆ select   enter confirm   esc reject                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
