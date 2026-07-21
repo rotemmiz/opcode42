@@ -1,0 +1,24 @@
+           ╭────────────────────────────────────────────────────────╮           
+           │                                                        │           
+           │  Commands                                              │           
+           │                                                        │           
+           │  Search  /                                             │           
+           │                                                        │           
+           │   New session                                          │           
+           │   Switch session                                       │           
+           │   Switch model                                         │           
+           │   Model variant                                        │           
+           │   Switch agent                                         │           
+           │   Switch theme                                         │           
+           │   Timeline                                             │           
+           │   Status                                               │           
+           │   Rename session                                       │           
+           │   Fork session                                         │           
+           │   Summarize context                                    │           
+           │   Interrupt (abort turn)                               │           
+           │  ↓ more                                                │           
+           │                                                        │           
+           │  ↑↓ move · enter select · esc close                    │           
+           │                                                        │           
+           ╰────────────────────────────────────────────────────────╯           
+                                                                                

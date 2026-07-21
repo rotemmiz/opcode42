@@ -132,3 +132,190 @@ func TestCanvas_Golden_Session(t *testing.T) {
 	out := m.composeView()
 	assertGolden(t, "canvas-session-100x60-dark.txt", stripANSI(out))
 }
+
+// ── Plan 08e §F1: modal / overlay scene goldens ──────────────────────────────
+//
+// A4 added the splash + session goldens. F1 (the visual parity audit workstream)
+// adds the modal scene goldens the plan enumerates: the command palette, the
+// sessions list (with the subtree view added in §C4), the models list, the diff
+// reviewer (with seeded diff data), and the permission + question overlays. Each
+// renders at a fixed size + theme and asserts against a checked-in golden in
+// internal/tui/testdata/. These are the deterministic equivalents of the VHS
+// modal captures (15-slash-commands, 16-command-palette, 17-model-list,
+// 19-session-list, 07-tools-diff); the goldens are the actual parity gate
+// (per CLAUDE.md's "no fabricated numbers" rule, the VHS pixel-diff % is a
+// guidance signal and the goldens are the deterministic assertion).
+//
+// All renders go through composeView() so the canvas compositor + z-order +
+// bg-fill invariants are exercised on every modal frame (not just the modal's
+// own card content): a regression in the modal's z-order (e.g. the body
+// showing through) or the base Bg fill surfaces as a golden mismatch.
+//
+// termDark is pinned true (see TestCanvas_Golden_Splash for rationale).
+
+// TestCanvas_Golden_ModalPalette pins the command-palette modal (Ctrl+P) at
+// 80×24 on opcode42-dark. The palette is the first modal the F1 scene list
+// names (scene 16: command-palette); its golden fixes the title row, the
+// filter affordance, the first visible palette items, the selection bar on
+// row 0, and the footer hint. A drift in any of those, or the modal's centered
+// geometry, surfaces as a mismatch.
+func TestCanvas_Golden_ModalPalette(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	m.termDark = true
+	m.screen = ScreenSession
+	m.width, m.height = 80, 24
+	m = m.applyThemeByName("opcode42-dark")
+	m.store.sessions = []Session{{ID: "ses_1", Title: "Palette session"}}
+	m.store.messages["ses_1"] = []Message{
+		{ID: "msg_1", SessionID: "ses_1", Role: "user"},
+	}
+	m.store.parts["msg_1"] = []Part{{ID: "p1", MessageID: "msg_1", Type: "text", Text: "open the palette"}}
+	m.modal = modalPalette
+	m.modalSel = 0
+	out := m.composeView()
+	assertGolden(t, "canvas-modal-palette-80x24-dark.txt", stripANSI(out))
+}
+
+// TestCanvas_Golden_ModalSessions pins the sessions list modal (Ctrl+X l) at
+// 80×24 on opcode42-dark with three seeded sessions. The golden fixes the
+// title, the filter affordance, the seeded session rows (newest-first per
+// orderedSessions), the selection bar on the first row, and the subtree
+// toggle hint. Scene 19 (session-list).
+func TestCanvas_Golden_ModalSessions(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_a"})
+	m.termDark = true
+	m.screen = ScreenSession
+	m.width, m.height = 80, 24
+	m = m.applyThemeByName("opcode42-dark")
+	m.store.sessions = []Session{
+		{ID: "ses_a", Title: "First session"},
+		{ID: "ses_b", Title: "Second session"},
+		{ID: "ses_c", Title: "Third session"},
+	}
+	m.modal = modalSessions
+	m.modalSel = 0
+	out := m.composeView()
+	assertGolden(t, "canvas-modal-sessions-80x24-dark.txt", stripANSI(out))
+}
+
+// TestCanvas_Golden_ModalModels pins the models list modal (Ctrl+X m) at 80×24
+// on opcode42-dark with a seeded provider catalog. The golden fixes the title,
+// the filter affordance, the seeded model rows with the active-model mark (●)
+// on the current model, the selection bar, and the footer hint. Scene 17
+// (model-list).
+func TestCanvas_Golden_ModalModels(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1", Provider: "anthropic", Model: "claude-sonnet-4"})
+	m.termDark = true
+	m.screen = ScreenSession
+	m.width, m.height = 80, 24
+	m = m.applyThemeByName("opcode42-dark")
+	m.store.sessions = []Session{{ID: "ses_1", Title: "Models session"}}
+	m.choices = []modelChoice{
+		{Provider: "anthropic", Model: "claude-sonnet-4"},
+		{Provider: "anthropic", Model: "claude-opus-4"},
+		{Provider: "openai", Model: "gpt-4o"},
+	}
+	m.modal = modalModels
+	m.modalSel = 0
+	out := m.composeView()
+	assertGolden(t, "canvas-modal-models-80x24-dark.txt", stripANSI(out))
+}
+
+// TestCanvas_Golden_Diff pins the full-screen diff reviewer at 100×40 on
+// opcode42-dark with two seeded files (one modified, one added). The golden
+// fixes the summary header (file count, +additions / -deletions), the file-tree
+// pane, the separator, the selected file's unified patch, and the key hints.
+// Scene 07 (tools-diff). This is the F1 plan's "add a golden for the diff
+// reviewer (if feasible in a test — the diff needs seeded diff data)" item:
+// the diff is seeded directly on m.diff.files (the post-load state), so no
+// HTTP round-trip is needed.
+func TestCanvas_Golden_Diff(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_diff"})
+	m.termDark = true
+	m.screen = ScreenSession
+	m.width, m.height = 100, 40
+	m = m.applyThemeByName("opcode42-dark")
+	m.store.sessions = []Session{{ID: "ses_diff", Title: "Diff session"}}
+	m.diff = diffState{
+		open:     true,
+		loading:  false,
+		source:   sourceSession,
+		showTree: true,
+		folded:   map[int]bool{},
+		files: []SnapshotFileDiff{
+			{
+				File:      "src/main.go",
+				Patch:     "--- a/src/main.go\n+++ b/src/main.go\n@@ -1,3 +1,4 @@\n package main\n\n+import \"fmt\"\n func main() {}\n",
+				Additions: 1,
+				Deletions: 0,
+				Status:    "modified",
+			},
+			{
+				File:      "docs/README.md",
+				Patch:     "--- /dev/null\n+++ b/docs/README.md\n@@ -0,0 +1 @@\n+opcode42 diff reviewer golden.\n",
+				Additions: 1,
+				Deletions: 0,
+				Status:    "added",
+			},
+		},
+	}
+	out := m.composeView()
+	assertGolden(t, "canvas-diff-100x40-dark.txt", stripANSI(out))
+}
+
+// TestCanvas_Golden_Permission pins the permission overlay at 80×24 on
+// opcode42-dark with a pending bash permission. The golden fixes the
+// "Permission required" header, the action line, the metadata detail, the
+// three choice rows (Allow once / Allow always / Reject) with the selection
+// bar on row 0, and the key hints. This is the F1 plan's "add a golden for
+// the permission/question overlay" item.
+func TestCanvas_Golden_Permission(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	m.termDark = true
+	m.screen = ScreenSession
+	m.width, m.height = 80, 24
+	m = m.applyThemeByName("opcode42-dark")
+	m.store.sessions = []Session{{ID: "ses_1", Title: "Permission session"}}
+	m.store.permissions = []Permission{{
+		ID:         "perm_1",
+		SessionID:  "ses_1",
+		Permission: "bash",
+		Metadata:   []byte(`{"command":"ls -la"}`),
+		Tool:       []byte(`{"name":"bash"}`),
+	}}
+	m.permSel = 0
+	out := m.composeView()
+	assertGolden(t, "canvas-permission-80x24-dark.txt", stripANSI(out))
+}
+
+// TestCanvas_Golden_Question pins the question overlay at 80×24 on opcode42-dark
+// with a pending single-select question. The golden fixes the header, the
+// question text, the option rows with the selection bar on the first option,
+// and the key hints. The F1 plan pairs this with the permission overlay golden
+// ("the permission/question overlay"); both are covered.
+func TestCanvas_Golden_Question(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	m.termDark = true
+	m.screen = ScreenSession
+	m.width, m.height = 80, 24
+	m = m.applyThemeByName("opcode42-dark")
+	m.store.sessions = []Session{{ID: "ses_1", Title: "Question session"}}
+	m.store.questions = []Question{{
+		ID:        "q_1",
+		SessionID: "ses_1",
+		Questions: []QuestionInfo{{
+			Question: "Which file should the agent edit?",
+			Header:   "Pick a file",
+			Options: []QuestionOption{
+				{Label: "src/main.go"},
+				{Label: "src/util.go"},
+				{Label: "docs/README.md"},
+			},
+			Multiple: false,
+		}},
+	}}
+	m.qIdx, m.qSel = 0, 0
+	m.qChecked = nil
+	out := m.composeView()
+	assertGolden(t, "canvas-question-80x24-dark.txt", stripANSI(out))
+}

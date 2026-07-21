@@ -1,0 +1,24 @@
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+           ╭────────────────────────────────────────────────────────╮           
+           │                                                        │           
+           │  Sessions                                              │           
+           │                                                        │           
+           │  Search  /                                             │           
+           │                                                        │           
+           │   Third session                                        │           
+           │   Second session                                       │           
+           │   First session                                        │           
+           │                                                        │           
+           │  enter open · ctrl+n new · ctrl+d delete · t subtree   │           
+           │  · esc close                                           │           
+           │                                                        │           
+           ╰────────────────────────────────────────────────────────╯           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
