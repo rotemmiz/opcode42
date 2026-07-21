@@ -705,6 +705,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "question reply failed (try again): " + msg.err.Error()
 			return m, nil
 		}
+		// Plan 08e §E4: record the finalized question for the in-stream
+		// answered card BEFORE clearing the pending slice + per-request state.
+		// The local reply path knows the specific selected labels (from qAnswers
+		// + the current step), so the card shows the labels rather than a bare
+		// "Answered" (the SSE path's fallback). Deduped by id against the SSE
+		// path inside recordAnsweredQuestion.
+		m = m.recordLocalAnsweredQuestion(msg.id)
 		m.store.questions = removeByID(m.store.questions, msg.id, func(x Question) string { return x.ID })
 		return m.resetQuestion(), nil
 
