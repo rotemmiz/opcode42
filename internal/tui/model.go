@@ -153,8 +153,8 @@ type Model struct {
 
 	// toasts is the live toast queue (plan 08c M11).  Entries expire after
 	// toastTTL; the animTick drives TTL countdown via toastTick().
-	// pushToast enqueues and toastTick purges; overlayToasts composites the
-	// stack onto the rendered frame bottom-right.
+	// pushToast enqueues and toastTick purges; the canvas composites the
+	// toast layer at zToast bottom-right over the base Bg fill (canvas.go).
 	toasts []toast
 }
 
@@ -1197,42 +1197,11 @@ func (m Model) View() tea.View {
 // follow-up will migrate the tests over and delete this alias.
 func (m Model) renderView() string { return m.composeView() }
 
-// viewSplash renders the splash screen content as a single string, used by
-// the pre-resize fallback (width/height == 0) and by composeView's splash
-// layer when dimensions are known. The canvas composites this content over
-// the base Bg fill, so the splash needs only to render its own foreground —
-// no per-line Bg fill, no Place/Center wrapping (the canvas does the centering
-// by positioning the layer).
+// viewSplash renders the splash screen content for the pre-resize fallback
+// (width/height <= 0). The canvas path (splashLayers) calls splashContent
+// directly and wraps it in a Layer; this entry point only runs when
+// dimensions are non-positive, so it forwards to splashContent which handles
+// the plain-stack pre-resize layout.
 func (m Model) viewSplash() string {
-	s := m.styles
-	w := m.width
-	if w <= 0 {
-		// Pre-first-resize: stack the elements plain (no centering, no bg fill).
-		return lipgloss.JoinVertical(lipgloss.Center,
-			s.Base.Bold(true).Render("opcode42"), "", m.composerView(), "",
-			s.Faint.Render("enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit"))
-	}
-	logoRows := logoFrame(m.animFrame, s.P)
-	logoLines := make([]string, len(logoRows))
-	for i, row := range logoRows {
-		logoLines[i] = lipgloss.NewStyle().Width(w).Align(lipgloss.Center).Render(row)
-	}
-	wordmark := lipgloss.JoinVertical(lipgloss.Left, logoLines...)
-
-	composer := m.composerView()
-	composer = lipgloss.PlaceHorizontal(w, lipgloss.Center, composer)
-
-	statusLine := m.statusLine()
-	if m.err != nil {
-		statusLine = m.err.Error()
-	}
-	status := lipgloss.NewStyle().Foreground(s.P.FgFaint).Width(w).Align(lipgloss.Center).Render(statusLine)
-	hint := lipgloss.NewStyle().Foreground(s.P.FgFaint).Width(w).Align(lipgloss.Center).Render("enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit")
-	blank := lipgloss.NewStyle().Width(w).Render("")
-
-	body := lipgloss.JoinVertical(lipgloss.Left, wordmark, blank, composer, blank, hint, blank, status)
-	if m.height == 0 {
-		return body
-	}
-	return lipgloss.Place(w, m.height, lipgloss.Center, lipgloss.Center, body)
+	return m.splashContent(m.width, m.height)
 }

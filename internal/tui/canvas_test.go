@@ -27,7 +27,6 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // TestCanvas_FullFill_NoTransparentCell asserts that composeView() renders a
@@ -35,23 +34,42 @@ import (
 // escapes to the terminal default. We build a model with dimensions, render
 // it, and verify every line is exactly m.width visible columns wide (the
 // robust full-fill signal — a transparent cell would render as trailing
-// whitespace and lipgloss.Width would report a shorter line).
+// whitespace and lipgloss.Width would report a shorter line). Covers both the
+// splash screen and a seeded session screen.
 func TestCanvas_FullFill_NoTransparentCell(t *testing.T) {
-	for _, tn := range []string{"opcode42-dark", "opcode42-light"} {
-		for _, wh := range []struct{ w, h int }{{40, 12}, {80, 24}, {120, 40}} {
-			label := tn + "/" + itoa(wh.w) + "x" + itoa(wh.h)
-			t.Run(label, func(t *testing.T) {
-				m := New(Config{URL: "http://x"})
-				m.width, m.height = wh.w, wh.h
-				m = m.applyThemeByName(tn)
-				out := m.composeView()
-				lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-				for i, line := range lines {
-					if got := lipgloss.Width(line); got != wh.w {
-						t.Errorf("line %d: visible width %d, want %d\nline: %q", i, got, wh.w, line)
+	cases := []struct {
+		name    string
+		session bool
+	}{
+		{name: "splash", session: false},
+		{name: "session", session: true},
+	}
+	for _, c := range cases {
+		for _, tn := range []string{"opcode42-dark", "opcode42-light"} {
+			for _, wh := range []struct{ w, h int }{{40, 12}, {80, 24}, {120, 40}} {
+				label := c.name + "/" + tn + "/" + itoa(wh.w) + "x" + itoa(wh.h)
+				t.Run(label, func(t *testing.T) {
+					m := New(Config{URL: "http://x"})
+					if c.session {
+						m = New(Config{URL: "http://x", SessionID: "ses_1"})
+						m.screen = ScreenSession
+						m.store.sessions = []Session{{ID: "ses_1", Title: "T"}}
+						m.store.messages["ses_1"] = []Message{
+							{ID: "msg_1", SessionID: "ses_1", Role: "user"},
+						}
+						m.store.parts["msg_1"] = []Part{{ID: "p1", MessageID: "msg_1", Type: "text", Text: "hello world"}}
 					}
-				}
-			})
+					m.width, m.height = wh.w, wh.h
+					m = m.applyThemeByName(tn)
+					out := m.composeView()
+					lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+					for i, line := range lines {
+						if got := lipgloss.Width(line); got != wh.w {
+							t.Errorf("line %d: visible width %d, want %d\nline: %q", i, got, wh.w, line)
+						}
+					}
+				})
+			}
 		}
 	}
 }
@@ -90,11 +108,13 @@ func TestCanvas_LayerZOrder_ModalOverStream(t *testing.T) {
 // v1 path the bubbles-internal textarea style left trailing cells at the
 // terminal default; on the canvas the base Bg fill masks it.
 //
-// We render a session with a composer and assert every cell in the composer's
-// row range carries the theme Bg (no zero-style cell, which would be the
-// bubbles default bleeding through). The composeView() path re-fills any
-// zero-style cell with the Bg style after the layers draw; this test
-// reproduces that fill to inspect the canvas mid-composite.
+// We render a session with a composer via composeCanvas() — the production
+// path, including its post-layer re-fill of zero-style cells — and assert
+// every cell in the composer's row range carries the theme Bg (no zero-style
+// cell, which would be the bubbles default bleeding through). Inspecting the
+// canvas directly (rather than re-deriving the fill in the test) means this
+// test actually exercises composeCanvas's re-fill guarantee: remove the
+// re-fill from composeCanvas and this test fails.
 func TestCanvas_Composer_NoDarkBar(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
@@ -102,44 +122,14 @@ func TestCanvas_Composer_NoDarkBar(t *testing.T) {
 	m = m.applyThemeByName("opcode42-light")
 	m.store.sessions = []Session{{ID: "ses_1", Title: "T"}}
 
-	// Build the canvas the same way composeView does (base Bg fill +
-	// layers + re-fill), so the test sees exactly what the production path
-	// produces.
-	out := m.composeView()
-	_ = out
-
-	// Re-render onto an inspectable canvas to verify the cells.
-	canvas := lipgloss.NewCanvas(m.width, m.height)
-	bgStyle := uv.Style{Bg: m.styles.P.Bg}
-	for y := 0; y < m.height; y++ {
-		for x := 0; x < m.width; x++ {
-			canvas.SetCell(x, y, &uv.Cell{Content: " ", Width: 1, Style: bgStyle})
-		}
-	}
-	layers := m.bodyLayers()
-	compositor := lipgloss.NewCompositor(layers...)
-	compositor.Draw(canvas, canvas.Bounds())
-	// Re-fill zero-style cells, matching composeView's guarantee.
-	for y := 0; y < m.height; y++ {
-		for x := 0; x < m.width; x++ {
-			c := canvas.CellAt(x, y)
-			if c == nil {
-				canvas.SetCell(x, y, &uv.Cell{Content: " ", Width: 1, Style: bgStyle})
-				continue
-			}
-			if c.Style.IsZero() {
-				c.Style = bgStyle
-				if c.Content == "" || c.Content == " " {
-					c.Content = " "
-					c.Width = 1
-				}
-			}
-		}
+	canvas := m.composeCanvas()
+	if canvas == nil {
+		t.Fatal("composeCanvas returned nil for 80×24")
 	}
 
 	// Find the composer's row: the row containing the textarea's placeholder
-	// ("Ask anything…" or "Reply, or / for commands" on session screen).
-	// Scan from the bottom (the composer sits at the bottom of the footer).
+	// ("Reply, or / for commands" on session screen). Scan from the bottom
+	// (the composer sits at the bottom of the footer).
 	composerRow := -1
 	for y := m.height - 1; y >= 0; y-- {
 		rowContent := ""
@@ -190,6 +180,17 @@ func TestCanvas_TinyDimensions_NoPanic(_ *testing.T) {
 		m := New(Config{URL: "http://x"})
 		m.width, m.height = wh.w, wh.h
 		_ = m.composeView() // must not panic
+	}
+}
+
+// TestCanvas_NegativeDimensions_NoPanic asserts that negative dimensions
+// (which would make make([], negative) panic) fall through the <= 0 guard to
+// the bodyContent fallback rather than reaching NewCanvas.
+func TestCanvas_NegativeDimensions_NoPanic(_ *testing.T) {
+	for _, wh := range []struct{ w, h int }{{-1, 10}, {10, -1}, {-5, -5}} {
+		m := New(Config{URL: "http://x"})
+		m.width, m.height = wh.w, wh.h
+		_ = m.composeView() // must not panic; falls back to bodyContent
 	}
 }
 

@@ -66,11 +66,22 @@ const (
 // drawing of layers onto the canvas. Every cell is owned by the canvas — no
 // terminal-default bleed, no manual bg re-emit, no string-splice overlays.
 func (m Model) composeView() string {
-	if m.width == 0 || m.height == 0 {
-		// Pre-first-resize: fall back to the raw body so something renders
-		// during the very first frame. Existing tests that set 0×0 expect
-		// a non-panic, possibly-empty result.
+	c := m.composeCanvas()
+	if c == nil {
+		// Pre-first-resize (or non-positive dimensions): fall back to the
+		// raw body so something renders during the very first frame.
 		return m.bodyContent()
+	}
+	return c.Render()
+}
+
+// composeCanvas builds and returns the v2 canvas for the current frame, or
+// nil when dimensions are non-positive (the caller falls back to bodyContent
+// in that case). Exposed so tests can inspect the canvas cells directly
+// rather than re-deriving the fill/composite logic.
+func (m Model) composeCanvas() *lipgloss.Canvas {
+	if m.width <= 0 || m.height <= 0 {
+		return nil
 	}
 
 	canvas := lipgloss.NewCanvas(m.width, m.height)
@@ -90,14 +101,19 @@ func (m Model) composeView() string {
 	}
 
 	// Collect body + overlay layers and draw them in z-order onto the canvas.
-	// We use the Compositor for the z-ordered drawing (it flattens + sorts
-	// by z), but we draw onto our pre-filled canvas rather than letting the
-	// compositor create its own (which would be sized to the union of layer
-	// bounds, not the full terminal).
+	// When a modal-class overlay (permission/question/diff/modal) is active
+	// the session body is skipped entirely — matching the v1 renderView
+	// switch, which never rendered the body under a modal. Only the base Bg
+	// fill + the overlay layers compose, so the fully-covered body work is
+	// avoided and no stale body cells leak around the modal.
+	modalClassActive := m.pendingPermission() != nil || m.pendingQuestion() != nil ||
+		m.diff.open || m.modal != modalNone
 	var layers []*lipgloss.Layer
-	for _, l := range m.bodyLayers() {
-		if l != nil {
-			layers = append(layers, l)
+	if !modalClassActive {
+		for _, l := range m.bodyLayers() {
+			if l != nil {
+				layers = append(layers, l)
+			}
 		}
 	}
 	for _, l := range m.overlayLayers() {
@@ -133,7 +149,7 @@ func (m Model) composeView() string {
 		}
 	}
 
-	return canvas.Render()
+	return canvas
 }
 
 // bodyLayers returns the layers for the active screen (splash or session),
@@ -150,10 +166,10 @@ func (m Model) bodyLayers() []*lipgloss.Layer {
 
 // overlayLayers returns the top-level overlay layers (modals, permission,
 // question, diff, autocomplete, toasts). Only one modal-class overlay is
-// active at a time — renderView's switch picked the topmost, but on the
-// canvas we can compose them all; the z-order resolves which is visible.
-// We still gate each by its active condition so only the visible ones
-// compose (cheaper, and matches the v1 behavior where only one shows).
+// active at a time; we gate each by its active condition so only the
+// visible ones compose. When any modal-class overlay is active the body
+// layers are skipped upstream in composeCanvas, matching the v1 renderView
+// switch that never rendered the body under a modal.
 func (m Model) overlayLayers() []*lipgloss.Layer {
 	var layers []*lipgloss.Layer
 
@@ -164,14 +180,20 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 		layers = append(layers, positionedPopup(ac, m.acPopupX(), m.acPopupY(), zPopup))
 	}
 
-	// Modals / blocking overlays: centered, zModal. The renderView switch
-	// priority is preserved (permission > question > diff > modal) but on
-	// the canvas only one of them is active at a time per the model state.
+	// Modals / blocking overlays: each renderer already centers itself via
+	// centerScreen / lipgloss.Place, so we place the already-centered string
+	// directly at (0,0) — no outer Place (that would double-Place). The
+	// renderView priority is preserved (permission > question > diff >
+	// modal); only one is active per the model state.
 	switch {
 	case m.pendingPermission() != nil:
-		layers = append(layers, centeredLayer(m.permissionView(), m.width, m.height, zModal))
+		if p := m.permissionView(); p != "" {
+			layers = append(layers, lipgloss.NewLayer(p).X(0).Y(0).Z(zModal))
+		}
 	case m.pendingQuestion() != nil:
-		layers = append(layers, centeredLayer(m.questionView(), m.width, m.height, zModal))
+		if q := m.questionView(); q != "" {
+			layers = append(layers, lipgloss.NewLayer(q).X(0).Y(0).Z(zModal))
+		}
 	case m.diff.open:
 		// The diff reviewer is full-screen, not centered — it renders at
 		// (0,0) covering the whole canvas.
@@ -179,7 +201,9 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 			layers = append(layers, lipgloss.NewLayer(d).X(0).Y(0).Z(zModal))
 		}
 	case m.modal != modalNone:
-		layers = append(layers, centeredLayer(m.modalView(), m.width, m.height, zModal))
+		if mv := m.modalView(); mv != "" {
+			layers = append(layers, lipgloss.NewLayer(mv).X(0).Y(0).Z(zModal))
+		}
 	}
 
 	// Toasts: bottom-right, zToast. Above panes, below modals.
@@ -203,12 +227,9 @@ func (m Model) sessionLayers() []*lipgloss.Layer {
 	// lowest row of the footer.
 	footer := m.composerView() + "\n" + m.statusBarView(leftW)
 	footerParts := []string{footer}
-	if ac := m.autocompleteView(); ac != "" {
-		// When the autocomplete popup is open it renders above the composer;
-		// we keep the popup as its own overlay layer (see overlayLayers)
-		// and leave the composer itself in the footer.
-		_ = ac
-	}
+	// When the autocomplete popup is open it renders above the composer;
+	// it is composed as its own overlay layer (see overlayLayers), so the
+	// composer itself stays in the footer.
 	if dock := m.tasksDockView(leftW); dock != "" {
 		footerParts = append([]string{dock}, footerParts...)
 	}
@@ -252,15 +273,26 @@ func (m Model) sessionLayers() []*lipgloss.Layer {
 // + composer + status. Each is its own layer so the canvas positions them
 // without the v1 lipgloss.Place whole-frame-centering hack.
 func (m Model) splashLayers() []*lipgloss.Layer {
-	s := m.styles
 	w, h := m.width, m.height
 	if w <= 0 || h <= 0 {
 		return nil
 	}
+	content := m.splashContent(w, h)
+	return []*lipgloss.Layer{lipgloss.NewLayer(content).X(0).Y(0).Z(zPane)}
+}
 
-	// Build the splash content as a single joined string and center it as
-	// one layer. This mirrors viewSplash's layout: wordmark, blank, composer,
-	// blank, hint, blank, status. The bg fill is owned by the base layer.
+// splashContent builds the splash screen body (wordmark, blank, composer,
+// blank, hint, blank, status) and centers it on a w×h frame. Shared by
+// splashLayers (the canvas path) and viewSplash (the pre-resize fallback).
+func (m Model) splashContent(w, h int) string {
+	s := m.styles
+	if w <= 0 {
+		// Pre-first-resize: stack the elements plain (no centering, no bg fill).
+		return lipgloss.JoinVertical(lipgloss.Center,
+			s.Base.Bold(true).Render("opcode42"), "", m.composerView(), "",
+			s.Faint.Render("enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit"))
+	}
+
 	logoRows := logoFrame(m.animFrame, s.P)
 	logoLines := make([]string, len(logoRows))
 	for i, row := range logoRows {
@@ -280,9 +312,10 @@ func (m Model) splashLayers() []*lipgloss.Layer {
 	blank := lipgloss.NewStyle().Width(w).Render("")
 
 	body := lipgloss.JoinVertical(lipgloss.Left, wordmark, blank, composer, blank, hint, blank, status)
-	// Center the body in the canvas as a single layer.
-	content := lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, body)
-	return []*lipgloss.Layer{lipgloss.NewLayer(content).X(0).Y(0).Z(zPane)}
+	if h <= 0 {
+		return body
+	}
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, body)
 }
 
 // bodyContent returns the unpositioned body string for the pre-resize fallback
@@ -303,18 +336,6 @@ func (m Model) bodyContent() string {
 	default:
 		return m.viewSplash()
 	}
-}
-
-// centeredLayer returns a Layer whose content is centered on a w×h canvas.
-// Used for modals and blocking overlays: the content is pre-centered via
-// lipgloss.Place and placed at (0,0) so it covers the whole canvas. The
-// canvas's own base + body layers render underneath because of z-order.
-func centeredLayer(content string, w, h, z int) *lipgloss.Layer {
-	if content == "" || w == 0 || h == 0 {
-		return nil
-	}
-	placed := lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, content)
-	return lipgloss.NewLayer(placed).X(0).Y(0).Z(z)
 }
 
 // positionedPopup returns a Layer at an explicit (x,y) — used for popups that

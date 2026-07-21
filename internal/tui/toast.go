@@ -12,14 +12,15 @@ package tui
 //   - toastTick() (called by animTickMsg handler) removes expired toasts.
 //   - animating() is extended in spinner.go to return true while any toast is live,
 //     so TTL countdown keeps ticking until the queue drains.
-//   - toastOverlayView() renders the stack; overlayToasts() composites it onto
-//     the Bg-filled frame by replacing the rightmost W columns of the bottom K rows.
+//   - toastOverlayView() renders the stack; the canvas composites the toast
+//     layer at zToast bottom-right over the base Bg fill (see canvas.go's
+//     overlayLayers + positionedPopup).
 //
 // Background-fill strategy (Tier 0 / plan 08c §0):
 //   Each toast box carries Background(BgElev) on every rendered cell — set via the
-//   lipgloss Border+Width style in toastBoxView(). The outer View() Bg fill runs first
-//   so the full frame is m.width wide; overlayToasts runs after, replacing the toast
-//   cells in-place. Since toast cells have their own BgElev SGR, they render correctly
+//   lipgloss Border+Width style in toastBoxView(). The canvas's base Bg fill
+//   owns every cell first; the toast layer paints its BgElev cells on top via
+//   z-order. Since toast cells carry their own BgElev SGR, they render correctly
 //   on any terminal color scheme.
 
 import (
