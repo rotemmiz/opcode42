@@ -211,7 +211,7 @@ private fun StructuredQuestionActions(
                     contentPadding = buttonPadding,
                 ) { Text("Skip", fontSize = 13.sp) }
                 Button(
-                    onClick = { onReply(menuMultiSelectReply(selected.toList())!!) },
+                    onClick = { onReply(menuMultiSelectSubmitReply(selected.toList())) },
                     modifier = Modifier.weight(1f).heightIn(min = 34.dp),
                     contentPadding = buttonPadding,
                     enabled = selected.isNotEmpty(),
@@ -312,6 +312,15 @@ internal fun menuSingleSelectReply(label: String): List<List<String>> = buildMen
  */
 internal fun menuMultiSelectReply(selected: List<String>): List<List<String>>? =
     if (selected.isEmpty()) null else buildMenuQuestionReply(selected)
+
+/**
+ * The non-null submit reply — the call site's Submit button is gated on
+ * `selected.isNotEmpty()`, so this never sees an empty list. Kept separate from
+ * [menuMultiSelectReply] so the composable never needs `!!` and the empty→null
+ * contract stays unit-testable.
+ */
+internal fun menuMultiSelectSubmitReply(selected: List<String>): List<List<String>> =
+    buildMenuQuestionReply(selected)
 
 /**
  * The menu's reply for the free-text field — the typed text, wrapped as a

@@ -44,6 +44,14 @@ class SessionActivityTest {
     }
 
     @Test
+    fun multiSelect_submitReply_repliesBothLabels() {
+        // The Submit button (gated on non-empty) calls menuMultiSelectSubmitReply, which
+        // is the non-null path of menuMultiSelectReply. Toggling "a" and "b" → [[a, b]].
+        val reply = menuMultiSelectSubmitReply(listOf("a", "b"))
+        assertEquals(listOf(listOf("a", "b")), reply)
+    }
+
+    @Test
     fun noOptions_freeTextReply_repliesTheTypedText() {
         // The no-options / custom-only branch keeps the free-text field; Reply calls
         // menuFreeTextReply(text). Typing "typed text" → [[typed text]].
