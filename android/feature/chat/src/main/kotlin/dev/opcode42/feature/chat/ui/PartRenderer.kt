@@ -84,7 +84,11 @@ fun PartRenderer(
 @Composable
 private fun TextPartView(part: TextPart, modifier: Modifier = Modifier) {
     if (part.text.isBlank()) return
-    MarkdownText(text = part.text, modifier = modifier.padding(vertical = 2.dp))
+    // `time.end` is null while the part is still streaming (the daemon sets it on the
+    // final part.update). Pass it down so MarkdownText can throttle re-parses while the
+    // text is in flux, then do one full-quality parse when the part settles.
+    val streaming = part.time?.end == null
+    MarkdownText(text = part.text, streaming = streaming, modifier = modifier.padding(vertical = 2.dp))
 }
 
 // ─── Reasoning ────────────────────────────────────────────────────────────────
