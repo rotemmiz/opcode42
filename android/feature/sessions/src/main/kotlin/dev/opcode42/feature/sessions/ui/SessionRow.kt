@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -239,7 +240,7 @@ internal fun SessionRow(
     // swipe never triggers the parent's archive/delete.
     Column(modifier.fillMaxWidth()) {
         // The row content is the same whether or not swipe-to-dismiss is mounted; wrap it in
-        // SwipeToDismissBox only when the dismiss state exists (open rail/list), otherwise a
+        // SwipeToDismissBox only when the dismiss state exists (open full list), otherwise a
         // plain Box. This avoids SwipeToDismissBox's per-frame AnchoredDraggableState callback
         // when the row isn't swipeable.
         val rowContent: @Composable () -> Unit = {
@@ -417,7 +418,7 @@ private fun CompactRailRow(
                 // the title resizes off the right edge as the rail narrows instead of overflowing.
                 .clipToBounds()
                 .combinedClickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = onClick,
                     onLongClick = onLongPress,
@@ -622,7 +623,7 @@ private fun FullListRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = onClick,
                     onLongClick = onLongPress,
@@ -743,7 +744,7 @@ private fun SubAgentChildren(
                 modifier = Modifier
                     .fillMaxWidth()
                     .combinedClickable(
-                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = { onOpen(child) },
                     )
