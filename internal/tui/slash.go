@@ -41,6 +41,7 @@ var builtinCommands = []slashItem{
 	{name: "/variant", desc: "Pick a model variant", kind: slashBuiltin},
 	{name: "/stash", desc: "Stashed prompt drafts", kind: slashBuiltin},
 	{name: "/status", desc: "Connection status", kind: slashBuiltin},
+	{name: "/connect", desc: "Connect to a daemon (mDNS + URL)", kind: slashBuiltin},
 }
 
 // acMode is what the composer popup is completing.
@@ -283,6 +284,14 @@ func (m Model) acceptSlash() (tea.Model, tea.Cmd) {
 		case "/status":
 			m.modal, m.modalSel = modalStatus, 0
 			return m, nil
+		case "/connect":
+			// Open the connect overlay (plan 08e §D2): mDNS browser + manual URL.
+			m = m.openConnectModal()
+			var cmd tea.Cmd
+			if m.discoverCtx != nil {
+				cmd = startDiscoverCmd(m.discoverCtx)
+			}
+			return m, cmd
 		}
 		return m, nil
 	}

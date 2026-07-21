@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/textarea"
@@ -14,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/rotemmiz/opcode42/internal/mdns"
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
@@ -52,6 +54,11 @@ type Config struct {
 	Provider  string // prompt model provider id (else resolved from /config)
 	Model     string // prompt model id
 	Theme     string // override theme name (empty = auto-pick or KV-pinned; for deterministic capture)
+
+	// NoDiscover disables mDNS browsing in the connect overlay (plan 08e §D3).
+	// Set by --no-discover for airgapped / CI / scripted runs. The manual URL
+	// field still works; only the nearby-servers list is suppressed.
+	NoDiscover bool
 }
 
 // Model is the Bubble Tea application state.
@@ -91,6 +98,21 @@ type Model struct {
 	skills       []skillItem     // read-only skills list (GET /skill)
 	permSel      int             // selected choice in the permission overlay
 	permReplying bool            // a permission reply is in flight (overlay stays up until it resolves)
+
+	// Connect overlay (plan 08e §D2): mDNS-discovered daemons + a manual URL
+	// field. discoverCtx/cancel own the D1 browser lifecycle (started on open,
+	// cancelled on close). connectURLInput is the manual-entry field at the
+	// top of the overlay; connectFieldFocus is true when the URL field (not
+	// the server list) owns the cursor. serverProbe is the best-effort
+	// /global/health reachability cache keyed by host:port. discoverOut is
+	// the live browser channel (stashed so discoverNextCmd can pump it).
+	discoveredServers []mdns.DiscoveredService
+	discoverCtx       context.Context
+	discoverCancel    context.CancelFunc
+	discoverOut       <-chan mdns.DiscoveredService
+	connectURLInput   textinput.Model
+	connectFieldFocus bool
+	serverProbe       map[string]serverProbeState
 
 	// Question overlay (steps through a request's questions).
 	qIdx      int        // current question index
@@ -193,17 +215,34 @@ func New(cfg Config) Model {
 	ri := textinput.New()
 	ri.Placeholder = "Session title"
 	ri.CharLimit = 200
+	// The connect overlay's manual URL field (plan 08e §D2). Pre-filled with
+	// cfg.URL when the overlay opens (openConnectModal), so a first-run user
+	// sees the default 127.0.0.1:4096 hint and a returning user sees their
+	// pinned URL.
+	ci := textinput.New()
+	ci.Placeholder = "http://host:port"
+	ci.CharLimit = 200
+	// status is the initial connection message. When a URL is known it
+	// reads "connecting to <url>"; the first-run flow (empty URL, no client
+	// yet) shows a neutral message — the connect overlay is what the user
+	// sees, not a connection attempt.
+	initialStatus := "connecting to " + cfg.URL
+	if cfg.URL == "" {
+		initialStatus = "ready"
+	}
 	m := Model{
-		cfg:         cfg,
-		screen:      ScreenSplash,
-		conn:        Connecting,
-		status:      "connecting to " + cfg.URL,
-		ctx:         ctx,
-		cancel:      cancel,
-		store:       newStore(),
-		input:       ta,
-		renameInput: ri,
-		model:       promptModel{Provider: cfg.Provider, Model: cfg.Model},
+		cfg:             cfg,
+		screen:          ScreenSplash,
+		conn:            Connecting,
+		status:          initialStatus,
+		ctx:             ctx,
+		cancel:          cancel,
+		store:           newStore(),
+		input:           ta,
+		renameInput:     ri,
+		connectURLInput: ci,
+		serverProbe:     map[string]serverProbeState{},
+		model:           promptModel{Provider: cfg.Provider, Model: cfg.Model},
 	}
 	// Auto-pick light vs dark by terminal background — mirrors opencode's
 	// theme_mode_lock behaviour. Restore() will override with any pinned KV theme.
@@ -216,14 +255,22 @@ func New(cfg Config) Model {
 	def, _ := theme.ByNameForMode(defName, m.termDark)
 	m = m.applyTheme(defName, def)
 	m.histIdx = -1
-	c, err := opcode42client.New(cfg.URL, opcode42client.Options{
-		Directory: cfg.Directory, Username: cfg.Username, Password: cfg.Password,
-	})
-	if err != nil {
-		m.conn, m.err = ConnError, err
-		return m
+	// Build the SDK client only when a URL is known. The first-run flow
+	// (plan 08e §D3) defers client construction: New() is called with an
+	// empty URL when --url was not passed and no KV pin yet exists, and the
+	// connect overlay's connectTo() rebuilds the client once the user picks
+	// a server. A nil client is handled throughout (Init and the connect
+	// overlay are no-ops without one).
+	if cfg.URL != "" {
+		c, err := opcode42client.New(cfg.URL, opcode42client.Options{
+			Directory: cfg.Directory, Username: cfg.Username, Password: cfg.Password,
+		})
+		if err != nil {
+			m.conn, m.err = ConnError, err
+			return m
+		}
+		m.client = c
 	}
-	m.client = c
 	// Ensure the markdown render cache is allocated so all Model copies
 	// derived from this root share a non-nil map (maps are reference types).
 	m.ensureMDCache()
@@ -267,6 +314,13 @@ func (m Model) applyTheme(name string, p theme.Palette) Model {
 // persistence. Call once from the real entrypoint (not in tests, which want a
 // hermetic New). CLI --provider/--model/--theme still win.
 // Theme resolution order: cfg.Theme (CLI --theme) > pinned KV theme > auto-pick by terminal background.
+//
+// First-run flow (plan 08e §D3): if no --url was passed (cfg.URL == "" — the
+// caller signals "no --url" by passing an empty URL) AND no KV-pinned
+// server_url exists AND --no-discover is not set, the connect overlay opens
+// on startup instead of the splash. When KV has server_url, it overrides
+// cfg.URL and the TUI connects directly (mirrors Android F1's "skip the
+// picker once a server is chosen").
 func (m Model) Restore() Model {
 	m.persistEnabled = true
 	kv := loadKV()
@@ -284,6 +338,22 @@ func (m Model) Restore() Model {
 	// default; nothing further needed here.
 	if !m.model.ok() && kv.Provider != "" && kv.Model != "" {
 		m.model = promptModel{Provider: kv.Provider, Model: kv.Model, Variant: kv.Variant}
+	}
+
+	// First-run / KV-pinned server resolution (plan 08e §D3).
+	// cfg.URL is set by --url; the absence of --url is signalled by the caller
+	// passing an empty cfg.URL (cmd/opcode-tui passes "" when --url was not
+	// on the command line). A KV-pinned server_url wins over the empty
+	// default and skips the overlay. When neither --url nor a KV pin exists,
+	// the connect overlay opens on startup regardless of --no-discover —
+	// the user still needs a way to enter a URL; --no-discover only
+	// suppresses the mDNS browser (the manual URL field still works).
+	urlFromFlag := m.cfg.URL
+	if urlFromFlag == "" && kv.ServerURL != "" {
+		m = m.applyServerURL(kv.ServerURL)
+	}
+	if urlFromFlag == "" && m.cfg.URL == "" {
+		m = m.openConnectModal()
 	}
 	return m
 }
@@ -378,7 +448,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.String() == "ctrl+x" {
 			m.leader = true
-			m.status = "ctrl+x — l sessions · n new · m model · a agent · g timeline · s status · b sidebar · t tasks · y copy · r thinking · f fold thought · o tools · v fold tool · e editor · d diff · ` terminal · w stash · ↓ child · ↑ parent · [ ] siblings"
+			m.status = "ctrl+x — l sessions · n new · m model · a agent · g timeline · s status · c connect · b sidebar · t tasks · y copy · r thinking · f fold thought · o tools · v fold tool · e editor · d diff · ` terminal · w stash · ↓ child · ↑ parent · [ ] siblings"
 			return m, nil
 		}
 		// The slash popup captures nav/accept/dismiss keys; other keys fall
@@ -937,6 +1007,53 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Not animating — stop; the next animating state will re-kick via maybeKickAnim.
 		return m, nil
+
+	// discoverStartedMsg (plan 08e §D2): the mDNS browser has opened. Stash
+	// the channel on m.discoverOut so discoverNextCmd can pump it; if a first
+	// service was already resolved, append it and kick its reachability probe.
+	// Then re-issue discoverNextCmd to read the next service.
+	case discoverStartedMsg:
+		if m.modal != modalConnect {
+			return m, nil // browser completed after the overlay closed — drop
+		}
+		m.discoverOut = msg.out
+		var cmds []tea.Cmd
+		if msg.first != nil {
+			m.discoveredServers = append(m.discoveredServers, *msg.first)
+			cmds = append(cmds, probeServerCmd(connectProbeKey(*msg.first), "http://"+msg.first.Host+":"+strconv.Itoa(msg.first.Port)))
+		}
+		cmds = append(cmds, discoverNextCmd(m.discoverCtx, m.discoverOut))
+		return m, tea.Batch(cmds...)
+
+	// discoveredServerMsg: one more daemon surfaced. Append it (dedupe by
+	// host:port — the browser already dedupes but a late duplicate across
+	// service types is harmless to guard against), kick its probe, and pump
+	// the next read.
+	case discoveredServerMsg:
+		if m.modal != modalConnect {
+			return m, nil
+		}
+		// Dedupe by host:port (defensive — mdns.Browse already dedupes).
+		for _, ex := range m.discoveredServers {
+			if ex.Host == msg.service.Host && ex.Port == msg.service.Port {
+				return m, discoverNextCmd(m.discoverCtx, m.discoverOut)
+			}
+		}
+		m.discoveredServers = append(m.discoveredServers, msg.service)
+		probeURL := "http://" + msg.service.Host + ":" + strconv.Itoa(msg.service.Port)
+		return m, tea.Batch(
+			probeServerCmd(connectProbeKey(msg.service), probeURL),
+			discoverNextCmd(m.discoverCtx, m.discoverOut),
+		)
+
+	// serverProbeMsg: a reachability probe returned. Update the cache so the
+	// row's dot color flips from amber to green on the next render.
+	case serverProbeMsg:
+		if m.serverProbe == nil {
+			m.serverProbe = map[string]serverProbeState{}
+		}
+		m.serverProbe[msg.key] = serverProbeState{reachable: msg.reachable}
+		return m, nil
 	}
 	return m, nil
 }
@@ -956,6 +1073,50 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.renameInput, cmd = m.renameInput.Update(msg)
 		return m, cmd
+	}
+	// The connect overlay (plan 08e §D2) has two focus targets: the manual
+	// URL text field and the nearby-servers list. Tab toggles focus. When the
+	// URL field is focused, typing edits it and enter connects to the typed
+	// URL; when the list is focused, up/down move and enter connects to the
+	// selected server. esc cancels the browser and closes the overlay.
+	if m.modal == modalConnect {
+		switch msg.String() {
+		case "esc":
+			return m.closeConnectModal()
+		case "tab":
+			m.connectFieldFocus = !m.connectFieldFocus
+			if m.connectFieldFocus {
+				m.connectURLInput.Focus()
+				m.connectURLInput.CursorEnd()
+			} else {
+				m.connectURLInput.Blur()
+			}
+			return m, nil
+		case "enter":
+			if m.connectFieldFocus {
+				return m.connectTo(m.connectURLInput.Value())
+			}
+			return m.modalSelect()
+		}
+		if m.connectFieldFocus {
+			var cmd tea.Cmd
+			m.connectURLInput, cmd = m.connectURLInput.Update(msg)
+			return m, cmd
+		}
+		// List-focused: up/down move, other keys fall through to no-op.
+		switch msg.String() {
+		case "up", "k", "ctrl+p":
+			if m.modalSel > 0 {
+				m.modalSel--
+			}
+			return m, nil
+		case "down", "j", "ctrl+n":
+			if m.modalSel < len(m.discoveredServers)-1 {
+				m.modalSel++
+			}
+			return m, nil
+		}
+		return m, nil
 	}
 	switch msg.String() {
 	case "esc":
@@ -1071,6 +1232,13 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "s":
 		m.modal, m.modalSel = modalStatus, 0
+		return m, nil
+	case "c":
+		// Open the connect overlay (plan 08e §D2): mDNS browser + manual URL.
+		m = m.openConnectModal()
+		if m.discoverCtx != nil {
+			return m, startDiscoverCmd(m.discoverCtx)
+		}
 		return m, nil
 	case "p":
 		m.modal, m.modalSel = modalPalette, 0

@@ -2,12 +2,14 @@ package tui
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/rotemmiz/opcode42/internal/mdns"
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
@@ -30,6 +32,7 @@ const (
 	modalHelp    // read-only: keybindings / commands reference
 	modalVariant // model-variant picker (plan 08b §7)
 	modalStash   // stashed prompt drafts (plan 08b §6)
+	modalConnect // mDNS server picker + manual URL entry (plan 08e §D2)
 )
 
 // paletteAction identifies a command-palette entry (dispatched by id, not index,
@@ -60,6 +63,7 @@ const (
 	paMCP
 	paSkills
 	paHelp
+	paConnect // open the connect overlay (plan 08e §D2)
 )
 
 type paletteCmd struct {
@@ -90,6 +94,7 @@ var paletteItems = []paletteCmd{
 	{"Delete session", paDelete},
 	{"MCP servers", paMCP},
 	{"Skills", paSkills},
+	{"Connect to daemon", paConnect},
 	{"Keybindings / help", paHelp},
 	{"Refresh sessions", paRefresh},
 }
@@ -245,6 +250,19 @@ func (m Model) modalItems() (title string, rows []string, footer string) {
 			rows = []string{"(no stashed drafts)"}
 		}
 		return "Stashed drafts", rows, "enter restore · ctrl+d delete · esc close"
+	case modalConnect:
+		// Nearby-servers list populated by D1's mDNS browser. The manual URL
+		// field is rendered above the list by modalView's modalConnect branch
+		// (the overlay has its own layout — a text input + a list — instead of
+		// the plain rows+footer shape). modalItems only carries the selectable
+		// server rows here; modalView reads them via this case too.
+		for _, svc := range m.discoveredServers {
+			rows = append(rows, m.connectRowLabel(svc))
+		}
+		if len(rows) == 0 {
+			rows = []string{"(no nearby daemons — enter a URL above)"}
+		}
+		return "Connect", rows, "↑↓ move · enter connect · tab edit URL · esc close"
 	default:
 		return "", nil, ""
 	}
@@ -255,6 +273,25 @@ func sessionRowLabel(s Session) string {
 		return s.Title
 	}
 	return s.ID
+}
+
+// connectRowLabel renders one nearby-daemon row: a colored reachability dot,
+// the instance name, and host:port. The dot is best-effort: green ● means a
+// recent /global/health probe succeeded, amber ● means unknown/unreachable.
+// The probe state lives on m.serverProbe (keyed by host:port); a missing entry
+// reads as "unknown" (amber) — the probe is async and may still be in flight.
+func (m Model) connectRowLabel(svc mdns.DiscoveredService) string {
+	dotColor := m.styles.P.Amber // unknown / unreachable
+	if p, ok := m.serverProbe[connectProbeKey(svc)]; ok && p.reachable {
+		dotColor = m.styles.P.Green
+	}
+	dot := lipgloss.NewStyle().Foreground(dotColor).Render("●")
+	return dot + "  " + svc.Name + "  " + svc.Host + ":" + strconv.Itoa(svc.Port)
+}
+
+// connectProbeKey is the dedupe key for reachability probes (host:port).
+func connectProbeKey(svc mdns.DiscoveredService) string {
+	return svc.Host + ":" + strconv.Itoa(svc.Port)
 }
 
 // modalCount is the number of selectable rows in the active modal.
@@ -364,6 +401,12 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 		case paSkills:
 			m.modal, m.modalSel = modalSkills, 0
 			return m, loadSkillsCmd(m.ctx, m.client)
+		case paConnect:
+			m = m.openConnectModal()
+			if m.discoverCtx != nil {
+				return m, startDiscoverCmd(m.discoverCtx)
+			}
+			return m, nil
 		case paHelp:
 			m.modal, m.modalSel = modalHelp, 0
 			return m, nil
@@ -420,6 +463,17 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 		return m.popStash(i), nil
 	case modalStatus, modalMCP, modalSkills, modalHelp:
 		m.modal = modalNone // read-only — enter just closes
+	case modalConnect:
+		// Selecting a discovered server: build http://<host>:<port> and dial
+		// it. The connect path is identical to a CLI --url connect: rebuild
+		// the client, re-issue the health + SSE bootstrap, and pin the URL.
+		if m.modalSel >= len(m.discoveredServers) {
+			var cmd tea.Cmd
+			m, cmd = m.closeConnectModal()
+			return m, cmd
+		}
+		svc := m.discoveredServers[m.modalSel]
+		return m.connectTo("http://" + svc.Host + ":" + strconv.Itoa(svc.Port))
 	case modalRename:
 		title := strings.TrimSpace(m.renameInput.Value())
 		id := m.cfg.SessionID
@@ -485,6 +539,52 @@ func (m Model) modalView() string {
 			BorderBackground(s.P.BgElev).
 			Background(s.P.BgElev).
 			Padding(1, 2).Width(width + 2).Render(body) // v2: +2 for the border cols Width now includes
+		return centerScreen(m.width, m.height, panel)
+	}
+
+	// The connect overlay (plan 08e §D2) is a manual URL field + a nearby-
+	// servers list. It has its own layout (a header, a focused/unfocused text
+	// input, a sub-header, the server list, and a footer hint) rather than the
+	// plain title+rows+footer shape — so it's handled here, before the generic
+	// list path. Tab toggles focus between the URL field and the server list;
+	// m.connectFieldFocus tracks which side owns the cursor.
+	if m.modal == modalConnect {
+		var lines []string
+		lines = append(lines, surfaceRow(s.Section.Render("Connect")))
+		lines = append(lines, surfaceRow(""))
+		lines = append(lines, surfaceRow(s.Faint.Render("Daemon URL")))
+		lines = append(lines, m.connectURLInput.View())
+		lines = append(lines, surfaceRow(""))
+		lines = append(lines, surfaceRow(s.Faint.Render("Nearby servers")))
+		if len(m.discoveredServers) == 0 {
+			lines = append(lines, surfaceRow(s.Faint.Render("(browsing…)")))
+		} else {
+			const maxRows = 10
+			start, end := windowAround(m.modalSel, len(m.discoveredServers), maxRows)
+			if start > 0 {
+				lines = append(lines, surfaceRow(s.Faint.Render("↑ more")))
+			}
+			for i := start; i < end; i++ {
+				row := m.connectRowLabel(m.discoveredServers[i])
+				if i == m.modalSel && !m.connectFieldFocus {
+					lines = append(lines, s.Selection.Width(innerWidth).Render(" "+row))
+				} else {
+					lines = append(lines, surfaceRow(s.Base.Render(" "+row)))
+				}
+			}
+			if end < len(m.discoveredServers) {
+				lines = append(lines, surfaceRow(s.Faint.Render("↓ more")))
+			}
+		}
+		lines = append(lines, surfaceRow(""))
+		lines = append(lines, surfaceRow(s.Faint.Render("enter connect · tab URL/list · esc close")))
+		panel := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(s.P.BorderActive).
+			BorderBackground(s.P.BgElev).
+			Background(s.P.BgElev).
+			Padding(1, 2).Width(width + 2).
+			Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 		return centerScreen(m.width, m.height, panel)
 	}
 

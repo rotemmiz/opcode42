@@ -16,7 +16,8 @@ type kvData struct {
 	Theme        string   `json:"theme,omitempty"`
 	Provider     string   `json:"provider,omitempty"`
 	Model        string   `json:"model,omitempty"`
-	Variant      string   `json:"variant,omitempty"` // active model variant (plan 08b §7)
+	Variant      string   `json:"variant,omitempty"`    // active model variant (plan 08b §7)
+	ServerURL    string   `json:"server_url,omitempty"` // pinned daemon URL (plan 08e §D3)
 	History      []string `json:"history,omitempty"`
 	Stash        []string `json:"stash,omitempty"`        // parked prompt drafts (plan 08b §6)
 	HideDiffTree bool     `json:"hideDiffTree,omitempty"` // diff reviewer file-tree pane off
@@ -70,10 +71,24 @@ func (m Model) persist() {
 		Provider:     m.model.Provider,
 		Model:        m.model.Model,
 		Variant:      m.model.Variant,
+		ServerURL:    m.cfg.URL,
 		History:      m.history,
 		Stash:        m.stash,
 		HideDiffTree: m.diffTreeHidden,
 	})
+}
+
+// persistServerURL pins a daemon URL to the KV (server_url key, plan 08e §D3)
+// so subsequent runs skip the connect overlay. Best-effort — a write failure
+// leaves the TUI working; the overlay just re-opens next time. No-op unless
+// persistence was enabled via Restore (keeps tests hermetic).
+func (m Model) persistServerURL(url string) {
+	if !m.persistEnabled || url == "" {
+		return
+	}
+	kv := loadKV()
+	kv.ServerURL = url
+	saveKV(kv)
 }
 
 // pushHistory appends a submitted prompt (dedup-adjacent, capped) and resets the
