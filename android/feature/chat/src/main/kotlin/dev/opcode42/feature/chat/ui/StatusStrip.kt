@@ -34,6 +34,8 @@ fun StatusStrip(
     model: String?,
     provider: String?,
     tokens: TokenUsage?,
+    status: String? = null,
+    retryAttempt: Int? = null,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     onModeClick: (() -> Unit)? = null,
@@ -61,6 +63,23 @@ fun StatusStrip(
                 .then(if (onModeClick != null) Modifier.clickable(onClick = onModeClick) else Modifier)
                 .padding(horizontal = 8.dp, vertical = 1.dp),
         )
+        // retry chip — surfaces `session.status` type "retry" (WS I5 E19). The opencode TUI
+        // renders this as "Retrying (attempt N)" (tui/src/routes/session/index.tsx:2316);
+        // we match that wording. Filled with Secondary so it reads as an active/recovering
+        // state distinct from the idle mode chip. Omitted entirely when not retrying.
+        retryStatusLabel(status, retryAttempt)?.let { label ->
+            Text(
+                text = label,
+                fontFamily = Opcode42Mono,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = OnSecondary,
+                modifier = Modifier
+                    .clip(Opcode42Shapes.xs)
+                    .background(Secondary)
+                    .padding(horizontal = 8.dp, vertical = 1.dp),
+            )
+        }
         if (model != null) {
             Text(
                 text = model,
@@ -97,4 +116,21 @@ fun StatusStrip(
             }
         }
     }
+}
+
+/**
+ * The retry chip's label for the [StatusStrip], or null when the session is not retrying.
+ *
+ * opencode's `session.status` event carries a nested `status` object whose `type` may be
+ * `"retry"` (openapi.json SessionStatus schema, `packages/sdk/openapi.json:17278-17324`).
+ * The retry variant requires an integer `attempt` field (no max is defined on the wire, so
+ * we show the attempt count alone, never a fabricated "N/M"). The opencode TUI renders this
+ * as `"Retrying (attempt ${attempt})"` (`packages/tui/src/routes/session/index.tsx:2316`),
+ * with no lower-bound guard — we match that wording exactly, including attempt 0. When
+ * `attempt` is absent/blank we fall back to bare "Retrying" — the plan's "if the event
+ * carries an attempt count" guard against fabricating a count.
+ */
+fun retryStatusLabel(status: String?, retryAttempt: Int?): String? {
+    if (status != "retry") return null
+    return retryAttempt?.let { "Retrying (attempt $it)" } ?: "Retrying"
 }

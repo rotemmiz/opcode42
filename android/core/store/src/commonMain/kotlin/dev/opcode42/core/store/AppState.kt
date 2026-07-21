@@ -27,6 +27,10 @@ data class AppState(
     /** sessionID → status string ("running" | "idle" | etc.) */
     val sessionStatus: Map<String, String> = emptyMap(),
 
+    /** sessionID → retry attempt count when the status is "retry" (null otherwise or when the
+     *  server omits it). Carried from the `session.status` event's nested `status.attempt` field. */
+    val retryAttempts: Map<String, Int?> = emptyMap(),
+
     /** sessionID → list of optimistic (un-confirmed) messages awaiting server echo */
     val optimisticMessages: Map<String, List<OptimisticMessage>> = emptyMap(),
 

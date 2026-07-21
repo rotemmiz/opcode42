@@ -236,6 +236,8 @@ fun ChatScreen(
                     model = displayModelLabel,
                     provider = displayProviderLabel,
                     tokens = uiState.session?.tokens,
+                    status = uiState.sessionStatus,
+                    retryAttempt = uiState.retryAttempt,
                     onClick = if (providers.isNotEmpty()) {
                         { pickerTarget = PickerTarget.MODEL }
                     } else null,

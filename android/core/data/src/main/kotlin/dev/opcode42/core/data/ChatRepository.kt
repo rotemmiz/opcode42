@@ -35,6 +35,7 @@ data class ChatSnapshot(
     val permissions: List<PermissionRequest> = emptyList(),
     val questions: List<QuestionRequest> = emptyList(),
     val status: String = "idle",
+    val retryAttempt: Int? = null,
     val diffs: Map<String, List<SnapshotFileDiff>> = emptyMap(),
 )
 
@@ -114,6 +115,7 @@ class DefaultChatRepository @Inject constructor(
             permissions = s.permissions[sessionId] ?: emptyList(),
             questions = s.questions[sessionId] ?: emptyList(),
             status = s.sessionStatus[sessionId] ?: "idle",
+            retryAttempt = s.retryAttempts[sessionId],
             diffs = s.diffs.filterKeys { it in messageIds },
         )
     }.distinctUntilChanged()

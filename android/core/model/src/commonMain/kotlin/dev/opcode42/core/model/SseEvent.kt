@@ -22,7 +22,7 @@ sealed class AppEvent {
     /** Session */
     data class SessionUpdated(val session: Session) : AppEvent()
     data class SessionRemoved(val sessionId: String) : AppEvent()
-    data class SessionStatus(val sessionId: String, val status: String) : AppEvent()
+    data class SessionStatus(val sessionId: String, val status: String, val retryAttempt: Int? = null) : AppEvent()
 
     /** Message */
     data class MessageUpdated(val message: Message) : AppEvent()
