@@ -156,6 +156,12 @@ fun ChatScreen(
     val pendingPermission = uiState.pendingPermissions.firstOrNull()
     val pendingQuestion = uiState.pendingQuestions.firstOrNull()
 
+    // Optimistic history rows for resolved questions: the store clears the pending entry on
+    // reply, so the card disappears from the list. These maps preserve the "Answered: …" /
+    // "Skipped" row for a moment so the user sees what they answered. Keyed by request id.
+    val resolvedQuestions = remember { mutableStateMapOf<String, List<List<String>>>() }
+    val skippedQuestions = remember { mutableStateMapOf<String, Boolean>() }
+
     val sessionDirectory = uiState.session?.directory
     var showInfoSheet by remember { mutableStateOf(false) }
     var showOverflow by remember { mutableStateOf(false) }
@@ -557,15 +563,28 @@ fun ChatScreen(
                                 onNavigateToSession = onNavigateToSession,
                             )
                         }
-                        // D3 — Synthetic question block: a pending question is visible in the
-                        // conversation stream (not just a transient modal), positioned after the
-                        // last message. Tapping it opens the QuestionSheet (already composed below).
+                        // D3 — Non-modal in-stream QuestionCard: a pending question renders as a
+                        // LazyColumn item (not a transient modal), positioned after the last
+                        // message. Flips to a static "Answered: …" / "Skipped" row after resolution.
                         if (pendingQuestion != null) {
                             item(
-                                key = "synthetic-question:${pendingQuestion!!.id}",
+                                key = "question:${pendingQuestion!!.id}",
                                 contentType = { "question" },
                             ) {
-                                PendingQuestionBlock(question = pendingQuestion!!)
+                                QuestionCard(
+                                    question = pendingQuestion!!,
+                                    resolvedAnswers = resolvedQuestions[pendingQuestion!!.id],
+                                    resolvedSkipped = skippedQuestions.contains(pendingQuestion!!.id),
+                                    onReply = { answers ->
+                                        resolvedQuestions[pendingQuestion!!.id] = answers
+                                        viewModel.replyQuestion(pendingQuestion!!.id, answers)
+                                    },
+                                    onReject = {
+                                        skippedQuestions[pendingQuestion!!.id] = true
+                                        viewModel.rejectQuestion(pendingQuestion!!.id)
+                                    },
+                                    isReplying = false, // PR 1.6 wires this
+                                )
                             }
                         }
                     }
@@ -618,21 +637,12 @@ fun ChatScreen(
             }
         }
 
-        // A8 — Permission sheet (non-dismissible)
+        // A8 — Permission sheet (non-dismissible, 3-way: Deny / Allow once / Always)
         pendingPermission?.let { req ->
             PermissionSheet(
                 permission = req,
-                onApprove = { viewModel.replyPermission(req.id, reply = "once") },
-                onDeny = { viewModel.replyPermission(req.id, reply = "reject") },
-            )
-        }
-
-        // D3 — Question sheet (structured options wizard; swipe-away = reject)
-        pendingQuestion?.let { req ->
-            QuestionSheet(
-                question = req,
-                onReply = { answers -> viewModel.replyQuestion(req.id, answers) },
-                onReject = { viewModel.rejectQuestion(req.id) },
+                onReply = { reply -> viewModel.replyPermission(req.id, reply) },
+                isReplying = false, // PR 1.6 wires this
             )
         }
 
@@ -971,47 +981,6 @@ private fun OptimisticMessageBlock(opt: OptimisticMessage) {
  *  cached switch resolves first, so the loader never flashes for it. Loading from the empty
  *  page shows it immediately (the splash is already on screen). */
 private const val LOADER_DELAY_MS = 250L
-
-/**
- * D3 — In-stream synthetic question block. A pending question is rendered in the conversation
- * stream (after the last message) so it's visible in history, not just a transient modal. The
- * block shows the question header + text + a "tap to answer" affordance; the QuestionSheet is
- * already composed separately and opens on tap.
- */
-@Composable
-private fun PendingQuestionBlock(question: dev.opcode42.core.model.QuestionRequest) {
-    val info = question.questions.firstOrNull()
-    val header = info?.header?.takeIf { it.isNotBlank() } ?: "Question"
-    val body = info?.question?.takeIf { it.isNotBlank() }
-        ?: question.message
-        ?: "The agent is waiting for input."
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.secondaryContainer)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-    ) {
-        Text(
-            text = header,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = body,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "Tap to answer",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
-        )
-    }
-}
 
 /** Once the loader has appeared, keep it up for at least this long, so a load finishing just
  *  past [LOADER_DELAY_MS] doesn't blink the spinner in and straight back out. */
