@@ -99,10 +99,12 @@ func resizePTYCmd(ctx context.Context, c *opcode42client.Opcode42Client, id stri
 	}
 }
 
-// ptyGridSize computes the terminal grid for the current layout (left column
-// width, a fraction of the screen height, clamped).
+// ptyGridSize computes the terminal grid for the current layout (the gutter-
+// reduced left column width — plan 18 §B1: the PTY pane renders at innerW via
+// buildFooter(innerW) → ptyPaneView(innerW) → renderGrid(innerW), so the grid
+// must match the rendered width to avoid clipping the right cols).
 func (m Model) ptyGridSize() (cols, rows int) {
-	cols = m.leftColumnWidth()
+	cols = m.leftColumnWidth() - 2*streamGutter
 	if cols <= 0 {
 		cols = m.width
 	}

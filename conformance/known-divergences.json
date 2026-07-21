@@ -165,5 +165,11 @@
     "phase": "D (plan 18)",
     "reason": "TUI (plan 18 §A4): Opcode42 removed the `maxContentWidth = 100` cap on the stream column (render.go:contentWidth). The stream now fills the full left column (leftW = m.width - sidebarWidth when sidebar visible, else m.width). opencode has no such cap — the stream is `flexGrow={1}` filling the left column (index.tsx:1165). The 100-col cap was a readability heuristic from plan 08c that predates the sidebar-aware layout. No wire/daemon impact; TUI-only.",
     "track": "intentional: no cap (Opcode42 + opencode) vs prior 100-col heuristic (plan 08c)"
+  },
+  {
+    "scenario": "tui-panel-gutter-alignment",
+    "phase": "D (plan 18)",
+    "reason": "TUI (plan 18 §B2 review fix): the permission and question footer panels are gutter-inset to align their SURFACE with the stream surface — both start at col streamGutter (X(streamGutter) on the canvas). The panel retains its own 1-col internal left pad (the leading space on each stage line), so panel CONTENT sits at col streamGutter+1 while stream content sits at col streamGutter. opencode puts the panel INSIDE the same paddingLeft={2} box with no extra internal pad, so opencode panel content is at col 2 (the gutter) with no further inset. Opcode42's 1-col internal pad is a footer-panel affordance (a visible content indent inside the BgElev surface); the 1-col divergence from opencode's flush-left panel content is intentional for readability. The panel surface (BgElev) aligns with the stream surface; only the internal content indent differs by 1 col. TUI-only, no wire/daemon impact.",
+    "track": "intentional: panel surface aligned to gutter; 1-col internal pad retained (Opcode42) vs flush-left (opencode)"
   }
 ]

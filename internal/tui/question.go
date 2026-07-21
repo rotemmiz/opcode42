@@ -340,9 +340,17 @@ func (m Model) questionView() string {
 	if leftW < 1 {
 		leftW = 1
 	}
-	innerW := leftW - 2 // Padding(0,1) → 1 col each side
+	// Plan 18 §B2 (review fix): the panel renders at the gutter-reduced
+	// innerW so it aligns with the stream surface (canvas places it at
+	// X(streamGutter)). contentW is innerW minus the panel's own 1-col
+	// internal pad (the stage helpers wrap at contentW).
+	innerW := leftW - 2*streamGutter
 	if innerW < 1 {
 		innerW = 1
+	}
+	contentW := innerW - 2
+	if contentW < 1 {
+		contentW = 1
 	}
 
 	var lines []string
@@ -352,14 +360,14 @@ func (m Model) questionView() string {
 	// question + a final "Confirm" tab. Single-question flows have no tab
 	// bar (questionSingle → 1 tab).
 	if !questionSingle(q) {
-		lines = append(lines, m.questionTabBar(q, innerW))
+		lines = append(lines, m.questionTabBar(q, contentW))
 		lines = append(lines, "")
 	}
 
 	if questionConfirm(q, m.qBody) {
-		lines = append(lines, m.questionConfirmReview(q, innerW)...)
+		lines = append(lines, m.questionConfirmReview(q, contentW)...)
 	} else {
-		lines = append(lines, m.questionQuestionLines(q, innerW)...)
+		lines = append(lines, m.questionQuestionLines(q, contentW)...)
 	}
 
 	hint := questionHint(q, m.qBody)
@@ -367,7 +375,10 @@ func (m Model) questionView() string {
 	lines = append(lines, s.Faint.Render(hint))
 
 	body := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	panel := s.Surface(s.P.BgElev).Width(leftW).Render(body)
+	// Panel body: innerW width (gutter-reduced), BgElev surface bg. The
+	// canvas positions the panel at X(streamGutter) so the panel surface
+	// aligns with the stream surface (plan 18 §B2 review fix).
+	panel := s.Surface(s.P.BgElev).Width(innerW).Render(body)
 	// Pad to the target height (plan 17 §B1): panelH = base + QUESTION_ROWS.
 	// opencode's renderer reserves a fixed height regardless of content
 	// (footer.ts:697-722); Opcode42 pads the body to the same height so

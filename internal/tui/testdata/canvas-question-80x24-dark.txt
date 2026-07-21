@@ -8,15 +8,15 @@
                                                                                 
                                                                                 
                                                                                 
- Pick a file                                                                    
+   Pick a file                                                                  
                                                                                 
- Which file should the agent edit?                                              
+   Which file should the agent edit?                                            
                                                                                 
- 1. src/main.go                                                                 
- 2. src/util.go                                                                 
- 3. docs/README.md                                                              
+   1. src/main.go                                                               
+   2. src/util.go                                                               
+   3. docs/README.md                                                            
                                                                                 
-↑↓ select   enter submit   esc dismiss                                          
+  ↑↓ select   enter submit   esc dismiss                                        
                                                                                 
                                                                                 
                                                                                 

@@ -239,9 +239,10 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 	//  - Footer panels (permission, question): plan 17 §B1 — opencode renders
 	//    these as a footer-region panel (bottom of screen), NOT a centered
 	//    modal. The body STAYS so the stream is visible above the panel. The
-	//    panel body (sized leftW × panelH, BgElev bg) is placed at
-	//    Y = m.height - panelH so it sits at the bottom; its blank padding
-	//    doesn't paint over the body layer above it.
+	//    panel body (sized innerW × panelH, BgElev bg) is placed at
+	//    X(streamGutter) so the panel surface aligns with the stream surface
+	//    (plan 18 §B2 review fix) and Y = m.height - panelH so it sits at the
+	//    bottom; its blank padding doesn't paint over the body layer above it.
 	//
 	// The renderView priority is preserved (permission > question > diff >
 	// modal); only one is active per the model state.
@@ -253,7 +254,7 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 			if y < 0 {
 				y = 0
 			}
-			layers = append(layers, lipgloss.NewLayer(p).X(0).Y(y).Z(zModal))
+			layers = append(layers, lipgloss.NewLayer(p).X(streamGutter).Y(y).Z(zModal))
 		}
 	case m.pendingQuestion() != nil:
 		if q := m.questionView(); q != "" {
@@ -262,7 +263,7 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 			if y < 0 {
 				y = 0
 			}
-			layers = append(layers, lipgloss.NewLayer(q).X(0).Y(y).Z(zModal))
+			layers = append(layers, lipgloss.NewLayer(q).X(streamGutter).Y(y).Z(zModal))
 		}
 	case m.diff.open:
 		// The diff reviewer is full-screen, not centered — it renders at

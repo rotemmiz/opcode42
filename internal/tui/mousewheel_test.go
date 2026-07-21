@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-
-	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // wheelUp / wheelDown build a MouseWheelMsg with the given button, matching the
@@ -17,7 +15,9 @@ func wheelDown() tea.MouseWheelMsg { return tea.MouseWheelMsg{Button: tea.MouseW
 // TestMouseWheel_ScrollsStream pins Plan 18 §A2: wheel up scrolls toward older
 // content (Offset grows), wheel down scrolls toward newer (Offset shrinks),
 // using the scrollStep=3 increment. The footer/sidebar pinning is covered by
-// the canvas layer tests; here we only assert the scroll math.
+// the canvas layer tests; here we only assert the scroll math. The down→0
+// floor (plan §A acceptance: `max(0, N-M)*scrollStep`) is exercised by sending
+// more down than up.
 func TestMouseWheel_ScrollsStream(t *testing.T) {
 	m := longSessionModel(t) // 40 messages in a 20-row viewport → scroll is meaningful
 	if m.scroll.Offset != 0 || !m.scroll.AtTail() {
@@ -39,11 +39,25 @@ func TestMouseWheel_ScrollsStream(t *testing.T) {
 	if m.scroll.Offset != (N-M)*scrollStep {
 		t.Fatalf("after %d wheel-down: Offset=%d want %d", M, m.scroll.Offset, (N-M)*scrollStep)
 	}
+
+	// Floor-at-0: send more down than up so Forward floors at 0. The total
+	// down count (M + extra) exceeds N, so Offset must clamp at 0, not go
+	// negative (scrollregion.Region.Forward floors; plan §A acceptance).
+	const extra = 6 // M_total = M + extra = 7 > N = 4
+	for i := 0; i < extra; i++ {
+		next, _ := m.Update(wheelDown())
+		m = next.(Model)
+	}
+	if m.scroll.Offset != 0 {
+		t.Fatalf("after %d extra wheel-down (total down=%d > up=%d): Offset=%d want 0 (Forward floors at 0)",
+			extra, M+extra, N, m.scroll.Offset)
+	}
 }
 
 // TestMouseWheel_IgnoredUnderModal pins Plan 18 §A2's overlay guard: when an
-// overlay owns the view (modal, focused PTY, or diff reviewer), the wheel must
-// NOT touch m.scroll. Same guard expression as the key handlers.
+// overlay owns the view, the wheel must NOT touch m.scroll. The guard has 5
+// disjuncts (PTY, diff, modal, pending permission, pending question); each
+// is covered by a case. Same guard expression as the key handlers.
 func TestMouseWheel_IgnoredUnderModal(t *testing.T) {
 	cases := []struct {
 		name string
@@ -52,11 +66,24 @@ func TestMouseWheel_IgnoredUnderModal(t *testing.T) {
 		{"modal palette", func(m *Model) { m.modal = modalPalette }},
 		{"focused pty", func(m *Model) { m.pty.open, m.pty.focused = true, true }},
 		{"diff reviewer", func(m *Model) { m.diff.open = true }},
+		{"pending permission", func(m *Model) {
+			m.store.permissions = []Permission{{ID: "p1", SessionID: "ses_1", Permission: "bash"}}
+		}},
+		{"pending question", func(m *Model) {
+			m.store.questions = []Question{{ID: "q1", SessionID: "ses_1"}}
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			m := longSessionModel(t)
 			tc.set(&m)
+			// Sanity: the overlay state the guard checks is actually set.
+			if tc.name == "pending permission" && m.pendingPermission() == nil {
+				t.Fatalf("setup failed: pendingPermission() nil")
+			}
+			if tc.name == "pending question" && m.pendingQuestion() == nil {
+				t.Fatalf("setup failed: pendingQuestion() nil")
+			}
 			next, _ := m.Update(wheelUp())
 			m = next.(Model)
 			if m.scroll.Offset != 0 {
@@ -120,7 +147,3 @@ func TestMouseMode_EnabledInView(t *testing.T) {
 		t.Errorf("View().MouseMode = %v, want MouseModeCellMotion", v.MouseMode)
 	}
 }
-
-// Compile-time: keep the sseEventMsg constructor honest — if the wire shape
-// ever changes, this fails to build.
-var _ opcode42client.SSEEvent = opcode42client.SSEEvent{}
