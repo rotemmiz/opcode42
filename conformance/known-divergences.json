@@ -81,5 +81,17 @@
     "phase": "A",
     "reason": "PATCH /session/{id} (session.update) is implemented at full parity for the normal contract: partial title/time.archived updates, full-Session 200 response, 404 NotFoundError on a missing id, 400 BadRequest on an empty/absent body or a wrong-typed/non-object payload, unknown top-level fields ignored (not rejected), and time.archived only ever SET by a number (null/absent are no-ops; opencode has no un-archive path). The session-update dual-run scenario (rename -> archive -> archived:null no-op) diffs clean. ONE deliberate divergence, not exercised by any scenario: for a SYNTACTICALLY MALFORMED JSON body (e.g. '{\"title\":') opencode returns 500 UnknownError (an uncaught decode throw specific to this endpoint), whereas Opcode42 returns the more correct 400 BadRequest. Emitting a 500 for a client error would be harmful, so Opcode42 does not mirror it.",
     "track": "intentional: malformed-JSON 400 (Opcode42) vs 500 (opencode) on session.update"
+  },
+  {
+    "scenario": "tui-inline-diff-bg-tints",
+    "phase": "D",
+    "reason": "Plan 17 Workstream C: the TUI in-chat inline diff (rendered at edit/apply_patch tool completion) uses the theme's DiffPalette background tints (AddedBg/RemovedBg/ContextBg) for added/removed/context rows. opencode's run mini-TUI uses transparent diff backgrounds (run/theme.ts:572-574); opencode's full-TUI diff-viewer plugin uses real tints. Opcode42 chose the tints for the inline diff for readability and colorblind-safety (the +/- sign marker column carries the color cue the background tint alone does not). This is a visual divergence from the run mini-TUI only; the wire shape (metadata.diff for edit, metadata.files[].patch for apply_patch) and the snapshot title ('# Edited <file>' / '# Created|Deleted|Moved|Patched <file>') match opencode (scrollback.writer.tsx:188-225, tool.ts:484-498, 515-569). Not gated by a parity scenario (TUI-only, no daemon wire).",
+    "track": "intentional: tints (Opcode42) vs transparent (opencode run mini-TUI) for the inline diff bg"
+  },
+  {
+    "scenario": "tui-inline-diff-fold-toggle",
+    "phase": "D",
+    "reason": "Plan 17 Workstream C: Opcode42's TUI keeps the per-tool fold toggle (ctrl+x v) for the inline diff — collapsed shows only the header ('Edit <file> ▸'), expanded shows header + diff. opencode's run mini-TUI has no per-tool fold for the inline diff (the snapshot always renders in full). This is an intentional extension to the run mini-TUI behavior, mirroring opencode's full-TUI diff-viewer plugin (which does have per-file fold). Documented in plans/17-tui-scroll-layout.md §C5.",
+    "track": "intentional: per-tool fold toggle (Opcode42 extension, ctrl+x v) for the inline diff"
   }
 ]

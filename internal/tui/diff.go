@@ -577,55 +577,12 @@ func advanceDiffLineNumbers(line string, oldLine, newLine int) (int, int) {
 //
 // where OOOO/NNNN are right-aligned in gutterNumWidth=4. A value of -1 means
 // "do not show" → rendered as spaces.
+//
+// Plan 17 Workstream C: delegates to the palette-pure renderGutterP so the
+// inline-diff path (toolrender.go) and the full-screen reviewer share one
+// implementation. The shared helper lives in diffrender.go.
 func (m Model) renderGutter(oldLine, newLine int, kind diffLineKind) string {
-	s := m.styles
-	d := s.P.Diff
-
-	// Determine background colors for old-number and new-number cells.
-	var oldBg, newBg, sepBg theme.Color
-	switch kind {
-	case diffLineAdded:
-		oldBg = d.AddedLineNumberBg
-		newBg = d.AddedLineNumberBg
-		sepBg = d.AddedLineNumberBg
-	case diffLineRemoved:
-		oldBg = d.RemovedLineNumberBg
-		newBg = d.RemovedLineNumberBg
-		sepBg = d.RemovedLineNumberBg
-	default:
-		// context, hunk header, meta
-		oldBg = s.P.BgPanel
-		newBg = s.P.BgPanel
-		sepBg = s.P.BgPanel
-	}
-
-	gutterStyle := func(bg theme.Color) lipgloss.Style {
-		return lipgloss.NewStyle().Foreground(d.LineNumber).Background(bg)
-	}
-
-	// Format old-line number cell.
-	var oldStr string
-	if oldLine > 0 && (kind == diffLineRemoved || kind == diffLineContext) {
-		oldStr = fmt.Sprintf("%*d", gutterNumWidth, oldLine)
-	} else {
-		oldStr = strings.Repeat(" ", gutterNumWidth)
-	}
-
-	// Format new-line number cell.
-	var newStr string
-	if newLine > 0 && (kind == diffLineAdded || kind == diffLineContext) {
-		newStr = fmt.Sprintf("%*d", gutterNumWidth, newLine)
-	} else {
-		newStr = strings.Repeat(" ", gutterNumWidth)
-	}
-
-	oldCell := gutterStyle(oldBg).Render(oldStr)
-	spaceCell := gutterStyle(sepBg).Render(" ")
-	newCell := gutterStyle(newBg).Render(newStr)
-	sepCell := lipgloss.NewStyle().Foreground(s.P.BorderSoft).Background(sepBg).Render(gutterSep)
-	trailCell := gutterStyle(sepBg).Render(" ")
-	// Gutter: "OOOO NNNN │ " (11 visible chars)
-	return oldCell + spaceCell + newCell + sepCell + trailCell
+	return renderGutterP(m.styles.P, oldLine, newLine, kind)
 }
 
 // renderDiffCodeLine renders the code body of a single diff line: a colored
@@ -639,63 +596,12 @@ func (m Model) renderGutter(oldLine, newLine int, kind diffLineKind) string {
 //
 // For meta lines (---/+++/diff/index), the whole line is rendered in the faint
 // color (no syntax — these are not source code).
+//
+// Plan 17 Workstream C: delegates to the palette-pure renderDiffCodeLineP so
+// the inline-diff path (toolrender.go) and the full-screen reviewer share one
+// implementation. The shared helper lives in diffrender.go.
 func (m Model) renderDiffCodeLine(line string, kind diffLineKind, codeWidth int, filename string) string {
-	s := m.styles
-	d := s.P.Diff
-
-	var rowBg, signFg theme.Color
-	switch kind {
-	case diffLineAdded:
-		rowBg = d.AddedBg
-		signFg = d.HighlightAdded
-	case diffLineRemoved:
-		rowBg = d.RemovedBg
-		signFg = d.HighlightRemoved
-	case diffLineMeta:
-		// meta lines (---/+++/diff/index): faint, no highlighting
-		return lipgloss.NewStyle().
-			Foreground(s.P.FgFaint).
-			Background(s.P.Bg).
-			Render(truncate(line, codeWidth))
-	default:
-		rowBg = d.ContextBg
-	}
-
-	// Split the leading marker (+/-/ ) from the raw code. Added/removed lines
-	// surface a colored marker; context lines pad the column with a blank space
-	// (still on rowBg) so the code body aligns across line kinds.
-	sign := " "
-	code := line
-	if len(line) > 0 {
-		switch kind {
-		case diffLineAdded:
-			sign = "+"
-			code = line[1:]
-		case diffLineRemoved:
-			sign = "-"
-			code = line[1:]
-		default:
-			// Context lines: drop a single leading space marker if present, but
-			// keep bare (space-less) context lines intact.
-			if strings.HasPrefix(line, " ") {
-				code = line[1:]
-			}
-		}
-	}
-	signCell := lipgloss.NewStyle().Foreground(signFg).Background(rowBg).Render(sign)
-
-	// Truncate the code to the width left after the sign column before
-	// highlighting so we don't syntax-highlight characters that will be clipped.
-	// This avoids any off-by-one in ANSI-length accounting after truncation.
-	bodyWidth := codeWidth - signWidth
-	if bodyWidth < 1 {
-		bodyWidth = 1
-	}
-	code = truncate(code, bodyWidth)
-
-	// Syntax-highlight with the row's diff background color so every token
-	// span carries the bg — no transparent cells between tokens.
-	return signCell + highlightCodeBg(code, filename, s.P, rowBg)
+	return renderDiffCodeLineP(m.styles.P, line, kind, codeWidth, filename)
 }
 
 // padRow pads a rendered row string (which may contain ANSI escapes) to exactly
