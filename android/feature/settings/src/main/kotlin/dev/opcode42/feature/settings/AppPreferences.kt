@@ -3,6 +3,7 @@ package dev.opcode42.feature.settings
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -46,6 +47,7 @@ class AppPreferences @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val themeKey = stringPreferencesKey("theme_mode")
+    private val dynamicColorKey = booleanPreferencesKey("dynamic_color")
 
     /** Synchronous mirror of the persisted theme mode, for instant cycle-from-current. */
     private val themeModeMirror = MutableStateFlow(ThemeMode.System)
@@ -56,6 +58,14 @@ class AppPreferences @Inject constructor(
 
     suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { it[themeKey] = mode.storage }
+    }
+
+    /** Dynamic color (Material You) opt-in. Off by default — the brand palette is the default. */
+    val dynamicColor: Flow<Boolean> = context.dataStore.data
+        .map { prefs -> prefs[dynamicColorKey] ?: false }
+
+    suspend fun setDynamicColor(enabled: Boolean) {
+        context.dataStore.edit { it[dynamicColorKey] = enabled }
     }
 
     /**

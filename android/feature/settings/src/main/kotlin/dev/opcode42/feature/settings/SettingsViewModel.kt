@@ -16,6 +16,8 @@ data class SettingsUiState(
     val connections: List<ServerConnection> = emptyList(),
     val activeKey: String? = null,
     val themeMode: ThemeMode = ThemeMode.System,
+    /** Dynamic color (Material You) opt-in — drives the Material You color scheme on API 31+. */
+    val dynamicColor: Boolean = false,
     /** SSE connection state for the active server — drives the server-row status dot (G1). */
     val activeConnectionState: ConnectionState = ConnectionState.Disconnected,
     /** Daemon version from `GET /global/health`, for the About section (G1). null = not fetched. */
@@ -36,12 +38,14 @@ class SettingsViewModel @Inject constructor(
         connectionManager.connections,
         connectionManager.activeServerConnectionFlow,
         appPreferences.themeMode,
+        appPreferences.dynamicColor,
         sessionRepo.connectionState,
-    ) { connections, active, themeMode, connState ->
+    ) { connections, active, themeMode, dynamicColor, connState ->
         SettingsUiState(
             connections = connections,
             activeKey = active?.key(),
             themeMode = themeMode,
+            dynamicColor = dynamicColor,
             activeConnectionState = connState,
         )
     }.combine(_daemonVersion) { state, ver ->
@@ -58,6 +62,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { appPreferences.setThemeMode(mode) }
+    }
+
+    fun setDynamicColor(enabled: Boolean) {
+        viewModelScope.launch { appPreferences.setDynamicColor(enabled) }
     }
 
     /**

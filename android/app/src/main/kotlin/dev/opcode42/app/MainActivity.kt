@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
         maybeRequestNotificationPermission()
         setContent {
             val themeMode by appPreferences.themeMode.collectAsState(initial = ThemeMode.System)
+            val dynamicColor by appPreferences.dynamicColor.collectAsState(initial = false)
             val darkTheme = when (themeMode) {
                 ThemeMode.System -> isSystemInDarkTheme()
                 ThemeMode.Light -> false
@@ -87,7 +88,7 @@ class MainActivity : ComponentActivity() {
             // Surface the tap once (keyed by token, so a repeat push for the same
             // session re-navigates). Cleared by bumping consumedToken on consume.
             val pending = tap?.takeIf { it.token != consumedToken.value }
-            Opcode42Theme(darkTheme = darkTheme) {
+            Opcode42Theme(darkTheme = darkTheme, dynamicColor = dynamicColor) {
                 Opcode42NavGraph(
                     deepLinkSessionId = pending?.target?.sessionId,
                     deepLinkToken = pending?.token ?: -1L,
