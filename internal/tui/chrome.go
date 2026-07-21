@@ -224,6 +224,38 @@ func (m Model) sidebarView() string {
 	dot := lipgloss.NewStyle().Foreground(dotColor).Render("•")
 	b.WriteString(dot + " " + s.Base.Render(strconv.Itoa(lspCount)) + s.Faint.Render(" servers") + "\n")
 
+	// TASKS section (plan 08e §C3) — live sub-agent status, only while the
+	// open session has children. Mirrors Android's D1 tasks flake and the
+	// design's right-sidebar Tasks block: a status dot (spinner while
+	// running, ✓ when completed) + the child's subagentLabel. When no
+	// children exist the section is omitted entirely (the design: "only
+	// while a sub-agent runs"). The child status is read from the tool
+	// parts of the child session's mirrored stream (a running tool part ⇒
+	// the child is still working; all completed ⇒ ✓).
+	if kids := m.childrenOf(m.cfg.SessionID); len(kids) > 0 {
+		b.WriteString("\n")
+		b.WriteString(s.Dim.Render("TASKS") + "\n")
+		for _, kid := range kids {
+			status := m.childStatus(kid.ID)
+			var glyph string
+			var col theme.Color
+			switch status {
+			case "running":
+				frame := spinnerFrames[m.animFrame%len(spinnerFrames)]
+				glyph, col = frame, s.P.Accent()
+			case "error":
+				glyph, col = "✗", s.P.Red
+			case "completed":
+				glyph, col = "✓", s.P.Green
+			default:
+				glyph, col = "•", s.P.FgFaint
+			}
+			dot := lipgloss.NewStyle().Foreground(col).Render(glyph)
+			label := truncate(subagentLabel(kid), sidebarWidth-4)
+			b.WriteString(dot + " " + s.Base.Render(label) + "\n")
+		}
+	}
+
 	body := b.String()
 
 	// Footer pinned to the bottom: cwd:branch + Opcode42 version tag.

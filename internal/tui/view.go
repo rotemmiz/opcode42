@@ -25,6 +25,13 @@ type viewState struct {
 	// encoding-ambiguous across terminals) — the field is managed by the
 	// splash/session screen transitions in model.go.
 	bgPulse bool
+
+	// sessionsSubtree toggles the sessions modal between flat (default) and
+	// subtree rendering (plan 08e §C4). In subtree mode, children are
+	// rendered indented under their parent with a └─/├─ prefix instead of
+	// being filtered out (the flat main list filters parentID != nil; the
+	// subtree view shows them). Toggled by `t` in the sessions modal only.
+	sessionsSubtree bool
 }
 
 // toggleHint returns a one-line status string describing a toggle's new value.

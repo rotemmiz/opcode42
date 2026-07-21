@@ -137,6 +137,68 @@ func (m Model) orderedSessions() []Session {
 	return out
 }
 
+// sessionSubtreeRows renders the sessions list as a parent→children subtree
+// (plan 08e §C4): top-level (parentID == "") sessions newest-first, each
+// followed by its children indented with a ├─/└─ prefix. Unlike the flat
+// list (which filters out children), the subtree view shows them — matching
+// Android's D1 rail. Returns the row labels in display order; the
+// corresponding session IDs are available via sessionSubtreeIDs so
+// modalSelect can resolve the highlighted row.
+func (m Model) sessionSubtreeRows() []string {
+	var rows []string
+	for _, s := range m.orderedSessions() {
+		if s.ParentID != "" {
+			continue
+		}
+		rows = append(rows, sessionRowLabel(s))
+		kids := m.childrenOf(s.ID)
+		for i, kid := range kids {
+			prefix := "├─ "
+			if i == len(kids)-1 {
+				prefix = "└─ "
+			}
+			rows = append(rows, prefix+sessionRowLabel(kid))
+		}
+	}
+	return rows
+}
+
+// sessionSubtreeIDs returns the session IDs in the same display order as
+// sessionSubtreeRows, so modalSelect can resolve the highlighted row to a
+// session id. Children are included (the subtree view doesn't filter them,
+// unlike the flat main list).
+func (m Model) sessionSubtreeIDs() []string {
+	var ids []string
+	for _, s := range m.orderedSessions() {
+		if s.ParentID != "" {
+			continue
+		}
+		ids = append(ids, s.ID)
+		for _, kid := range m.childrenOf(s.ID) {
+			ids = append(ids, kid.ID)
+		}
+	}
+	return ids
+}
+
+// sessionIDAtModalSel resolves the modal selection to a session id, handling
+// both the flat list (orderedSessions) and the subtree view
+// (sessionSubtreeIDs). Returns "" when the selection is out of range.
+func (m Model) sessionIDAtModalSel() string {
+	if m.view.sessionsSubtree {
+		ids := m.sessionSubtreeIDs()
+		if m.modalSel < len(ids) {
+			return ids[m.modalSel]
+		}
+		return ""
+	}
+	ss := m.orderedSessions()
+	if m.modalSel < len(ss) {
+		return ss[m.modalSel].ID
+	}
+	return ""
+}
+
 // modalItems returns the visible rows + an optional footer hint for the modal.
 func (m Model) modalItems() (title string, rows []string, footer string) {
 	switch m.modal {
@@ -146,13 +208,17 @@ func (m Model) modalItems() (title string, rows []string, footer string) {
 		}
 		return "Commands", rows, "↑↓ move · enter select · esc close"
 	case modalSessions:
-		for _, s := range m.orderedSessions() {
-			rows = append(rows, sessionRowLabel(s))
+		if m.view.sessionsSubtree {
+			rows = m.sessionSubtreeRows()
+		} else {
+			for _, s := range m.orderedSessions() {
+				rows = append(rows, sessionRowLabel(s))
+			}
 		}
 		if len(rows) == 0 {
 			rows = []string{"(no sessions — ctrl+n to create)"}
 		}
-		return "Sessions", rows, "enter open · ctrl+n new · ctrl+d delete · esc close"
+		return "Sessions", rows, "enter open · ctrl+n new · ctrl+d delete · t subtree · esc close"
 	case modalModels:
 		for _, ch := range m.choices {
 			mark := "  "
@@ -414,10 +480,9 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 			return m, loadSessionsCmd(m.ctx, m.client)
 		}
 	case modalSessions:
-		ss := m.orderedSessions()
 		m.modal = modalNone
-		if m.modalSel < len(ss) {
-			m.cfg.SessionID = ss[m.modalSel].ID
+		if id := m.sessionIDAtModalSel(); id != "" {
+			m.cfg.SessionID = id
 			m.screen = ScreenSession
 			return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
 		}

@@ -37,8 +37,10 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
@@ -56,6 +58,48 @@ type toolState struct {
 	Title    string          `json:"title"`
 	Metadata json.RawMessage `json:"metadata"`
 	Error    string          `json:"error"`
+}
+
+// taskMeta is the metadata block the opencode TaskTool attaches to the tool
+// state (task.ts:171-176): it carries the spawned child session id under the
+// JSON key "sessionId", alongside the parent session id and the resolved
+// model. Android's SubAgentBlock.kt:60-71 reads the same field as the primary
+// source of the child id, with a fallback to the <task id="…"> wrapper in the
+// output text — childSessionID below mirrors that priority order.
+type taskMeta struct {
+	ParentSessionID string `json:"parentSessionId"`
+	SessionID       string `json:"sessionId"`
+	Background      bool   `json:"background,omitempty"`
+}
+
+// taskIDRe extracts the child session id from the <task id="…" state="…">
+// wrapper that opencode's TaskTool emits around its output (task.ts:72).
+// Fallback when the metadata.sessionId field is absent (e.g. an older
+// daemon, or a part whose metadata hasn't arrived yet).
+var taskIDRe = regexp.MustCompile(`<task id="([^"]+)"`)
+
+// childSessionID extracts the spawned sub-agent session id from a task tool
+// part, in priority order (matches Android SubAgentBlock.kt:60-71):
+//  1. the tool state's metadata.sessionId field (set by opencode TaskTool), or
+//  2. the id attribute of the <task id="…" …> wrapper in the output/error text.
+//
+// Returns "" when no child id can be recovered (the part predates the
+// metadata, or the daemon isn't opencode-compatible).
+func childSessionID(st toolState) string {
+	if len(st.Metadata) > 0 {
+		var tm taskMeta
+		if json.Unmarshal(st.Metadata, &tm) == nil && tm.SessionID != "" {
+			return tm.SessionID
+		}
+	}
+	haystack := st.Output
+	if haystack == "" {
+		haystack = st.Error
+	}
+	if mm := taskIDRe.FindStringSubmatch(haystack); mm != nil {
+		return mm[1]
+	}
+	return ""
 }
 
 // toolInput is the per-tool input fields we care about.
@@ -281,6 +325,24 @@ func (m Model) toolRow(p Part) string {
 	var lines []string
 	lines = append(lines, headerLine)
 
+	// ── Task card (plan 08e §C1) ──────────────────────────────────────────────
+	// The `task` tool renders as an in-stream card mirroring Android's
+	// SubAgentBlock: header (already rendered above) + a meta line (toolcall
+	// count + running/done state) + an inline expandable transcript of the
+	// child session's message stream. The expand is toggled by the same
+	// view.toggleToolCollapse(partID) key the generic output panel uses
+	// (ctrl+x v), so a single chord covers both; ctrl+x > descends into the
+	// child as a full chat view (model.go handleLeaderKey). The child id is
+	// parsed from the tool state's metadata.sessionId (task.ts:173) with a
+	// fallback to the <task id="…"> output wrapper.
+	if p.Tool == "task" {
+		card := m.taskCardBody(st, cw, isCollapsed)
+		if card != "" {
+			lines = append(lines, card)
+		}
+		return strings.Join(lines, "\n")
+	}
+
 	// ── Error sub-line ─────────────────────────────────────────────────────────
 	if st.Status == "error" && st.Error != "" {
 		errLine := "  " + lipgloss.NewStyle().Foreground(s.P.Red).
@@ -416,4 +478,186 @@ func (m Model) lastToolPartID() string {
 		}
 	}
 	return ""
+}
+
+// lastTaskPart returns the last `task` tool part in the active session, or nil
+// when there is none. Used by handleLeaderKey's ctrl+x > chord (descend into
+// the most recent sub-agent child) so the chord targets the task the user
+// most likely means.
+func (m Model) lastTaskPart() *Part {
+	sid := m.cfg.SessionID
+	for _, msg := range m.store.messages[sid] {
+		parts := m.store.parts[msg.ID]
+		for i := len(parts) - 1; i >= 0; i-- {
+			if parts[i].Type == "tool" && parts[i].Tool == "task" {
+				p := parts[i]
+				return &p
+			}
+		}
+	}
+	return nil
+}
+
+// maybeLoadTaskChildMessages returns a loadChildMessagesCmd when the given tool
+// part is a `task` whose child session id is known AND whose child messages
+// aren't already mirrored in the store. This is fired on expand (ctrl+x v) so
+// the inline transcript populates on first expand rather than showing an empty
+// card (plan 08e §C1). Returns nil when the part isn't a task, the child id
+// is unknown, or the child's messages are already loaded (idempotent).
+func (m Model) maybeLoadTaskChildMessages(partID string) tea.Cmd {
+	if partID == "" || m.client == nil {
+		return nil
+	}
+	for _, msg := range m.store.messages[m.cfg.SessionID] {
+		for _, p := range m.store.parts[msg.ID] {
+			if p.ID != partID || p.Tool != "task" {
+				continue
+			}
+			st, _ := parseToolState(p.State)
+			cid := childSessionID(st)
+			if cid == "" {
+				return nil
+			}
+			if _, ok := m.store.messages[cid]; ok && len(m.store.messages[cid]) > 0 {
+				return nil
+			}
+			return loadChildMessagesCmd(m.ctx, m.client, cid)
+		}
+	}
+	return nil
+}
+
+// taskCardBody renders the body of a `task` tool card (plan 08e §C1): a meta
+// line (toolcall count + running/done state) and, when expanded, an indented
+// transcript of the child session's message stream. Returns "" when there is
+// nothing to show. The header line is rendered by the caller (toolRow) —
+// this is the body below it.
+//
+// The child id is parsed from the tool state's metadata.sessionId (set by
+// opencode's TaskTool, task.ts:173) with a fallback to the <task id="…">
+// wrapper in the output text (Android SubAgentBlock.kt:60-71 mirrors this).
+// The toolcall count comes from the child session's message stream already
+// mirrored in the store (loadChildrenCmd populates the child sessions;
+// loadChildMessagesCmd populates their messages on first expand).
+//
+// isCollapsed controls the transcript expand: when true only the meta line is
+// shown; when false the transcript is rendered indented under the card.
+func (m Model) taskCardBody(st toolState, cw int, isCollapsed bool) string {
+	s := m.styles
+	childID := childSessionID(st)
+
+	// ── Meta line: N toolcalls · running…/done/error ───────────────────────
+	// The toolcall count is the number of assistant messages in the child
+	// session's mirrored stream (each assistant turn = one toolcall-bearing
+	// message). When the child id is unknown we fall back to a bare label.
+	var meta string
+	if childID != "" {
+		n := m.childToolcallCount(childID)
+		meta = fmt.Sprintf("%d toolcall%s", n, pluralS(n))
+	} else {
+		meta = "subagent"
+	}
+	switch st.Status {
+	case "running":
+		meta += " · running…"
+	case "completed":
+		meta += " · done"
+	case "error":
+		meta += " · error"
+	}
+	metaLine := "  " + s.Faint.Render(meta)
+
+	if isCollapsed {
+		return metaLine
+	}
+
+	var lines []string
+	lines = append(lines, metaLine)
+
+	// ── Inline transcript (expandable) ─────────────────────────────────────
+	// On expand, the child session's messages are loaded via
+	// loadChildMessagesCmd (model.go fires it when the collapse state
+	// flips). The transcript renders each message indented under the card,
+	// mirroring Android's ChildTranscript but inlined into the terminal
+	// scrollback — the TUI's advantage over the mobile card.
+	if childID != "" {
+		if transcript := m.taskTranscript(childID, cw); transcript != "" {
+			lines = append(lines, transcript)
+		}
+	}
+
+	// ── Output panel fallback ──────────────────────────────────────────────
+	// When the child id is unknown OR the transcript is empty (not yet
+	// loaded), fall back to the task_result text in the output panel — same
+	// render as the generic tool output so a task without a spawnable child
+	// still shows its result.
+	if childID == "" && strings.TrimSpace(st.Output) != "" {
+		lines = append(lines, m.renderOutputPanel(st.Output, cw))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// childToolcallCount returns the number of assistant turns in the child
+// session's mirrored message stream — the "toolcalls" count shown in the task
+// card's meta line. Each assistant message in the child session corresponds
+// to one toolcall-bearing turn (the child agent's reasoning + tool use). When
+// the child's messages haven't been loaded yet (expand hasn't fired), this
+// returns 0; the count populates once loadChildMessagesCmd resolves.
+func (m Model) childToolcallCount(childID string) int {
+	n := 0
+	for _, msg := range m.store.messages[childID] {
+		if msg.Role == "assistant" {
+			n++
+		}
+	}
+	return n
+}
+
+// taskTranscript renders the child session's message stream indented under
+// the task card (plan 08e §C1). Each message shows its role prefix + the
+// text of its text parts, truncated to fit the card width. Mirrors Android's
+// ChildTranscript but inlined into the terminal scrollback (newest-last, so
+// it reads top-down with the parent stream).
+func (m Model) taskTranscript(childID string, cw int) string {
+	s := m.styles
+	msgs := m.store.messages[childID]
+	if len(msgs) == 0 {
+		return ""
+	}
+	indent := "    "
+	w := cw - len(indent)
+	if w < 10 {
+		w = 10
+	}
+	var lines []string
+	for _, msg := range msgs {
+		var text string
+		for _, p := range m.store.parts[msg.ID] {
+			if p.Type == "text" && strings.TrimSpace(p.Text) != "" {
+				if text != "" {
+					text += "\n"
+				}
+				text += strings.TrimSpace(p.Text)
+			}
+		}
+		if text == "" {
+			continue
+		}
+		role := msg.Role
+		if role == "" {
+			role = "msg"
+		}
+		roleTag := s.Faint.Render("[" + role + "]")
+		var bodyLines []string
+		for _, l := range strings.Split(text, "\n") {
+			bodyLines = append(bodyLines, truncate(l, w-lipgloss.Width(roleTag)-1))
+		}
+		body := s.Base.Render(strings.Join(bodyLines, "\n"))
+		lines = append(lines, indent+roleTag+" "+body)
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n")
 }
