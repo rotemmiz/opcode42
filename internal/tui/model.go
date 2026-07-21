@@ -712,9 +712,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// "reply failed" status. Non-404 errors still keep the request so
 			// the user can retry.
 			if isHTTPNotFound(msg.err) {
+				// Plan 08e §E4: apply any deferred SSE event (the daemon already
+				// processed the reply; the 404 confirms it) before clearing.
+				if m.qDeferredSSE.Type != "" {
+					m.store = m.store.Reduce(m.qDeferredSSE)
+					m.qDeferredSSE = opcode42client.SSEEvent{}
+				}
 				m.store.questions = removeByID(m.store.questions, msg.id, func(x Question) string { return x.ID })
 				return m.resetQuestion(), nil
 			}
+			// Plan 08e §E4: a non-404 error means the daemon rejected the
+			// reply (e.g. transient 500). The deferred SSE event (if any) is
+			// for a prior successful processing — clear it so a retry doesn't
+			// apply a stale event. The user retries against the live daemon
+			// state.
+			m.qDeferredSSE = opcode42client.SSEEvent{}
 			m.status = "question reply failed (try again): " + msg.err.Error()
 			return m, nil
 		}
