@@ -281,6 +281,10 @@ func (m Model) statusGlyph(status string) (string, lipgloss.Style) {
 //   - Collapsed: header only.
 //   - TodoWrite: todo items with checkbox glyphs + status colors.
 //   - Error: red error line below header.
+//   - edit/apply_patch (plan 17 Workstream C): inline unified diff at
+//     completion, rendered via the shared renderInlineDiff helper (full hunks,
+//     no 20-line cap). The rendered string is cached on the Model so the diff
+//     is built once at completion, not every animation tick.
 //
 // renderMessage gates hideTools before calling this; do not duplicate the check here.
 func (m Model) toolRow(p Part) string {
@@ -291,12 +295,25 @@ func (m Model) toolRow(p Part) string {
 	glyph, gstyle := m.statusGlyph(st.Status)
 	hdr := toolHeader(p.Tool, inp)
 
+	// Plan 17 Workstream C: edit/apply_patch at completion render an inline
+	// diff instead of the generic output panel. Compute it once here (cached)
+	// so the fold affordance, the panel decision, and the body render all
+	// agree on its presence. The cache key is (partID, patchHash, width,
+	// themeName); the diff is immutable once the tool completes, so the cache
+	// hit rate is ~100% across animation ticks.
+	inlineDiff := ""
+	isDiffTool := p.Tool == "edit" || p.Tool == "multiedit" || p.Tool == "apply_patch"
+	if isDiffTool && st.Status == "completed" {
+		inlineDiff = m.cachedInlineDiff(p, st, inp)
+	}
+
 	// Fold affordance: ▸ collapsed, ▾ expanded.
 	hasOutput := strings.TrimSpace(st.Output) != ""
+	hasInlineDiff := inlineDiff != ""
 	isTodo := p.Tool == "todowrite" || p.Tool == "todo_write"
 	isCollapsed := m.view.isToolCollapsed(p.ID)
 	foldIcon := ""
-	if hasOutput || isTodo {
+	if hasOutput || isTodo || hasInlineDiff {
 		if isCollapsed {
 			foldIcon = " ▸"
 		} else {
@@ -364,13 +381,79 @@ func (m Model) toolRow(p Part) string {
 		return strings.Join(lines, "\n")
 	}
 
+	// ── Inline diff (plan 17 Workstream C) ───────────────────────────────────
+	// edit/apply_patch at completion render the unified diff inline (full hunks,
+	// bypassing the 20-line renderOutputPanel cap — matches opencode's
+	// no-truncation behavior, scrollback.writer.tsx:188-225). The diff is cached
+	// on the Model so this branch is a map lookup after the first render. The
+	// output panel is NOT shown for the diff itself; if the tool also has an
+	// output (e.g. LSP diagnostics appended to the result), it follows below.
+	if hasInlineDiff {
+		lines = append(lines, inlineDiff)
+	}
+
 	// ── Output panel ──────────────────────────────────────────────────────────
-	if hasOutput {
+	// For diff tools, only show the generic output panel if there's additional
+	// output beyond the diff (e.g. LSP diagnostics appended to the result).
+	// opencode's snapEdit returns the diff as the structured snapshot and the
+	// LSP diagnostics are appended to the output text — both are visible, the
+	// diff as the snapshot body, the diagnostics as the trailing text.
+	if isDiffTool && hasInlineDiff {
+		// Strip the leading diff-success marker that opencode's edit/apply_patch
+		// tools prepend to their output ("Edit applied successfully." /
+		// "Success. Updated the following files:…"). When the only output is the
+		// success line, suppress the panel; when diagnostics follow, show them.
+		trimmed := trimDiffSuccessOutput(st.Output, p.Tool)
+		if trimmed != "" {
+			lines = append(lines, m.renderOutputPanel(trimmed, cw))
+		}
+	} else if hasOutput {
 		panel := m.renderOutputPanel(st.Output, cw)
 		lines = append(lines, panel)
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// trimDiffSuccessOutput strips the redundant success-line prefix that
+// opencode's edit and apply_patch tools prepend to their output text, so
+// the inline diff (which already conveys the change) isn't followed by a
+// redundant "Edit applied successfully." or "Success. Updated the following
+// files:…" line. opencode's entryLayout (scrollback.writer.tsx:52-79) hides
+// the output text entirely when a structured snapshot renders at
+// phase=final; Opcode42 keeps any LSP-diagnostics tail (the part of the output
+// the user still needs to see) and drops the rest.
+//
+// For edit: the output is "Edit applied successfully." + optional diagnostics.
+// Returns "" when only the success line is present, else the trimmed tail
+// (diagnostics). For apply_patch: the output is
+// "Success. Updated the following files:\n<file list>" + optional
+// diagnostics. The per-file diff titles already convey the file list, so we
+// drop everything except the diagnostics block (edit.ts:196-201,
+// apply_patch.ts:284-293).
+func trimDiffSuccessOutput(output, tool string) string {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return ""
+	}
+	switch tool {
+	case "edit", "multiedit":
+		const marker = "Edit applied successfully."
+		if strings.HasPrefix(trimmed, marker) {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, marker))
+		}
+		return trimmed
+	case "apply_patch":
+		// The apply_patch output is "Success. Updated the following files:\n
+		// <file list>" optionally followed by "\n\nLSP errors detected in …".
+		// The file list is redundant (the per-file diff titles show it); keep
+		// only the LSP diagnostics block when present.
+		if i := strings.Index(trimmed, "LSP errors detected in"); i >= 0 {
+			return strings.TrimSpace(trimmed[i:])
+		}
+		return ""
+	}
+	return trimmed
 }
 
 // renderOutputPanel renders tool output in a BgPanel-filled block bounded to

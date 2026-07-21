@@ -193,6 +193,16 @@ type Model struct {
 	// entries for the new theme; old entries become unreachable and are GC'd.
 	mdCache mdCache
 
+	// diffCache is the rendered inline-diff cache for completed edit/apply_patch
+	// tools (plan 17 Workstream C). Diffs arrive complete at phase=final and are
+	// immutable thereafter, so the fully-rendered styled string can be cached
+	// by (partID, patchHash, width, themeName) and reused across frames. This is
+	// critical: toolRow runs every animation tick and re-rendering a multi-hunk
+	// diff (with syntax highlighting) every frame would dominate the render
+	// budget. The map is a reference type; ensureDiffCache initialises it on
+	// the root Model so all copies share one map.
+	diffCache diffRenderCache
+
 	// animFrame is the monotonic animation frame counter incremented on each
 	// animTickMsg.  Passed to scannerFrame() and (later) logo shimmer.
 	// Reset to 0 when a new session opens so the sweep always starts from the left.
@@ -326,6 +336,7 @@ func New(cfg Config) Model {
 	// Ensure the markdown render cache is allocated so all Model copies
 	// derived from this root share a non-nil map (maps are reference types).
 	m.ensureMDCache()
+	m.ensureDiffCache()
 	return m
 }
 
