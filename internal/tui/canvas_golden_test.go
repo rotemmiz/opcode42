@@ -11,7 +11,10 @@ package tui
 //
 // Regenerate the goldens:
 //
-//	go test -run 'TestCanvas_Golden_(Splash|Session)' -update ./internal/tui/
+//	go test ./internal/tui/ -run 'TestCanvas_Golden_(Splash|Session)' -args -update
+//
+// (the package path precedes -run; -update is a test-binary flag, so it goes
+// after -args so `go test` forwards it rather than trying to parse it itself.)
 //
 // The goldens are plain-text (ANSI-stripped) frames so they diff cleanly in
 // code review and don't depend on the terminal's color profile. The full
@@ -69,12 +72,12 @@ func assertGolden(t *testing.T, name, got string) {
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read %s: %v\nregenerate with: go test -run %s -update ./internal/tui/",
+		t.Fatalf("read %s: %v\nregenerate with: go test ./internal/tui/ -run %s -args -update",
 			path, err, t.Name())
 	}
 	have := strings.TrimRight(string(b), "\n")
 	if have != want {
-		t.Fatalf("golden mismatch for %s\n--- want ---\n%s\n--- have ---\n%s\nregenerate with: go test -run %s -update ./internal/tui/",
+		t.Fatalf("golden mismatch for %s\n--- want ---\n%s\n--- have ---\n%s\nregenerate with: go test ./internal/tui/ -run %s -args -update",
 			path, have, want, t.Name())
 	}
 }
