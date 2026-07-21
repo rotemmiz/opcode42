@@ -24,6 +24,16 @@ type childrenLoadedMsg struct {
 	err      error
 }
 
+// childMessagesLoadedMsg carries a child session's message stream, fetched on
+// first expand of a task card (plan 08e §C1). The items mirror the
+// GET /session/{id}/message shape; the reducer (model.go) ingests them into
+// the store via ingestHistory so taskTranscript can render them inline.
+type childMessagesLoadedMsg struct {
+	childID string
+	items   []wireWithParts
+	err     error
+}
+
 // loadChildrenCmd fetches a session's sub-agent children. Exercises the frozen
 // GET /session/{id}/children endpoint and tops up any child the store missed.
 func loadChildrenCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID string) tea.Cmd {
@@ -31,6 +41,20 @@ func loadChildrenCmd(ctx context.Context, c *opcode42client.Opcode42Client, sess
 		var children []Session
 		err := c.GetJSON(ctx, "/session/"+sessionID+"/children", &children)
 		return childrenLoadedMsg{children: children, err: err}
+	}
+}
+
+// loadChildMessagesCmd fetches a child session's message stream on first
+// expand of a task card (plan 08e §C1). Uses the frozen GET /session/{id}/message
+// endpoint (the same one loadMessagesCmd uses for the open session); the
+// items are ingested into the store via ingestHistory so taskTranscript can
+// render them inline. No wire divergence — this is a plain GET against an
+// existing endpoint, just scoped to the child id.
+func loadChildMessagesCmd(ctx context.Context, c *opcode42client.Opcode42Client, childID string) tea.Cmd {
+	return func() tea.Msg {
+		var items []wireWithParts
+		err := c.GetJSON(ctx, "/session/"+childID+"/message", &items)
+		return childMessagesLoadedMsg{childID: childID, items: items, err: err}
 	}
 }
 
@@ -187,4 +211,48 @@ func (m Model) subagentBar(width int, info, hint string) string {
 		return lipgloss.NewStyle().Width(width).Render(label)
 	}
 	return label + strings.Repeat(" ", gap) + keys
+}
+
+// childStatus derives a child session's run status from its mirrored message
+// stream: "running" when any tool part is in the running/pending state,
+// "completed" when the child has at least one assistant message and no
+// running tools, "error" when any tool part errored, "" when the child's
+// stream hasn't been loaded yet (unknown). Used by the sidebar TASKS section
+// (plan 08e §C3).
+//
+// This mirrors how animating() decides whether a session is active, scoped to
+// the child's parts rather than the open session's. The store mirrors child
+// sessions via loadChildrenCmd + loadChildMessagesCmd; before the first
+// loadChildMessagesCmd resolves, the child has no messages and the status
+// reads as "" (the sidebar shows a neutral •).
+func (m Model) childStatus(childID string) string {
+	msgs := m.store.messages[childID]
+	if len(msgs) == 0 {
+		return ""
+	}
+	hasAssistant := false
+	for _, msg := range msgs {
+		if msg.Role == "assistant" {
+			hasAssistant = true
+		}
+		for _, p := range m.store.parts[msg.ID] {
+			if p.Type != "tool" {
+				continue
+			}
+			var st toolState
+			if !decode(p.State, &st) {
+				continue
+			}
+			switch st.Status {
+			case "running", "pending":
+				return "running"
+			case "error":
+				return "error"
+			}
+		}
+	}
+	if hasAssistant {
+		return "completed"
+	}
+	return ""
 }

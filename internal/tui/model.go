@@ -482,7 +482,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.String() == "ctrl+x" {
 			m.leader = true
-			m.status = "ctrl+x — l sessions · n new · m model · a agent · g timeline · s status · c connect · b sidebar · t tasks · y copy · r thinking · f fold thought · o tools · v fold tool · e editor · d diff · ` terminal · w stash · ↓ child · ↑ parent · [ ] siblings"
+			m.status = "ctrl+x — l sessions · n new · m model · a agent · g timeline · s status · c connect · b sidebar · t tasks · y copy · r thinking · f fold thought · o tools · v fold tool · > open task child · e editor · d diff · ` terminal · w stash · ↓ child · ↑ parent · [ ] siblings"
 			return m, nil
 		}
 		// The slash popup captures nav/accept/dismiss keys; other keys fall
@@ -1004,6 +1004,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case childMessagesLoadedMsg:
+		// Plan 08e §C1: ingest the child session's messages into the store so
+		// taskTranscript can render them inline under the expanded task card.
+		// Reuses the ingestHistory path (same wire shape, same reducer); the
+		// child id is the store key. On error, leave the store unchanged — a
+		// flaky GET must not wipe the transcript; the user can re-toggle the
+		// card to retry.
+		if msg.err == nil {
+			m.store = m.store.ingestHistory(msg.childID, msg.items)
+		}
+		return m, nil
+
 	case diffLoadedMsg:
 		if !m.diff.open { // reviewer was closed while the fetch was in flight
 			return m, nil
@@ -1231,10 +1243,25 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		return m.modalSelect()
+	case "t":
+		// Toggle subtree mode in the sessions modal (plan 08e §C4).
+		// Children render indented under their parent instead of flat.
+		if m.modal == modalSessions {
+			m.view.sessionsSubtree = !m.view.sessionsSubtree
+			if m.modalSel > 0 && m.modalSel >= m.modalCount() {
+				m.modalSel = m.modalCount() - 1
+			}
+			if m.view.sessionsSubtree {
+				m.status = "sessions: subtree"
+			} else {
+				m.status = "sessions: flat"
+			}
+		}
+		return m, nil
 	case "ctrl+d":
 		if m.modal == modalSessions {
-			if ss := m.orderedSessions(); m.modalSel < len(ss) {
-				return m, deleteSessionCmd(m.ctx, m.client, ss[m.modalSel].ID)
+			if id := m.sessionIDAtModalSel(); id != "" {
+				return m, deleteSessionCmd(m.ctx, m.client, id)
 			}
 		}
 		if m.modal == modalStash && m.modalSel < len(m.stash) {
@@ -1373,17 +1400,37 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "v":
 		// Toggle collapse on the last tool part (plan 08c M7 per-tool collapse).
 		// ctrl+x v collapses/expands the most recent tool's output panel.
+		// For a `task` tool part, expanding also fires loadChildMessagesCmd so
+		// the inline transcript populates on first expand (plan 08e §C1).
 		if id := m.lastToolPartID(); id != "" {
 			m.view = m.view.toggleToolCollapse(id)
 			if m.view.isToolCollapsed(id) {
 				m.status = "tool output: collapsed"
 			} else {
 				m.status = "tool output: expanded"
+				if cmd := m.maybeLoadTaskChildMessages(id); cmd != nil {
+					return m, cmd
+				}
 			}
 		} else {
 			m.status = "no tool to fold"
 		}
 		return m, nil
+	case ">":
+		// Descend into the last task tool's child session (plan 08e §C1).
+		// ctrl+x > opens the most recent sub-agent's child as a full chat
+		// view (openSession), matching Android's "Open in new view" button.
+		// Mnemonic: ">" = "go deeper into". When the child id can't be
+		// recovered (no metadata, no <task id> wrapper) fall back to
+		// enterFirstChild (the existing "first child" nav) so the chord is
+		// still useful when the task part predates the metadata.
+		if task := m.lastTaskPart(); task != nil {
+			st, _ := parseToolState(task.State)
+			if cid := childSessionID(st); cid != "" {
+				return m.openSession(cid)
+			}
+		}
+		return m.enterFirstChild()
 	case "e":
 		return m, openEditorCmd(m.input.Value())
 	case "d":
