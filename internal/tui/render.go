@@ -197,8 +197,6 @@ func (m Model) barWidth() int {
 	return 1
 }
 
-// frame trims body to the tail that fits the viewport (auto-scroll to newest)
-// and pins the status line at the bottom.
 // composerView renders the prompt input with the design's blue left accent bar.
 func (m Model) composerView() string {
 	accent := m.styles.P.Blue
@@ -227,6 +225,14 @@ func (m Model) statusLine() string {
 
 // frame tail-scrolls body to the lines that fit above footer and pins footer to
 // the bottom (padding a short body so the composer/status bar stay anchored).
+//
+// The clamp/window math lives in the scrollregion package (plan 08e §A3): the
+// Region is tail-anchored (0 == live tail), and Window both clamps the offset
+// against [0, MaxOffset] and pads a short body so the footer stays pinned to
+// the bottom row. The canvas renders the resulting windowed string as the body
+// layer at zPane — the scroll viewport is the canvas region the body layer
+// occupies, and scrollregion.Window is the math that decides which rows of the
+// full stream land in that region.
 func (m Model) frame(body, footer string) string {
 	if m.height <= 0 {
 		return body + "\n" + footer
@@ -235,25 +241,7 @@ func (m Model) frame(body, footer string) string {
 	if avail < 1 {
 		avail = 1
 	}
-	lines := strings.Split(body, "\n")
-	if len(lines) > avail {
-		// Window the body to `avail` lines, scrolled up from the bottom by
-		// scrollOffset (clamped so we can't scroll past the top/bottom).
-		maxOff := len(lines) - avail
-		off := m.scrollOffset
-		if off > maxOff {
-			off = maxOff
-		}
-		if off < 0 {
-			off = 0
-		}
-		end := len(lines) - off
-		lines = lines[end-avail : end]
-	} else {
-		for len(lines) < avail { // pad so footer sits at the bottom
-			lines = append(lines, "")
-		}
-	}
+	lines := m.scroll.Window(strings.Split(body, "\n"), avail)
 	return strings.Join(lines, "\n") + "\n" + footer
 }
 

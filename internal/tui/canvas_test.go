@@ -224,6 +224,124 @@ func TestCanvas_CellAt_OutOfBounds(t *testing.T) {
 	}
 }
 
+// ── Plan 08e §A3: scroll reconciliation on the canvas viewport ────────────────
+
+// canvasRowText returns the concatenation of all cell contents on canvas row y,
+// used to read what the user actually sees on that row of the composited frame.
+func canvasRowText(canvas *lipgloss.Canvas, y, width int) string {
+	if canvas == nil {
+		return ""
+	}
+	row := ""
+	for x := 0; x < width; x++ {
+		if c := canvas.CellAt(x, y); c != nil {
+			row += c.Content
+		}
+	}
+	return row
+}
+
+// rowMarkerIndex extracts the two-digit index from a "ROWnn marker" row, or -1.
+func rowMarkerIndex(row string) int {
+	i := strings.Index(row, "ROW")
+	if i < 0 || i+5 > len(row) {
+		return -1
+	}
+	tens := int(row[i+3] - '0')
+	ones := int(row[i+4] - '0')
+	if tens < 0 || tens > 9 || ones < 0 || ones > 9 {
+		return -1
+	}
+	return tens*10 + ones
+}
+
+// TestCanvas_ScrollOffset_WindowBody is the canvas-specific scroll guard for
+// plan 08e §A3: a long body with scroll.Offset > 0 must render the scrolled-to
+// region in the body layer, not the live tail. The scroll math now lives in the
+// scrollregion package (Region.Window) and feeds the body layer's content; this
+// test asserts that what lands on the canvas at the body's top row is the
+// scrolled-to content, distinct from the tail view.
+//
+// We build a tall transcript of uniquely-labelled rows, render the canvas at
+// scroll.Offset = 0 (tail) and at a mid-transcript offset, then read the body's
+// first visible row off the canvas and assert the scrolled view shows an earlier
+// row than the tail view. This is the structural proof that the clamp/window math
+// moved off model.go string operations onto the canvas viewport path: the canvas
+// cells reflect the scrollregion.Window output, not the un-windowed body.
+func TestCanvas_ScrollOffset_WindowBody(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	m.screen = ScreenSession
+	m.width, m.height = 80, 24
+	m.store.sessions = []Session{{ID: "ses_1", Title: "Scroll canvas"}}
+	// Build 40 user messages, each with a unique marker "ROWnn" so we can read
+	// which transcript row is visible at the body's top.
+	msgs := make([]Message, 0, 40)
+	for i := 0; i < 40; i++ {
+		id := "msg_" + string(rune('a'+i%26)) + string(rune('0'+i/26))
+		msgs = append(msgs, Message{ID: id, SessionID: "ses_1", Role: "user"})
+		m.store.parts[id] = []Part{{
+			ID: "p" + id, MessageID: id, Type: "text",
+			Text: "ROW" + string(rune('0'+i/10)) + string(rune('0'+i%10)) + " marker",
+		}}
+	}
+	m.store.messages["ses_1"] = msgs
+
+	// Tail view (offset 0): the body's first visible row should contain a
+	// late-transcript marker. Scan from y=0 down past the section header to
+	// find the first non-blank body row.
+	tailCanvas := m.composeCanvas()
+	if tailCanvas == nil {
+		t.Fatal("tail composeCanvas returned nil")
+	}
+	tailFirstBody := ""
+	for y := 0; y < m.height; y++ {
+		row := canvasRowText(tailCanvas, y, m.width)
+		if strings.Contains(row, "ROW") {
+			tailFirstBody = row
+			break
+		}
+	}
+	if tailFirstBody == "" {
+		t.Skip("could not locate the first body row on the canvas")
+	}
+
+	// Scrolled view: scroll back ~half the transcript. The body's first visible
+	// row must now be an earlier marker (a lower ROW index) than the tail view's
+	// first row, proving the window moved off the tail.
+	m.scroll.Offset = 20
+	scrollCanvas := m.composeCanvas()
+	if scrollCanvas == nil {
+		t.Fatal("scrolled composeCanvas returned nil")
+	}
+	scrollFirstBody := ""
+	for y := 0; y < m.height; y++ {
+		row := canvasRowText(scrollCanvas, y, m.width)
+		if strings.Contains(row, "ROW") {
+			scrollFirstBody = row
+			break
+		}
+	}
+	if scrollFirstBody == "" {
+		t.Fatalf("scrolled view: no ROW marker visible on canvas — window math not applied")
+	}
+	if tailFirstBody == scrollFirstBody {
+		t.Fatalf("scroll did not change the body's first visible row:\n tail=%q\n scrolled=%q",
+			tailFirstBody, scrollFirstBody)
+	}
+	// The scrolled view's first row must be an EARLIER transcript row than the
+	// tail's. Extract the two-digit ROW index from each and compare numerically.
+	tailIdx := rowMarkerIndex(tailFirstBody)
+	scrollIdx := rowMarkerIndex(scrollFirstBody)
+	if scrollIdx < 0 || tailIdx < 0 {
+		t.Fatalf("could not parse ROW marker index:\n tail=%q (idx %d)\n scrolled=%q (idx %d)",
+			tailFirstBody, tailIdx, scrollFirstBody, scrollIdx)
+	}
+	if scrollIdx >= tailIdx {
+		t.Errorf("scrolled view's first ROW %d should be < tail's %d (earlier transcript row)",
+			scrollIdx, tailIdx)
+	}
+}
+
 // ── Plan 08e §B1-B3: logo canvas paint, bg-pulse, --no-anim ──────────────────
 
 // splashLogoModel builds a splash-screen model at the given terminal size with
