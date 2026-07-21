@@ -1,0 +1,40 @@
+Diff · session · 2 files · +2 -0                                                                    
+src/                              │src/main.go                                                      
+  M main.go                       │                                                                 
+docs/                             │         │ --- a/src/main.go                                     
+  A README.md                +1 -0│         │ +++ b/src/main.go                                     
+                                  │         │ @@ -1,3 +1,4 @@                                       
+                                  │   1    1│  package main                                         
+                                  │   2    2│                                                       
+                                  │        3│ +import "fmt"                                         
+                                  │   3    4│  func main() {}                                       
+                                  │   4    5│                                                       
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+                                  │                                                                 
+j/k file · space fold · ctrl+d/u scroll · t tree · ctrl+x s source · esc close                      

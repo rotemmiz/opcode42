@@ -1,0 +1,24 @@
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+         ╭────────────────────────────────────────────────────────────╮         
+         │                                                            │         
+         │  Permission required                                       │         
+         │                                                            │         
+         │  bash                                                      │         
+         │  ls -la                                                    │         
+         │                                                            │         
+         │   Allow once                                               │         
+         │   Allow always                                             │         
+         │   Reject                                                   │         
+         │                                                            │         
+         │  a allow · s always · r reject · enter select              │         
+         │                                                            │         
+         ╰────────────────────────────────────────────────────────────╯         
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                

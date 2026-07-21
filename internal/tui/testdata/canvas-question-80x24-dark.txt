@@ -1,0 +1,24 @@
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+       ╭────────────────────────────────────────────────────────────────╮       
+       │                                                                │       
+       │  Pick a file                                                   │       
+       │  Which file should the agent edit?                             │       
+       │                                                                │       
+       │     src/main.go                                                │       
+       │     src/util.go                                                │       
+       │     docs/README.md                                             │       
+       │                                                                │       
+       │  ↑↓ move · enter select · r reject                             │       
+       │                                                                │       
+       ╰────────────────────────────────────────────────────────────────╯       
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
