@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
@@ -382,7 +382,7 @@ func TestKindColor(t *testing.T) {
 	p := theme.Default()
 	cases := []struct {
 		kind toastKind
-		want lipgloss.Color
+		want theme.Color
 	}{
 		{toastInfo, p.Cyan},
 		{toastSuccess, p.Green},

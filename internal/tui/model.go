@@ -9,10 +9,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
@@ -182,9 +182,13 @@ func New(cfg Config) Model {
 	ta.SetHeight(1)                                          // grows with content up to maxComposerRows
 	ta.KeyMap.InsertNewline.SetKeys("shift+enter", "ctrl+j") // Enter submits; these add a newline
 	// Drop the focused cursor-line highlight + base frame to keep the minimal look.
-	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
-	ta.FocusedStyle.Base = lipgloss.NewStyle()
-	ta.BlurredStyle.CursorLine = lipgloss.NewStyle()
+	// bubbles v2 exposes styles via Styles()/SetStyles (a copy) rather than the
+	// mutable FocusedStyle/BlurredStyle fields of v1.
+	tst := ta.Styles()
+	tst.Focused.CursorLine = lipgloss.NewStyle()
+	tst.Focused.Base = lipgloss.NewStyle()
+	tst.Blurred.CursorLine = lipgloss.NewStyle()
+	ta.SetStyles(tst)
 	ta.Focus()
 	ri := textinput.New()
 	ri.Placeholder = "Session title"
@@ -204,7 +208,7 @@ func New(cfg Config) Model {
 	// Auto-pick light vs dark by terminal background — mirrors opencode's
 	// theme_mode_lock behaviour. Restore() will override with any pinned KV theme.
 	// cfg.Theme (--theme flag) wins over both auto-pick and KV.
-	m.termDark = lipgloss.HasDarkBackground()
+	m.termDark = lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
 	defName := pickDefaultTheme(m.termDark)
 	if cfg.Theme != "" {
 		defName = cfg.Theme
@@ -235,15 +239,18 @@ func (m Model) applyTheme(name string, p theme.Palette) Model {
 	m.styles = theme.New(p)
 	txt := lipgloss.NewStyle().Foreground(p.Fg).Background(p.Bg)
 	ph := lipgloss.NewStyle().Foreground(p.FgGhost).Background(p.Bg)
-	m.input.FocusedStyle.Text, m.input.FocusedStyle.Placeholder = txt, ph
-	m.input.BlurredStyle.Text, m.input.BlurredStyle.Placeholder = txt, ph
 	// The textarea pads its current/empty line with CursorLine + Base styles; pin
 	// their Bg too so the composer row fills with the theme background rather than
 	// the terminal default (visible as a dark bar on a light terminal). plan 08c Tier 0.
+	// bubbles v2 routes all of these through the Styles()/SetStyles copy.
 	bg := lipgloss.NewStyle().Background(p.Bg)
-	m.input.FocusedStyle.CursorLine, m.input.FocusedStyle.Base = bg, bg
-	m.input.BlurredStyle.CursorLine, m.input.BlurredStyle.Base = bg, bg
-	m.input.FocusedStyle.EndOfBuffer, m.input.BlurredStyle.EndOfBuffer = bg, bg
+	st := m.input.Styles()
+	st.Focused.Text, st.Focused.Placeholder = txt, ph
+	st.Blurred.Text, st.Blurred.Placeholder = txt, ph
+	st.Focused.CursorLine, st.Focused.Base = bg, bg
+	st.Blurred.CursorLine, st.Blurred.Base = bg, bg
+	st.Focused.EndOfBuffer, st.Blurred.EndOfBuffer = bg, bg
+	m.input.SetStyles(st)
 	// bubbles' textarea caches an internal *Style pointer (set only by Focus/Blur)
 	// to the active style; after this value-copy of Model that pointer still aims at
 	// the pre-copy FocusedStyle, so our edits above wouldn't take effect on render.
@@ -325,7 +332,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// A focused terminal captures every key (ctrl+c included, so the shell can
 		// interrupt) — only ctrl+] escapes, handled inside handlePTYKey. A pending
 		// permission/question prompt still takes precedence (so it can be answered);
@@ -1169,7 +1176,18 @@ func (m Model) effectiveAgent() string {
 // default theme renders on the terminal's native background (no full-screen fill,
 // so it doesn't paint a mismatched box); an explicitly chosen light/mono theme
 // paints its background so it stays legible on any terminal.
-func (m Model) View() string {
+// View satisfies bubbletea v2's Model interface, which now returns a tea.View
+// struct (was a string in v1). The whole-frame compositing still happens in
+// renderView; this wrapper just declares the program-level terminal toggles
+// that used to be tea.NewProgram options (AltScreen replaces tea.WithAltScreen
+// in cmd/opcode-tui/main.go).
+func (m Model) View() tea.View {
+	v := tea.NewView(m.renderView())
+	v.AltScreen = true
+	return v
+}
+
+func (m Model) renderView() string {
 	var body string
 	switch {
 	case m.pendingPermission() != nil:
@@ -1239,7 +1257,7 @@ func (m Model) viewSplash() string {
 	}
 	// The composer is a fixed-width bordered block; center it on a Bg-filled row.
 	composer = lipgloss.PlaceHorizontal(w, lipgloss.Center, composer,
-		lipgloss.WithWhitespaceBackground(s.P.Bg))
+		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(s.P.Bg)))
 
 	status := fill(s.Faint, m.statusLine())
 	if m.err != nil {
@@ -1254,7 +1272,7 @@ func (m Model) viewSplash() string {
 	// Body rows are already full-width Bg-painted; Place only adds vertical padding,
 	// which WithWhitespaceBackground fills with the theme Bg too.
 	return lipgloss.Place(w, m.height, lipgloss.Center, lipgloss.Center, body,
-		lipgloss.WithWhitespaceBackground(s.P.Bg))
+		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(s.P.Bg)))
 }
 
 func (m Model) viewSession() string { return m.renderSession() }

@@ -26,8 +26,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
@@ -137,7 +137,7 @@ func (m *Model) toastTick() {
 //	toastInfo    → Cyan  (opencode variant "info"    → theme.info)
 //	toastSuccess → Green (opencode variant "success" → theme.success)
 //	toastError   → Red   (opencode variant "error"   → theme.error)
-func kindColor(kind toastKind, p theme.Palette) lipgloss.Color {
+func kindColor(kind toastKind, p theme.Palette) theme.Color {
 	switch kind {
 	case toastSuccess:
 		return p.Green
@@ -177,7 +177,7 @@ func (m Model) toastBoxView(t toast) string {
 	ft := t.fadeT()
 
 	// Lerp foreground and accent colors toward BgElev for fade-out.
-	var fgColor, iconColor, accentColor lipgloss.Color
+	var fgColor, iconColor, accentColor theme.Color
 	bgStr := string(p.BgElev)
 	if ft > 0 {
 		fgColor = lerpHex(string(p.Fg), bgStr, ft)
@@ -221,7 +221,9 @@ func (m Model) toastBoxView(t toast) string {
 		BorderBackground(p.BgElev).
 		PaddingLeft(1).
 		PaddingRight(1).
-		Width(innerW).
+		// lipgloss v2: Width is the total box width (content + padding + border).
+		// Add back the 2 padding + 2 border columns so the content area stays innerW.
+		Width(innerW + 4).
 		Render(content)
 }
 

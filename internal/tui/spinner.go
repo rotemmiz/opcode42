@@ -27,7 +27,7 @@ package tui
 // The trail length is trailLen = 6 (matching spinner.ts deriveTrailColors default).
 //
 // Color representation: we work entirely in 24-bit hex strings that lipgloss
-// accepts directly as lipgloss.Color values.  The lerp helper interpolates two
+// accepts directly as theme.Color values.  The lerp helper interpolates two
 // hex colors so we can express the trail gradient purely in the theme tokens.
 
 import (
@@ -36,8 +36,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
@@ -156,7 +156,7 @@ func hexToRGB(hex string) (r, g, b float64) {
 }
 
 // lerpHex linearly interpolates between hex colors a and b by t ∈ [0.0, 1.0].
-// Returns a "#rrggbb" hex string suitable for lipgloss.Color.
+// Returns a "#rrggbb" hex string suitable for theme.Color.
 //
 // Math: each channel is lerped independently in linear RGB space:
 //
@@ -164,14 +164,14 @@ func hexToRGB(hex string) (r, g, b float64) {
 //
 // We clamp each channel to [0,1] before re-encoding to avoid out-of-range values
 // from rounding.
-func lerpHex(a, b string, t float64) lipgloss.Color {
+func lerpHex(a, b string, t float64) theme.Color {
 	ar, ag, ab := hexToRGB(a)
 	br, bg, bb := hexToRGB(b)
 	t = clamp01(t)
 	rr := ar + (br-ar)*t
 	rg := ag + (bg-ag)*t
 	rb := ab + (bb-ab)*t
-	return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x",
+	return theme.Color(fmt.Sprintf("#%02x%02x%02x",
 		int(math.Round(clamp01(rr)*255)),
 		int(math.Round(clamp01(rg)*255)),
 		int(math.Round(clamp01(rb)*255)),
@@ -188,7 +188,7 @@ func clamp01(v float64) float64 {
 	return v
 }
 
-// trailColor returns the lipgloss.Color for a character at the given trail
+// trailColor returns the theme.Color for a character at the given trail
 // distance from the sweep head.  Mirrors spinner.ts deriveTrailColors:
 //
 //	dist == 0: head — full Accent color (bright, alpha=1.0)
@@ -202,7 +202,7 @@ func clamp01(v float64) float64 {
 // uses brightnessFactor=1.15 on the RGBA).  In 24-bit hex we approximate by
 // lerping the accent color toward white (#ffffff) by 0.15, which achieves the
 // same "slight glare" effect without needing float RGB arithmetic at call time.
-func trailColor(dist int, p theme.Palette) lipgloss.Color {
+func trailColor(dist int, p theme.Palette) theme.Color {
 	accent := string(p.Accent())
 	dim := string(p.FgDim)
 	if dist < 0 || dist >= trailLen {

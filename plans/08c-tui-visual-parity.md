@@ -30,9 +30,18 @@
 > syntax, diff — is achievable to pixel parity. The *animations* (gradient-scanner spinner, shimmer
 > wordmark, `bg-pulse` field) are achievable but cost more in Bubble Tea (a `tea.Tick` loop + manual
 > per-frame string synthesis) and are quarantined into Tier 3.
+>
+> **[Superseded 2026-06-04 by `plans/08d-tui-bubbletea-v2-migration.md`.]** This gap *closed*: Lip Gloss
+> **v2** ships a real cell-buffer compositor (`NewCanvas` + z-ordered `Layer`s with `SetCell`), i.e.
+> opentui's model in Go. Opcode42 migrated the TUI to Bubble Tea/Lip Gloss v2 (08d M1, done). The
+> "animations cost more / quarantine to Tier 3" framing above no longer holds — per-frame `SetCell` is
+> now the native idiom and `bg-pulse` becomes feasible. 08c's *content* goals (themes, markdown, syntax,
+> diff) still stand; they re-base onto the canvas (see 08d's parity roadmap) and get cheaper, not harder.
 
 ## Links
-- Siblings: `plans/08-client-tui.md`, `plans/08a-tui-parity-now.md`, `plans/08b-tui-parity-planned.md`.
+- Siblings: `plans/08-client-tui.md`, `plans/08a-tui-parity-now.md`, `plans/08b-tui-parity-planned.md`,
+  `plans/08d-tui-bubbletea-v2-migration.md` (the v2 compositor migration that supersedes the
+  "string-diff renderer" constraint framed below).
 - Opcode42 TUI: `internal/tui/` (Go/Bubble Tea, ~5k LOC); theme in `internal/tui/theme/theme.go`.
 - Reference TUI: `/Users/rotemmiz/git/opencode/packages/opencode/src/cli/cmd/tui/` (TS/opentui).
 - **Visual oracle:** `/Users/rotemmiz/git/opencode/screenshots-harness/` (VHS; see §V).

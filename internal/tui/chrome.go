@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // U7 — chrome: the bottom status bar and the right sidebar (design components.jsx
@@ -245,7 +245,7 @@ func (m Model) sidebarView() string {
 		Border(lipgloss.NormalBorder(), false, false, false, true).
 		BorderForeground(s.P.Border).
 		BorderBackground(s.P.BgPanel).
-		Width(sidebarWidth-1).
+		Width(sidebarWidth). // lipgloss v2: Width includes the border column (was -1 in v1)
 		Height(m.height).
 		Padding(0, 1).
 		Render(panel)

@@ -37,9 +37,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/glamour"
-	gansi "github.com/charmbracelet/glamour/ansi"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/glamour/v2"
+	gansi "charm.land/glamour/v2/ansi"
+	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
@@ -78,11 +78,11 @@ func sp(s string) *string { return &s }
 // bp returns a *bool holding b — same reason.
 func bp(b bool) *bool { return &b }
 
-// colStr converts a lipgloss.Color (which is a string typedef) to a plain
+// colStr converts a theme.Color (which is a string typedef) to a plain
 // *string for glamour's StylePrimitive.Color fields. Empty color (zero value)
 // is returned as nil so glamour inherits from the parent element instead of
 // emitting an empty SGR sequence.
-func colStr(c lipgloss.Color) *string {
+func colStr(c theme.Color) *string {
 	if string(c) == "" {
 		return nil
 	}

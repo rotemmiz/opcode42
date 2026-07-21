@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
@@ -122,7 +122,7 @@ func (m Model) permissionView() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(s.P.Amber).
 		Padding(1, 2).
-		Width(width).
+		Width(width + 2). // v2: +2 for the border cols Width now includes
 		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 
 	if m.width == 0 || m.height == 0 {

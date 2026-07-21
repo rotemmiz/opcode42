@@ -5,7 +5,31 @@
 // terminal's best available palette automatically.
 package theme
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+)
+
+// Color is a truecolor hex string ("#rrggbb"), ANSI index, or color name that
+// also implements image/color.Color so it can be handed directly to Lip Gloss
+// v2's Foreground/Background (which now take color.Color). Keeping it a string
+// preserves the TUI's hex-level color math — SGR building (paint.go), gradient
+// lerps (spinner.go/logo.go), and diff tints all do string(c) / hex arithmetic.
+//
+// Lip Gloss v2 special-cases the NoColor *type* to mean "no color"; an empty
+// Color would render opaque black instead, so callers must never pass a
+// zero-value Color to a style. In practice every palette field is populated and
+// the few local color vars are assigned in exhaustive switches (see diff.go).
+type Color string
+
+// RGBA implements image/color.Color by delegating to Lip Gloss's own parser.
+func (c Color) RGBA() (r, g, b, a uint32) {
+	return lipgloss.Color(string(c)).RGBA()
+}
+
+// Color must satisfy color.Color so it can be passed to Lip Gloss v2 styles.
+var _ color.Color = Color("")
 
 // Palette holds the design tokens. Names mirror the CSS custom properties.
 //
@@ -17,40 +41,40 @@ import "github.com/charmbracelet/lipgloss"
 type Palette struct {
 	// Surfaces (neutral charcoal).
 	// opencode: background / backgroundPanel / backgroundElement / (selection)
-	Bg      lipgloss.Color // terminal background
-	BgPanel lipgloss.Color // collapsible panels, composer, autocomplete
-	BgElev  lipgloss.Color // modals / popovers
-	BgSel   lipgloss.Color // row hover
+	Bg      Color // terminal background
+	BgPanel Color // collapsible panels, composer, autocomplete
+	BgElev  Color // modals / popovers
+	BgSel   Color // row hover
 
 	// Borders.
 	// opencode: border / borderActive / borderSubtle
-	Border     lipgloss.Color // table/panel/modal borders
-	BorderSoft lipgloss.Color // hairline dividers, sidebar edge (→ borderSubtle)
+	Border     Color // table/panel/modal borders
+	BorderSoft Color // hairline dividers, sidebar edge (→ borderSubtle)
 	// BorderActive is the focused/active component border; brighter than Border.
 	// Derived from: opencode token "borderActive" (darkStep8 / lightStep8).
-	BorderActive lipgloss.Color
+	BorderActive Color
 
 	// Text.
 	// opencode: text / textMuted / (faint, ghost are Opcode42 extensions)
-	Fg      lipgloss.Color // primary
-	FgDim   lipgloss.Color // secondary, tool-call lines
-	FgFaint lipgloss.Color // hints, line numbers, metadata
-	FgGhost lipgloss.Color // placeholders, disabled, diff gutters
+	Fg      Color // primary
+	FgDim   Color // secondary, tool-call lines
+	FgFaint Color // hints, line numbers, metadata
+	FgGhost Color // placeholders, disabled, diff gutters
 
 	// Semantic colors (meanings fixed by the design — do not repurpose).
 	// opencode mapping: secondary=Blue, accent=Purple, error=Red,
 	// warning=Amber, success=Green, info=Cyan.
-	Blue   lipgloss.Color // agent mode, prompt accent, function names
-	Green  lipgloss.Color // added diff, success, paths, strings
-	Red    lipgloss.Color // removed diff, errors, blocked
-	Amber  lipgloss.Color // selection highlight, in-progress, thinking
-	Purple lipgloss.Color // section headers, keywords, table headers
-	Cyan   lipgloss.Color // types, @mentions, links, hunk markers
-	Yellow lipgloss.Color // reserve / rarely used
+	Blue   Color // agent mode, prompt accent, function names
+	Green  Color // added diff, success, paths, strings
+	Red    Color // removed diff, errors, blocked
+	Amber  Color // selection highlight, in-progress, thinking
+	Purple Color // section headers, keywords, table headers
+	Cyan   Color // types, @mentions, links, hunk markers
+	Yellow Color // reserve / rarely used
 
 	// Selection bar (modal & table highlight): solid amber, near-black text.
-	SelBg lipgloss.Color
-	SelFg lipgloss.Color
+	SelBg Color
+	SelFg Color
 
 	// Sub-structs extend Palette to opencode's full token surface (plan 08c §1a).
 	// All M2-M6 renderers consume these rather than the raw flat colors above,
@@ -69,35 +93,35 @@ type Palette struct {
 type DiffPalette struct {
 	// Added / Removed / Context are foreground colors for the respective line types.
 	// opencode: diffAdded, diffRemoved, diffContext
-	Added   lipgloss.Color
-	Removed lipgloss.Color
-	Context lipgloss.Color
+	Added   Color
+	Removed Color
+	Context Color
 
 	// HunkHeader is the foreground for @@ hunk-header lines.
 	// opencode: diffHunkHeader
-	HunkHeader lipgloss.Color
+	HunkHeader Color
 
 	// HighlightAdded / HighlightRemoved are intra-line span highlights
 	// (the changed span within an add/remove line — brighter than AddedBg).
 	// opencode: diffHighlightAdded, diffHighlightRemoved
-	HighlightAdded   lipgloss.Color
-	HighlightRemoved lipgloss.Color
+	HighlightAdded   Color
+	HighlightRemoved Color
 
 	// AddedBg / RemovedBg / ContextBg are full-row background tints.
 	// opencode: diffAddedBg, diffRemovedBg, diffContextBg
-	AddedBg   lipgloss.Color
-	RemovedBg lipgloss.Color
-	ContextBg lipgloss.Color
+	AddedBg   Color
+	RemovedBg Color
+	ContextBg Color
 
 	// LineNumber is the foreground for the line-number gutter text.
 	// opencode: diffLineNumber
-	LineNumber lipgloss.Color
+	LineNumber Color
 
 	// AddedLineNumberBg / RemovedLineNumberBg are background tints for the
 	// line-number gutter column on added/removed rows (darker than the row bg).
 	// opencode: diffAddedLineNumberBg, diffRemovedLineNumberBg
-	AddedLineNumberBg   lipgloss.Color
-	RemovedLineNumberBg lipgloss.Color
+	AddedLineNumberBg   Color
+	RemovedLineNumberBg Color
 }
 
 // MarkdownPalette holds rendering colors for each markdown element, mirroring
@@ -109,60 +133,60 @@ type DiffPalette struct {
 type MarkdownPalette struct {
 	// Text is the base prose color (typically Fg).
 	// opencode: markdownText
-	Text lipgloss.Color
+	Text Color
 
 	// Heading is the h1–h6 foreground.
 	// opencode: markdownHeading
-	Heading lipgloss.Color
+	Heading Color
 
 	// Link is the URL foreground (the raw href part).
 	// opencode: markdownLink
-	Link lipgloss.Color
+	Link Color
 
 	// LinkText is the visible link label foreground (the [label] part).
 	// opencode: markdownLinkText
-	LinkText lipgloss.Color
+	LinkText Color
 
 	// Code is the foreground for inline `code` spans.
 	// opencode: markdownCode
-	Code lipgloss.Color
+	Code Color
 
 	// BlockQuote is the foreground for > blockquote lines.
 	// opencode: markdownBlockQuote
-	BlockQuote lipgloss.Color
+	BlockQuote Color
 
 	// Emph is the foreground for *italic* text.
 	// opencode: markdownEmph
-	Emph lipgloss.Color
+	Emph Color
 
 	// Strong is the foreground for **bold** text.
 	// opencode: markdownStrong
-	Strong lipgloss.Color
+	Strong Color
 
 	// HorizontalRule is the foreground for --- dividers.
 	// opencode: markdownHorizontalRule
-	HorizontalRule lipgloss.Color
+	HorizontalRule Color
 
 	// ListItem is the foreground for list item text.
 	// opencode: markdownListItem
-	ListItem lipgloss.Color
+	ListItem Color
 
 	// ListEnumeration is the foreground for the bullet/number marker.
 	// opencode: markdownListEnumeration
-	ListEnumeration lipgloss.Color
+	ListEnumeration Color
 
 	// Image is the foreground for ![alt](url) image tokens.
 	// opencode: markdownImage
-	Image lipgloss.Color
+	Image Color
 
 	// ImageText is the foreground for the alt-text portion of an image.
 	// opencode: markdownImageText
-	ImageText lipgloss.Color
+	ImageText Color
 
 	// CodeBlock is the base foreground for fenced code block bodies
 	// (before syntax highlighting is applied by M5/chroma).
 	// opencode: markdownCodeBlock
-	CodeBlock lipgloss.Color
+	CodeBlock Color
 }
 
 // SyntaxPalette holds chroma token-class colors, mirroring opencode's syntax
@@ -175,43 +199,43 @@ type MarkdownPalette struct {
 type SyntaxPalette struct {
 	// Comment is the foreground for line/block comments (muted).
 	// opencode: syntaxComment
-	Comment lipgloss.Color
+	Comment Color
 
 	// Keyword is the foreground for language keywords (if, func, return, …).
 	// opencode: syntaxKeyword
-	Keyword lipgloss.Color
+	Keyword Color
 
 	// Function is the foreground for function/method names at call/def sites.
 	// opencode: syntaxFunction
-	Function lipgloss.Color
+	Function Color
 
 	// Variable is the foreground for variable names and identifiers.
 	// opencode: syntaxVariable
-	Variable lipgloss.Color
+	Variable Color
 
 	// String is the foreground for string literals.
 	// opencode: syntaxString
-	String lipgloss.Color
+	String Color
 
 	// Number is the foreground for numeric literals.
 	// opencode: syntaxNumber
-	Number lipgloss.Color
+	Number Color
 
 	// Type is the foreground for type names, class names, and type annotations.
 	// opencode: syntaxType
-	Type lipgloss.Color
+	Type Color
 
 	// Operator is the foreground for operators (+, -, =>, …).
 	// opencode: syntaxOperator
-	Operator lipgloss.Color
+	Operator Color
 
 	// Punctuation is the foreground for brackets, braces, commas, semicolons.
 	// opencode: syntaxPunctuation
-	Punctuation lipgloss.Color
+	Punctuation Color
 }
 
 // Accent is the UI accent color (the design aliases --accent to --blue).
-func (p Palette) Accent() lipgloss.Color { return p.Blue }
+func (p Palette) Accent() Color { return p.Blue }
 
 // Default returns the design's charcoal (opcode42-dark) palette.
 //
@@ -493,7 +517,7 @@ func New(p Palette) Styles {
 // must pin its own bg; otherwise transparent cells bleed through on light
 // terminals. Use BgPanel for composer/autocomplete panels, BgElev for modals,
 // BgSel for hover rows, or Bg for the base surface.
-func (s Styles) Surface(bg lipgloss.Color) lipgloss.Style {
+func (s Styles) Surface(bg Color) lipgloss.Style {
 	return lipgloss.NewStyle().Background(bg).Foreground(s.P.Fg)
 }
 

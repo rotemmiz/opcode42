@@ -608,3 +608,13 @@ Firebase). LIVE send/receive needs real infra and is MANUAL-VERIFY:
       and the device is no longer listed by `GET /push/register`.
 - [ ] EYEBALL: on Android 13+ confirm the app requests the `POST_NOTIFICATIONS` runtime permission on
       first launch (only when push is configured) and that denying it does not crash the app.
+
+## Plan 08d — Bubble Tea v2 migration (branch `track-p08d-tui-v2-spike`)
+- [x] M0 spike (2026-06-04): `charm.land/.../v2` paths resolve; canvas compositor renders z-ordered
+      layers. Throwaway `cmd/v2spike/` deleted at M1 start.
+- [ ] EYEBALL (M1): run the real TUI under v2 (`pnpm --filter @forge/tui start`, or `forge-tui` against
+      a daemon) in a true-color terminal. Confirm it's visually identical to pre-migration: composer has
+      no trailing dark bar, sidebar/footer width unchanged, modal/permission/question cards are the same
+      width (not 2 cols narrower), toasts show full untruncated text, completed tasks-dock todos still
+      show struck-through, and splash + light/dark theme auto-pick work. Unit suite is green; this
+      catches what goldens can't.

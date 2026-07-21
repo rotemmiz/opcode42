@@ -47,8 +47,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 //go:embed themes/*.json
@@ -237,80 +235,80 @@ func ParseThemeJSON(data []byte, dark bool) (Palette, error) {
 
 	// --- Assemble Palette ----------------------------------------------------
 	p := Palette{
-		Bg:      lipgloss.Color(bg),
-		BgPanel: lipgloss.Color(bgPanel),
-		BgElev:  lipgloss.Color(bgElev),
-		BgSel:   lipgloss.Color(bgSel),
+		Bg:      Color(bg),
+		BgPanel: Color(bgPanel),
+		BgElev:  Color(bgElev),
+		BgSel:   Color(bgSel),
 
-		Fg:      lipgloss.Color(get("text", string(base.Fg))),
-		FgDim:   lipgloss.Color(get("textMuted", string(base.FgDim))),
+		Fg:      Color(get("text", string(base.Fg))),
+		FgDim:   Color(get("textMuted", string(base.FgDim))),
 		FgFaint: base.FgFaint, // no direct opencode token; keep baseline
 		FgGhost: base.FgGhost, // no direct opencode token; keep baseline
 
-		Blue:   lipgloss.Color(get("secondary", string(base.Blue))),
-		Purple: lipgloss.Color(get("accent", string(base.Purple))),
-		Red:    lipgloss.Color(get("error", string(base.Red))),
-		Amber:  lipgloss.Color(get("warning", string(base.Amber))),
-		Green:  lipgloss.Color(get("success", string(base.Green))),
-		Cyan:   lipgloss.Color(get("info", string(base.Cyan))),
+		Blue:   Color(get("secondary", string(base.Blue))),
+		Purple: Color(get("accent", string(base.Purple))),
+		Red:    Color(get("error", string(base.Red))),
+		Amber:  Color(get("warning", string(base.Amber))),
+		Green:  Color(get("success", string(base.Green))),
+		Cyan:   Color(get("info", string(base.Cyan))),
 		Yellow: base.Yellow, // no opencode token; baseline scaling
 
-		Border:       lipgloss.Color(get("border", string(base.Border))),
-		BorderSoft:   lipgloss.Color(get("borderSubtle", string(base.BorderSoft))),
-		BorderActive: lipgloss.Color(get("borderActive", string(base.BorderActive))),
+		Border:       Color(get("border", string(base.Border))),
+		BorderSoft:   Color(get("borderSubtle", string(base.BorderSoft))),
+		BorderActive: Color(get("borderActive", string(base.BorderActive))),
 
 		// SelBg: opencode uses "primary" as the selection accent color.
 		// SelFg stays near-black from baseline (it is always readable against
 		// the bright primary color, per the original design intent).
-		SelBg: lipgloss.Color(get("primary", string(base.SelBg))),
+		SelBg: Color(get("primary", string(base.SelBg))),
 		SelFg: base.SelFg,
 	}
 
 	// --- Diff sub-struct ------------------------------------------------------
 	p.Diff = DiffPalette{
-		Added:               lipgloss.Color(get("diffAdded", string(base.Diff.Added))),
-		Removed:             lipgloss.Color(get("diffRemoved", string(base.Diff.Removed))),
-		Context:             lipgloss.Color(get("diffContext", string(base.Diff.Context))),
-		HunkHeader:          lipgloss.Color(get("diffHunkHeader", string(base.Diff.HunkHeader))),
-		HighlightAdded:      lipgloss.Color(get("diffHighlightAdded", string(base.Diff.HighlightAdded))),
-		HighlightRemoved:    lipgloss.Color(get("diffHighlightRemoved", string(base.Diff.HighlightRemoved))),
-		AddedBg:             lipgloss.Color(getDiffBg("diffAddedBg", bgPanel, string(base.Diff.AddedBg))),
-		RemovedBg:           lipgloss.Color(getDiffBg("diffRemovedBg", bgPanel, string(base.Diff.RemovedBg))),
-		ContextBg:           lipgloss.Color(getDiffBg("diffContextBg", bgPanel, string(base.Diff.ContextBg))),
-		LineNumber:          lipgloss.Color(get("diffLineNumber", string(base.Diff.LineNumber))),
-		AddedLineNumberBg:   lipgloss.Color(getDiffBg("diffAddedLineNumberBg", bgPanel, string(base.Diff.AddedLineNumberBg))),
-		RemovedLineNumberBg: lipgloss.Color(getDiffBg("diffRemovedLineNumberBg", bgPanel, string(base.Diff.RemovedLineNumberBg))),
+		Added:               Color(get("diffAdded", string(base.Diff.Added))),
+		Removed:             Color(get("diffRemoved", string(base.Diff.Removed))),
+		Context:             Color(get("diffContext", string(base.Diff.Context))),
+		HunkHeader:          Color(get("diffHunkHeader", string(base.Diff.HunkHeader))),
+		HighlightAdded:      Color(get("diffHighlightAdded", string(base.Diff.HighlightAdded))),
+		HighlightRemoved:    Color(get("diffHighlightRemoved", string(base.Diff.HighlightRemoved))),
+		AddedBg:             Color(getDiffBg("diffAddedBg", bgPanel, string(base.Diff.AddedBg))),
+		RemovedBg:           Color(getDiffBg("diffRemovedBg", bgPanel, string(base.Diff.RemovedBg))),
+		ContextBg:           Color(getDiffBg("diffContextBg", bgPanel, string(base.Diff.ContextBg))),
+		LineNumber:          Color(get("diffLineNumber", string(base.Diff.LineNumber))),
+		AddedLineNumberBg:   Color(getDiffBg("diffAddedLineNumberBg", bgPanel, string(base.Diff.AddedLineNumberBg))),
+		RemovedLineNumberBg: Color(getDiffBg("diffRemovedLineNumberBg", bgPanel, string(base.Diff.RemovedLineNumberBg))),
 	}
 
 	// --- Markdown sub-struct --------------------------------------------------
 	p.Markdown = MarkdownPalette{
-		Text:            lipgloss.Color(get("markdownText", string(base.Markdown.Text))),
-		Heading:         lipgloss.Color(get("markdownHeading", string(base.Markdown.Heading))),
-		Link:            lipgloss.Color(get("markdownLink", string(base.Markdown.Link))),
-		LinkText:        lipgloss.Color(get("markdownLinkText", string(base.Markdown.LinkText))),
-		Code:            lipgloss.Color(get("markdownCode", string(base.Markdown.Code))),
-		BlockQuote:      lipgloss.Color(get("markdownBlockQuote", string(base.Markdown.BlockQuote))),
-		Emph:            lipgloss.Color(get("markdownEmph", string(base.Markdown.Emph))),
-		Strong:          lipgloss.Color(get("markdownStrong", string(base.Markdown.Strong))),
-		HorizontalRule:  lipgloss.Color(get("markdownHorizontalRule", string(base.Markdown.HorizontalRule))),
-		ListItem:        lipgloss.Color(get("markdownListItem", string(base.Markdown.ListItem))),
-		ListEnumeration: lipgloss.Color(get("markdownListEnumeration", string(base.Markdown.ListEnumeration))),
-		Image:           lipgloss.Color(get("markdownImage", string(base.Markdown.Image))),
-		ImageText:       lipgloss.Color(get("markdownImageText", string(base.Markdown.ImageText))),
-		CodeBlock:       lipgloss.Color(get("markdownCodeBlock", string(base.Markdown.CodeBlock))),
+		Text:            Color(get("markdownText", string(base.Markdown.Text))),
+		Heading:         Color(get("markdownHeading", string(base.Markdown.Heading))),
+		Link:            Color(get("markdownLink", string(base.Markdown.Link))),
+		LinkText:        Color(get("markdownLinkText", string(base.Markdown.LinkText))),
+		Code:            Color(get("markdownCode", string(base.Markdown.Code))),
+		BlockQuote:      Color(get("markdownBlockQuote", string(base.Markdown.BlockQuote))),
+		Emph:            Color(get("markdownEmph", string(base.Markdown.Emph))),
+		Strong:          Color(get("markdownStrong", string(base.Markdown.Strong))),
+		HorizontalRule:  Color(get("markdownHorizontalRule", string(base.Markdown.HorizontalRule))),
+		ListItem:        Color(get("markdownListItem", string(base.Markdown.ListItem))),
+		ListEnumeration: Color(get("markdownListEnumeration", string(base.Markdown.ListEnumeration))),
+		Image:           Color(get("markdownImage", string(base.Markdown.Image))),
+		ImageText:       Color(get("markdownImageText", string(base.Markdown.ImageText))),
+		CodeBlock:       Color(get("markdownCodeBlock", string(base.Markdown.CodeBlock))),
 	}
 
 	// --- Syntax sub-struct ----------------------------------------------------
 	p.Syntax = SyntaxPalette{
-		Comment:     lipgloss.Color(get("syntaxComment", string(base.Syntax.Comment))),
-		Keyword:     lipgloss.Color(get("syntaxKeyword", string(base.Syntax.Keyword))),
-		Function:    lipgloss.Color(get("syntaxFunction", string(base.Syntax.Function))),
-		Variable:    lipgloss.Color(get("syntaxVariable", string(base.Syntax.Variable))),
-		String:      lipgloss.Color(get("syntaxString", string(base.Syntax.String))),
-		Number:      lipgloss.Color(get("syntaxNumber", string(base.Syntax.Number))),
-		Type:        lipgloss.Color(get("syntaxType", string(base.Syntax.Type))),
-		Operator:    lipgloss.Color(get("syntaxOperator", string(base.Syntax.Operator))),
-		Punctuation: lipgloss.Color(get("syntaxPunctuation", string(base.Syntax.Punctuation))),
+		Comment:     Color(get("syntaxComment", string(base.Syntax.Comment))),
+		Keyword:     Color(get("syntaxKeyword", string(base.Syntax.Keyword))),
+		Function:    Color(get("syntaxFunction", string(base.Syntax.Function))),
+		Variable:    Color(get("syntaxVariable", string(base.Syntax.Variable))),
+		String:      Color(get("syntaxString", string(base.Syntax.String))),
+		Number:      Color(get("syntaxNumber", string(base.Syntax.Number))),
+		Type:        Color(get("syntaxType", string(base.Syntax.Type))),
+		Operator:    Color(get("syntaxOperator", string(base.Syntax.Operator))),
+		Punctuation: Color(get("syntaxPunctuation", string(base.Syntax.Punctuation))),
 	}
 
 	return p, nil

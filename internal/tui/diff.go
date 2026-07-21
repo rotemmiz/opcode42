@@ -8,9 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
@@ -96,7 +97,7 @@ func (m Model) handleDiffKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.diff.scroll = 0
 		}
 		return m, nil
-	case " ", "enter":
+	case " ", "space", "enter": // bubbletea v2: the space bar stringifies as "space"
 		if len(m.diff.files) > 0 {
 			m.diff.folded[m.diff.sel] = !m.diff.folded[m.diff.sel]
 		}
@@ -437,7 +438,7 @@ func (m Model) diffPatchPane(width, height int) string {
 			gutterStr := m.renderGutter(oldLine, newLine, kind)
 			bodyStr := m.renderDiffCodeLine(line, kind, codeWidth, f.File)
 			row := gutterStr + bodyStr
-			var rowBg lipgloss.Color
+			var rowBg theme.Color
 			switch kind {
 			case diffLineAdded:
 				rowBg = s.P.Diff.AddedBg
@@ -500,7 +501,7 @@ func (m Model) renderGutter(oldLine, newLine int, kind diffLineKind) string {
 	d := s.P.Diff
 
 	// Determine background colors for old-number and new-number cells.
-	var oldBg, newBg, sepBg lipgloss.Color
+	var oldBg, newBg, sepBg theme.Color
 	switch kind {
 	case diffLineAdded:
 		oldBg = d.AddedLineNumberBg
@@ -517,7 +518,7 @@ func (m Model) renderGutter(oldLine, newLine int, kind diffLineKind) string {
 		sepBg = s.P.BgPanel
 	}
 
-	gutterStyle := func(bg lipgloss.Color) lipgloss.Style {
+	gutterStyle := func(bg theme.Color) lipgloss.Style {
 		return lipgloss.NewStyle().Foreground(d.LineNumber).Background(bg)
 	}
 
@@ -561,7 +562,7 @@ func (m Model) renderDiffCodeLine(line string, kind diffLineKind, codeWidth int,
 	s := m.styles
 	d := s.P.Diff
 
-	var rowBg, signFg lipgloss.Color
+	var rowBg, signFg theme.Color
 	switch kind {
 	case diffLineAdded:
 		rowBg = d.AddedBg
@@ -625,7 +626,7 @@ func (m Model) renderDiffCodeLine(line string, kind diffLineKind, codeWidth int,
 // We subtract the visible width of row from width to get the pad length, then
 // render that many spaces with Background(bg). If row is already >= width we
 // truncate using lipgloss's own ansi-aware truncation via Render(Width(width)).
-func padRow(row string, width int, bg lipgloss.Color) string {
+func padRow(row string, width int, bg theme.Color) string {
 	visible := lipgloss.Width(row)
 	if visible >= width {
 		// Truncate to exactly width using a lipgloss Width constraint so ANSI
@@ -640,7 +641,7 @@ func padRow(row string, width int, bg lipgloss.Color) string {
 
 // padDiffLines pads each element of lines to width using padRow, so that
 // non-diff rows (file header, spacer, folded hint) are also background-filled.
-func padDiffLines(lines []string, width int, bg lipgloss.Color) []string {
+func padDiffLines(lines []string, width int, bg theme.Color) []string {
 	out := make([]string, len(lines))
 	for i, l := range lines {
 		out[i] = padRow(l, width, bg)
@@ -669,7 +670,7 @@ func padLines(lines []string, height int) string {
 // exactly width visible characters wide by padding short lines with bg-colored
 // spaces. This is used by diffPatchPane to guarantee full-width fill on every
 // row including the empty padding lines at the bottom of a short patch.
-func padLinesWidth(lines []string, height, width int, bg lipgloss.Color) string {
+func padLinesWidth(lines []string, height, width int, bg theme.Color) string {
 	if len(lines) > height {
 		lines = lines[:height]
 	}

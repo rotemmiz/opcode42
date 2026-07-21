@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestThemeModal_SelectChangesStyles(t *testing.T) {
@@ -31,7 +31,7 @@ func TestThemeModal_SelectChangesStyles(t *testing.T) {
 
 func TestThemeSwitch_RestylesComposer(t *testing.T) {
 	m := New(Config{URL: "http://x"})
-	darkText := m.input.FocusedStyle.Text.GetForeground()
+	darkText := m.input.Styles().Focused.Text.GetForeground()
 	if darkText == nil {
 		t.Fatal("composer text color should be set from the theme at startup, not terminal-default")
 	}
@@ -39,7 +39,7 @@ func TestThemeSwitch_RestylesComposer(t *testing.T) {
 	m.modal, m.modalSel = modalThemes, 1 // opcode42-light
 	next, _ := m.modalSelect()
 	nm := next.(Model)
-	if nm.input.FocusedStyle.Text.GetForeground() == darkText {
+	if nm.input.Styles().Focused.Text.GetForeground() == darkText {
 		t.Fatal("composer text color should follow the theme switch")
 	}
 }

@@ -39,7 +39,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
+
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // maxPanelLines is the maximum lines shown in an expanded tool output panel
@@ -371,7 +373,7 @@ func (m Model) renderTodos(todos []todoItem, contentW int) string {
 	var sb strings.Builder
 	for _, td := range todos {
 		var glyph string
-		var fg lipgloss.Color
+		var fg theme.Color
 		switch td.Status {
 		case "completed":
 			glyph, fg = "[✓]", s.P.Green

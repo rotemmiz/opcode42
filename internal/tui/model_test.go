@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
@@ -81,7 +81,7 @@ func TestUpdate_WindowSizeAndQuit(t *testing.T) {
 		t.Fatalf("size = %dx%d", m.width, m.height)
 	}
 	// q quits (stream is nil, so no Close panic).
-	_, cmd := step(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	_, cmd := step(t, m, tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if cmd == nil {
 		t.Fatal("q should return a quit command")
 	}
@@ -89,7 +89,7 @@ func TestUpdate_WindowSizeAndQuit(t *testing.T) {
 
 func TestViewSplash_RendersWordmark(t *testing.T) {
 	m := New(Config{URL: "http://127.0.0.1:4096"})
-	if !strings.Contains(m.View(), "opcode42") {
-		t.Fatalf("splash missing wordmark: %q", m.View())
+	if !strings.Contains(m.renderView(), "opcode42") {
+		t.Fatalf("splash missing wordmark: %q", m.renderView())
 	}
 }

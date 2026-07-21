@@ -3,8 +3,10 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // paintBackground composites the rendered frame onto a full-screen canvas painted
@@ -30,7 +32,7 @@ import (
 //     empty lines. Tightly-packed colored spans (selection bars, diff tints, the
 //     sidebar panel, toasts) set their own background and are unaffected: no bare
 //     cell follows their reset before the next SGR, so the re-emit paints nothing.
-func paintBackground(frame string, width, height int, bg lipgloss.Color) string {
+func paintBackground(frame string, width, height int, bg theme.Color) string {
 	if width <= 0 || height <= 0 {
 		return frame
 	}
@@ -71,7 +73,7 @@ func paintBackground(frame string, width, height int, bg lipgloss.Color) string 
 // active lipgloss color profile (so truecolor degrades to 256/ANSI when the
 // terminal can't do better, and yields "" when color is unavailable). It works by
 // rendering a single space with the background and isolating the opening sequence.
-func bgSGR(c lipgloss.Color) string {
+func bgSGR(c theme.Color) string {
 	rendered := lipgloss.NewStyle().Background(c).Render(" ")
 	if i := strings.IndexByte(rendered, ' '); i > 0 {
 		return rendered[:i]

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
@@ -25,19 +25,22 @@ func TestTasksDock_TogglesAndRenders(t *testing.T) {
 		t.Fatal("dock should be hidden until toggled")
 	}
 	// ctrl+x t opens it (+ fetches)
-	m, _ = step(t, m, tea.KeyMsg{Type: tea.KeyCtrlX})
+	m, _ = step(t, m, tea.KeyPressMsg{Code: 'x', Mod: tea.ModCtrl})
 	m, cmd := step(t, m, key("t"))
 	if !m.tasksOpen || cmd == nil {
 		t.Fatal("ctrl+x t should open the dock and fetch todos")
 	}
-	view := m.renderSession()
+	// Strip ANSI before matching: lipgloss v2 emits strikethrough (the completed
+	// "scaffold" todo) as per-character SGR runs, so the plain text is only
+	// contiguous once styling is removed.
+	view := stripANSI(m.renderSession())
 	for _, want := range []string{"Tasks", "1/3", "write the parser", "add tests", "scaffold"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("dock missing %q", want)
 		}
 	}
 	// ctrl+x t again closes it
-	m, _ = step(t, m, tea.KeyMsg{Type: tea.KeyCtrlX})
+	m, _ = step(t, m, tea.KeyPressMsg{Code: 'x', Mod: tea.ModCtrl})
 	m, _ = step(t, m, key("t"))
 	if m.tasksOpen {
 		t.Fatal("ctrl+x t should toggle the dock closed")

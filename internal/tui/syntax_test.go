@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	chroma "github.com/alecthomas/chroma/v2"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
@@ -173,7 +172,7 @@ func TestTokenColor_Mapping(t *testing.T) {
 	cases := []struct {
 		name    string
 		tt      chroma.TokenType
-		wantCol lipgloss.Color
+		wantCol theme.Color
 	}{
 		// Keyword family.
 		{"Keyword", chroma.Keyword, sy.Keyword},

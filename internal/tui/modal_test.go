@@ -4,34 +4,43 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
-func key(s string) tea.KeyMsg {
+// key builds a bubbletea v2 KeyPressMsg whose String() equals s, so handlers
+// that switch on msg.String() see the intended key. Ctrl combos set Mod|ModCtrl;
+// named keys set the Code rune constant; anything else is treated as typed text
+// (Code = first rune so the textarea and String() both behave).
+func key(s string) tea.KeyPressMsg {
 	switch s {
 	case "ctrl+p":
-		return tea.KeyMsg{Type: tea.KeyCtrlP}
+		return tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl}
 	case "ctrl+n":
-		return tea.KeyMsg{Type: tea.KeyCtrlN}
+		return tea.KeyPressMsg{Code: 'n', Mod: tea.ModCtrl}
 	case "ctrl+d":
-		return tea.KeyMsg{Type: tea.KeyCtrlD}
+		return tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
 	case "ctrl+j":
-		return tea.KeyMsg{Type: tea.KeyCtrlJ}
+		return tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl}
 	case "tab":
-		return tea.KeyMsg{Type: tea.KeyTab}
+		return tea.KeyPressMsg{Code: tea.KeyTab}
 	case "enter":
-		return tea.KeyMsg{Type: tea.KeyEnter}
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "esc":
-		return tea.KeyMsg{Type: tea.KeyEsc}
+		return tea.KeyPressMsg{Code: tea.KeyEsc}
 	case "down":
-		return tea.KeyMsg{Type: tea.KeyDown}
+		return tea.KeyPressMsg{Code: tea.KeyDown}
 	case "up":
-		return tea.KeyMsg{Type: tea.KeyUp}
+		return tea.KeyPressMsg{Code: tea.KeyUp}
 	default:
-		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+		r := []rune(s)
+		var code rune
+		if len(r) > 0 {
+			code = r[0]
+		}
+		return tea.KeyPressMsg{Code: code, Text: s}
 	}
 }
 

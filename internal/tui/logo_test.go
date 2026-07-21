@@ -17,7 +17,7 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
@@ -337,7 +337,7 @@ func TestShimmerBrightnessPeriodic(t *testing.T) {
 }
 
 // TestColumnColorDark asserts that columnColor on a dark palette returns a
-// lipgloss.Color that is a valid "#rrggbb" hex string for all (x, frame).
+// theme.Color that is a valid "#rrggbb" hex string for all (x, frame).
 func TestColumnColorDark(t *testing.T) {
 	p := theme.Default()
 	for _, frame := range []int{0, 10, 23, 45} {

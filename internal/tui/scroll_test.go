@@ -42,7 +42,7 @@ func TestView_NeverExceedsViewport(t *testing.T) {
 	m := longSessionModel(t)
 	for _, off := range []int{0, 3, 9, 1000} {
 		m.scrollOffset = off
-		rows := frameRows(m.View())
+		rows := frameRows(m.renderView())
 		if len(rows) != m.height {
 			t.Fatalf("scrollOffset=%d: got %d rows, want exactly %d (overflow → terminal scrolls everything)", off, len(rows), m.height)
 		}
@@ -66,7 +66,7 @@ func TestView_FooterPinnedAcrossScroll(t *testing.T) {
 	}
 	bottomFor := func(off int) string {
 		m.scrollOffset = off
-		rows := frameRows(m.View())
+		rows := frameRows(m.renderView())
 		// Search the last 3 rows (composer + status bar live at the very bottom).
 		return stripANSI(strings.Join(rows[len(rows)-3:], "\n"))
 	}
@@ -81,9 +81,9 @@ func TestView_FooterPinnedAcrossScroll(t *testing.T) {
 func TestView_ScrollChangesStreamContent(t *testing.T) {
 	m := longSessionModel(t)
 	m.scrollOffset = 0
-	tail := stripANSI(m.View())
+	tail := stripANSI(m.renderView())
 	m.scrollOffset = 1000 // large offset → clamped to the top of the transcript
-	back := stripANSI(m.View())
+	back := stripANSI(m.renderView())
 	if tail == back {
 		t.Fatal("scrolling changed nothing — stream is not scrollable")
 	}

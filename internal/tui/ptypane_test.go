@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/hinshun/vt10x"
 )
 
@@ -28,22 +28,22 @@ func TestKeyToBytes(t *testing.T) {
 		msg  tea.KeyMsg
 		want string
 	}{
-		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ls")}, "ls"},
-		{tea.KeyMsg{Type: tea.KeyEnter}, "\r"},
-		{tea.KeyMsg{Type: tea.KeyTab}, "\t"},
-		{tea.KeyMsg{Type: tea.KeyEsc}, "\x1b"},
-		{tea.KeyMsg{Type: tea.KeyBackspace}, "\x7f"},
-		{tea.KeyMsg{Type: tea.KeySpace}, " "},
-		{tea.KeyMsg{Type: tea.KeyUp}, "\x1b[A"},
-		{tea.KeyMsg{Type: tea.KeyLeft}, "\x1b[D"},
-		{tea.KeyMsg{Type: tea.KeyCtrlC}, "\x03"}, // SIGINT forwarded to the shell
-		{tea.KeyMsg{Type: tea.KeyCtrlA}, "\x01"},
-		{tea.KeyMsg{Type: tea.KeyCtrlZ}, "\x1a"},
-		{tea.KeyMsg{Type: tea.KeyF5}, ""}, // unmapped → no bytes
+		{tea.KeyPressMsg{Code: 'l', Text: "ls"}, "ls"},
+		{tea.KeyPressMsg{Code: tea.KeyEnter}, "\r"},
+		{tea.KeyPressMsg{Code: tea.KeyTab}, "\t"},
+		{tea.KeyPressMsg{Code: tea.KeyEsc}, "\x1b"},
+		{tea.KeyPressMsg{Code: tea.KeyBackspace}, "\x7f"},
+		{tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}, " "},
+		{tea.KeyPressMsg{Code: tea.KeyUp}, "\x1b[A"},
+		{tea.KeyPressMsg{Code: tea.KeyLeft}, "\x1b[D"},
+		{tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, "\x03"}, // SIGINT forwarded to the shell
+		{tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl}, "\x01"},
+		{tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl}, "\x1a"},
+		{tea.KeyPressMsg{Code: tea.KeyF5}, ""}, // unmapped → no bytes
 	}
 	for _, c := range cases {
 		if got := string(keyToBytes(c.msg)); got != c.want {
-			t.Errorf("keyToBytes(%v) = %q, want %q", c.msg.Type, got, c.want)
+			t.Errorf("keyToBytes(%v) = %q, want %q", c.msg.String(), got, c.want)
 		}
 	}
 }
@@ -168,13 +168,13 @@ func TestPTY_FocusOpenCloseCycle(t *testing.T) {
 	}
 
 	// ctrl+] (focused) → unfocus, pane stays open.
-	m, _ = step(t, m, tea.KeyMsg{Type: tea.KeyCtrlCloseBracket})
+	m, _ = step(t, m, tea.KeyPressMsg{Code: ']', Mod: tea.ModCtrl})
 	if m.pty.focused || !m.pty.open {
 		t.Fatalf("ctrl+] should unfocus but keep the pane (focus=%v open=%v)", m.pty.focused, m.pty.open)
 	}
 
 	// ctrl+] (unfocused) → close.
-	m, _ = step(t, m, tea.KeyMsg{Type: tea.KeyCtrlCloseBracket})
+	m, _ = step(t, m, tea.KeyPressMsg{Code: ']', Mod: tea.ModCtrl})
 	if m.pty.open {
 		t.Fatal("a second ctrl+] should close the pane")
 	}
@@ -184,7 +184,7 @@ func TestPTY_FocusedCapturesKeys(t *testing.T) {
 	m := withPTY()
 	m.pty.focused = true
 	// A focused terminal must not let ctrl+c quit — it returns a model, not tea.Quit.
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if _, ok := next.(Model); !ok {
 		t.Fatal("focused terminal should swallow ctrl+c (no quit)")
 	}

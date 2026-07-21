@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"sort"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )

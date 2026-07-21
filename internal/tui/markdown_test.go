@@ -27,7 +27,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
@@ -290,7 +290,7 @@ func TestNewMarkdownRenderer_ValidPalettes(t *testing.T) {
 }
 
 // TestBuildStyleConfig_NoNilPointerPanic verifies that buildStyleConfig does
-// not panic for any registered palette (a zero-value lipgloss.Color in a
+// not panic for any registered palette (a zero-value theme.Color in a
 // palette field would panic colStr only if it weren't nil-guarded).
 func TestBuildStyleConfig_NoNilPointerPanic(t *testing.T) {
 	for _, named := range theme.Palettes() {

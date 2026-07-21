@@ -12,7 +12,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )

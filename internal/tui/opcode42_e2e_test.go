@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/rotemmiz/opcode42/internal/auth"
 	"github.com/rotemmiz/opcode42/internal/bus"
@@ -231,7 +231,7 @@ func TestOpcode42Parity_PromptStreamsParts(t *testing.T) {
 	}
 	// The session view must render the streamed reply (markdown may reflow, so
 	// match a distinctive word on the ANSI-stripped frame).
-	if !strings.Contains(stripANSI(d.m.View()), "Opcode42") {
+	if !strings.Contains(stripANSI(d.m.renderView()), "Opcode42") {
 		t.Fatalf("session view missing streamed assistant text")
 	}
 	d.m.stream.Close()
@@ -266,7 +266,7 @@ func TestOpcode42Parity_PermissionRoundTrip(t *testing.T) {
 		t.Fatalf("pending permission = %+v, want bash", got)
 	}
 	// The overlay must render.
-	if !strings.Contains(stripANSI(d.m.View()), "Permission required") {
+	if !strings.Contains(stripANSI(d.m.renderView()), "Permission required") {
 		t.Fatal("permission overlay did not render")
 	}
 

@@ -5,10 +5,11 @@ import (
 	"strconv"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/hinshun/vt10x"
 
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
@@ -180,12 +181,15 @@ func (m Model) handlePTYKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // keyToBytes encodes a Bubble Tea key event as the raw bytes a terminal expects.
+//
+// bubbletea v2: a Key carries a Code rune (special keys are high PUA runes that
+// never collide with printable ASCII), the printable Text, and a Mod bitmask.
+// Special keys are matched first so Enter/Tab map to \r/\t regardless of Text;
+// then printable characters (incl. space, the old KeyRunes/KeySpace cases) are
+// forwarded verbatim; then ctrl+a..ctrl+z collapse to control bytes 0x01..0x1a.
 func keyToBytes(msg tea.KeyMsg) []byte {
-	switch msg.Type {
-	case tea.KeyRunes:
-		return []byte(string(msg.Runes))
-	case tea.KeySpace:
-		return []byte(" ")
+	k := msg.Key()
+	switch k.Code {
 	case tea.KeyEnter:
 		return []byte("\r")
 	case tea.KeyTab:
@@ -213,9 +217,13 @@ func keyToBytes(msg tea.KeyMsg) []byte {
 	case tea.KeyPgDown:
 		return []byte("\x1b[6~")
 	}
-	// ctrl+a..ctrl+z → bytes 0x01..0x1a (KeyCtrlA == 1, contiguous in bubbletea).
-	if msg.Type >= tea.KeyCtrlA && msg.Type <= tea.KeyCtrlZ {
-		return []byte{byte(msg.Type - tea.KeyCtrlA + 1)}
+	// Printable characters (letters, digits, space, …) arrive as Text.
+	if k.Text != "" {
+		return []byte(k.Text)
+	}
+	// ctrl+a..ctrl+z → bytes 0x01..0x1a.
+	if k.Mod&tea.ModCtrl != 0 && k.Code >= 'a' && k.Code <= 'z' {
+		return []byte{byte(k.Code-'a') + 1}
 	}
 	return nil
 }
@@ -259,7 +267,7 @@ const (
 // any reverse swap) plus the bold/underline/italic flags. Two adjacent cells
 // share a style run iff their cellAttrs are equal, so it is the run-batching key.
 type cellAttrs struct {
-	fg, bg                  lipgloss.Color
+	fg, bg                  theme.Color
 	colorOK                 bool
 	bold, underline, italic bool
 }
@@ -358,10 +366,10 @@ func (m Model) renderGrid(width int) string {
 
 // vtPalette pre-renders the 256 palette indices to lipgloss colors so the hot
 // render path doesn't strconv.Itoa per cell.
-var vtPalette = func() [256]lipgloss.Color {
-	var p [256]lipgloss.Color
+var vtPalette = func() [256]theme.Color {
+	var p [256]theme.Color
 	for i := range p {
-		p[i] = lipgloss.Color(strconv.Itoa(i))
+		p[i] = theme.Color(strconv.Itoa(i))
 	}
 	return p
 }()
@@ -369,7 +377,7 @@ var vtPalette = func() [256]lipgloss.Color {
 // vtColor maps a vt10x color to a lipgloss color; ok is false for the terminal
 // default (so the cell inherits the surrounding theme). vt10x emits palette
 // indices [0,256) plus the Default* sentinels (1<<24+, no truecolor).
-func vtColor(c vt10x.Color) (lipgloss.Color, bool) {
+func vtColor(c vt10x.Color) (theme.Color, bool) {
 	if c < 256 {
 		return vtPalette[c], true
 	}

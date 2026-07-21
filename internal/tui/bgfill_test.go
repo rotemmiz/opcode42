@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
@@ -86,7 +86,7 @@ func TestView_BackgroundFill(t *testing.T) {
 					// session model uses fixed 100×60 from seededSessionModel
 					m = m.applyThemeByName(tn)
 				}
-				out := m.View()
+				out := m.renderView()
 
 				// Split on newlines and check each line's visible width.
 				// We trim a trailing newline that lipgloss may add after the last row.
@@ -117,7 +117,7 @@ func TestView_NoDimensionsNoPanic(_ *testing.T) {
 		m := New(Config{URL: "http://x"})
 		m = m.applyThemeByName(tn)
 		// width==0, height==0 — should not panic, should return body unpainted.
-		_ = m.View() // any non-panic result is acceptable
+		_ = m.renderView() // any non-panic result is acceptable
 	}
 }
 
@@ -137,7 +137,7 @@ func TestView_AllThemesFullWidth(t *testing.T) {
 				m := New(Config{URL: "http://x"})
 				m.width, m.height = w, 24
 				m = m.applyThemeByName(named.Name)
-				out := m.View()
+				out := m.renderView()
 				lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 				for i, line := range lines {
 					if got := lipgloss.Width(line); got != w {

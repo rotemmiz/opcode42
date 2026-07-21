@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
@@ -484,7 +484,7 @@ func (m Model) modalView() string {
 			BorderForeground(s.P.BorderActive).
 			BorderBackground(s.P.BgElev).
 			Background(s.P.BgElev).
-			Padding(1, 2).Width(width).Render(body)
+			Padding(1, 2).Width(width + 2).Render(body) // v2: +2 for the border cols Width now includes
 		return centerScreen(m.width, m.height, panel)
 	}
 
@@ -535,7 +535,7 @@ func (m Model) modalView() string {
 		BorderBackground(s.P.BgElev).
 		Background(s.P.BgElev).
 		Padding(1, 2).
-		Width(width).
+		Width(width + 2). // v2: +2 for the border cols Width now includes
 		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 
 	return centerScreen(m.width, m.height, panel)

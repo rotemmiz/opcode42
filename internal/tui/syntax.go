@@ -42,20 +42,20 @@ import (
 	"path/filepath"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	chroma "github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
-// tokenColor returns the lipgloss.Color from p.Syntax that corresponds to the
+// tokenColor returns the theme.Color from p.Syntax that corresponds to the
 // given chroma TokenType. The TokenType hierarchy in chroma is represented by
 // integer ranges; we use In() to check each parent category in priority order.
 //
 // The mapping follows opencode's dark-theme syntax token assignment (verified
 // against design/tui/styles.css and opencode.json syntax* keys).
-func tokenColor(tt chroma.TokenType, p theme.Palette) lipgloss.Color {
+func tokenColor(tt chroma.TokenType, p theme.Palette) theme.Color {
 	sy := p.Syntax
 
 	switch {
@@ -127,7 +127,7 @@ func tokenColor(tt chroma.TokenType, p theme.Palette) lipgloss.Color {
 // specific row background tint set.
 // Used by the diff viewer to compose syntax foreground + diff row tint without
 // any gap or reset exposing terminal-default background between tokens.
-func tokenStyleBg(tt chroma.TokenType, p theme.Palette, bg lipgloss.Color) lipgloss.Style {
+func tokenStyleBg(tt chroma.TokenType, p theme.Palette, bg theme.Color) lipgloss.Style {
 	return lipgloss.NewStyle().
 		Foreground(tokenColor(tt, p)).
 		Background(bg)
@@ -197,7 +197,7 @@ func highlightCode(code, filenameOrLang string, p theme.Palette) string {
 // explicitly, so every SGR span carries the row tint. The caller also post-pads
 // the whole row to pane width using the same rowBg, covering any trailing cells
 // after the last token (see diffPatchPane).
-func highlightCodeBg(code, filenameOrLang string, p theme.Palette, rowBg lipgloss.Color) string {
+func highlightCodeBg(code, filenameOrLang string, p theme.Palette, rowBg theme.Color) string {
 	if code == "" {
 		// Return a single space on rowBg so the caller can still measure width.
 		return lipgloss.NewStyle().Background(rowBg).Foreground(p.Fg).Render(" ")

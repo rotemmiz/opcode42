@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui"
 )
@@ -35,7 +35,9 @@ func main() {
 		Theme: *themeFlag,
 	}).Restore() // restore persisted theme/model/history + enable persistence
 
-	if _, err := tea.NewProgram(model, tea.WithAltScreen()).Run(); err != nil {
+	// AltScreen (and other terminal toggles) moved from NewProgram options to
+	// fields on the View struct returned by Model.View() in bubbletea v2.
+	if _, err := tea.NewProgram(model).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "opcode-tui:", err)
 		os.Exit(1)
 	}

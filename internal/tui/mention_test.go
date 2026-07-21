@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestMentionQuery(t *testing.T) {
@@ -72,7 +72,7 @@ func TestLeader_DispatchesChords(t *testing.T) {
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	// ctrl+x then a → agents modal (+ load)
-	m, _ = step(t, m, tea.KeyMsg{Type: tea.KeyCtrlX})
+	m, _ = step(t, m, tea.KeyPressMsg{Code: 'x', Mod: tea.ModCtrl})
 	if !m.leader {
 		t.Fatal("ctrl+x should arm the leader")
 	}
@@ -93,13 +93,13 @@ func TestLeader_SidebarToggleAndUnknownKey(t *testing.T) {
 		t.Fatal("sidebar should be visible at this size")
 	}
 	// ctrl+x b toggles the sidebar off
-	m, _ = step(t, m, tea.KeyMsg{Type: tea.KeyCtrlX})
+	m, _ = step(t, m, tea.KeyPressMsg{Code: 'x', Mod: tea.ModCtrl})
 	m, _ = step(t, m, key("b"))
 	if m.sidebarVisible() {
 		t.Fatal("ctrl+x b should hide the sidebar")
 	}
 	// unknown chord is an inert no-op that clears the leader
-	m, _ = step(t, m, tea.KeyMsg{Type: tea.KeyCtrlX})
+	m, _ = step(t, m, tea.KeyPressMsg{Code: 'x', Mod: tea.ModCtrl})
 	m, _ = step(t, m, key("z"))
 	if m.leader {
 		t.Fatal("an unknown chord should still clear the leader")

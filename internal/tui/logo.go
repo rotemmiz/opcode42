@@ -29,7 +29,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
@@ -162,7 +162,7 @@ func shimmerBrightness(x int, frame int) float64 {
 	return clamp01(brightness)
 }
 
-// columnColor maps a shimmerBrightness value to a lipgloss.Color by lerping
+// columnColor maps a shimmerBrightness value to a theme.Color by lerping
 // through a three-zone brightness ramp:
 //
 //	zone 1 [0.0, 0.3): dim base      — lerp FgDim → Fg
@@ -172,7 +172,7 @@ func shimmerBrightness(x int, frame int) float64 {
 // This mirrors opencode logo.tsx's layered approach: the halo/tail pulls toward
 // theme.primary (our Accent), while the bright core stays near-white — achieved
 // in logo.tsx by tinting ink → primary first, then tinting toward PEAK (white).
-func columnColor(x int, frame int, p theme.Palette) lipgloss.Color {
+func columnColor(x int, frame int, p theme.Palette) theme.Color {
 	b := shimmerBrightness(x, frame)
 	dim := string(p.FgDim)
 	fg := string(p.Fg)

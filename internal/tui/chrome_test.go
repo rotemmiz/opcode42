@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // TestAlwaysPaintsBackground verifies that View() always wraps content in the
@@ -17,7 +17,7 @@ func TestAlwaysPaintsBackground(t *testing.T) {
 		m := New(Config{URL: "http://x"})
 		m.width, m.height = 80, 24
 		m = m.applyThemeByName(name)
-		out := m.View()
+		out := m.renderView()
 		if out == "" {
 			t.Fatalf("theme %q: View() returned empty", name)
 		}
@@ -26,7 +26,7 @@ func TestAlwaysPaintsBackground(t *testing.T) {
 	m0 := New(Config{URL: "http://x"})
 	m0.themeName = "monochrome"
 	// width==0, height==0 → no background fill, should not panic
-	_ = m0.View()
+	_ = m0.renderView()
 }
 
 // Overlays must render as clean rectangles (uniform line width, no ragged edge).

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
@@ -41,7 +41,7 @@ func TestPermission_OverlayBlocksAndReplies(t *testing.T) {
 		t.Fatal("a pending permission should be present")
 	}
 	// the overlay renders the action + detail
-	view := m.View()
+	view := m.renderView()
 	for _, want := range []string{"Permission required", "bash", "ls"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("permission overlay missing %q", want)

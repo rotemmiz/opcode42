@@ -3,8 +3,8 @@ package tui
 import (
 	"context"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
@@ -76,7 +76,7 @@ func (m Model) handleQuestionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.qSel++
 		}
 		return m, nil
-	case " ":
+	case " ", "space": // bubbletea v2: the space bar stringifies as "space"
 		if info.Multiple && m.qSel < len(m.qChecked) {
 			m.qChecked[m.qSel] = !m.qChecked[m.qSel]
 		}
@@ -199,7 +199,7 @@ func (m Model) questionView() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(s.P.Blue).
 		Padding(1, 2).
-		Width(width).
+		Width(width + 2). // v2: +2 for the border cols Width now includes
 		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 
 	if m.width == 0 || m.height == 0 {

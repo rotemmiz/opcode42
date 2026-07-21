@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
@@ -40,7 +40,7 @@ func TestQuestion_SingleSelectReplies(t *testing.T) {
 	if m.pendingQuestion() == nil {
 		t.Fatal("question should be pending")
 	}
-	view := m.View()
+	view := m.renderView()
 	for _, want := range []string{"Color", "Pick a color", "red", "green", "blue"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("overlay missing %q", want)

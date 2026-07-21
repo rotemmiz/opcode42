@@ -4,13 +4,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 func TestDefaultPaletteMatchesTokens(t *testing.T) {
 	p := Default()
-	cases := map[string]lipgloss.Color{
+	cases := map[string]Color{
 		"#15171a": p.Bg, "#1c1f23": p.BgPanel, "#20242a": p.BgElev,
 		"#d6dade": p.Fg, "#8b929a": p.FgDim,
 		"#6fa8dc": p.Blue, "#8cc265": p.Green, "#e0606e": p.Red,
@@ -74,7 +72,7 @@ func TestPaletteNoZeroTokens(t *testing.T) {
 	}
 }
 
-// checkStructNoZero reflects over a struct of lipgloss.Color fields and fails
+// checkStructNoZero reflects over a struct of Color fields and fails
 // the test for every field that is the empty-string zero value.
 func checkStructNoZero(t *testing.T, prefix string, v interface{}) {
 	t.Helper()
@@ -83,13 +81,13 @@ func checkStructNoZero(t *testing.T, prefix string, v interface{}) {
 	for i := 0; i < rv.NumField(); i++ {
 		field := rt.Field(i)
 		val := rv.Field(i).Interface()
-		color, ok := val.(lipgloss.Color)
+		color, ok := val.(Color)
 		if !ok {
 			t.Errorf("%s.%s: unexpected non-Color field type %T", prefix, field.Name, val)
 			continue
 		}
 		if color == "" {
-			t.Errorf("%s.%s is zero-value (empty lipgloss.Color)", prefix, field.Name)
+			t.Errorf("%s.%s is zero-value (empty Color)", prefix, field.Name)
 		}
 	}
 }
@@ -100,8 +98,8 @@ func TestDiffPaletteDefaultValues(t *testing.T) {
 	p := Default()
 	cases := []struct {
 		name string
-		got  lipgloss.Color
-		want lipgloss.Color
+		got  Color
+		want Color
 	}{
 		{"Diff.Added", p.Diff.Added, p.Green},
 		{"Diff.Removed", p.Diff.Removed, p.Red},
@@ -129,8 +127,8 @@ func TestMarkdownPaletteDefaultValues(t *testing.T) {
 	p := Default()
 	cases := []struct {
 		name string
-		got  lipgloss.Color
-		want lipgloss.Color
+		got  Color
+		want Color
 	}{
 		{"Markdown.Text", p.Markdown.Text, p.Fg},
 		{"Markdown.Heading", p.Markdown.Heading, p.Purple},
@@ -160,8 +158,8 @@ func TestSyntaxPaletteDefaultValues(t *testing.T) {
 	p := Default()
 	cases := []struct {
 		name string
-		got  lipgloss.Color
-		want lipgloss.Color
+		got  Color
+		want Color
 	}{
 		{"Syntax.Comment", p.Syntax.Comment, p.FgFaint},
 		{"Syntax.Keyword", p.Syntax.Keyword, p.Purple},

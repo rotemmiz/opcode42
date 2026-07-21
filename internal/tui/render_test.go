@@ -43,7 +43,7 @@ func seededSessionModel(t *testing.T) Model {
 }
 
 func TestRenderSession_ShowsAllBlockKinds(t *testing.T) {
-	out := seededSessionModel(t).View()
+	out := seededSessionModel(t).renderView()
 	// Strip ANSI escapes before substring search: prose() now renders via
 	// glamour which emits SGR codes in TTY environments.  The text content is
 	// still present; stripping lets Contains find it reliably.
@@ -104,7 +104,7 @@ func TestRenderSession_SurfacesAssistantError(t *testing.T) {
 	a.Error = &MsgError{Name: "ProviderAuthError"}
 	a.Error.Data.Message = "Google Generative AI API key is missing."
 	m.store.messages["ses_1"] = []Message{a}
-	plain := stripANSI(m.View())
+	plain := stripANSI(m.renderView())
 	for _, want := range []string{"ProviderAuthError", "API key is missing"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("assistant error not surfaced (%q) in plain output", want)
