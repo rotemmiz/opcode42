@@ -6,6 +6,12 @@ plugins {
 
 android {
     namespace = "dev.opcode42.feature.chat"
+    testOptions {
+        // Compose UI tests (QuestionCardTest, PermissionSheetTest) run under Robolectric on
+        // the JVM; they need the merged resources + a working Android build to host the
+        // Compose test rule.
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -22,4 +28,9 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.robolectric)
+    testDebugImplementation(libs.compose.ui.test.manifest)
+    testDebugImplementation(libs.compose.ui.tooling)
 }

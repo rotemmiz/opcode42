@@ -16,6 +16,7 @@ firebase-bom = "33.10.0"
 android-core-ktx = "1.16.0"
 activity-compose = "1.10.1"
 junit = "4.13.2"
+robolectric = "4.14.1"
 
 [libraries]
 # Core Android
@@ -74,8 +75,10 @@ firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 
 # Gradle plugin artifacts — consumed by the build-logic convention plugins so they
