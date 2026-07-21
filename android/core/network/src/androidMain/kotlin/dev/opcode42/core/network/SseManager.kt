@@ -211,9 +211,16 @@ class SseManager @Inject constructor(
     /**
      * Collects events for up to FLUSH_FRAME_MS, then coalesces and dispatches.
      * Mirrors server-sdk.tsx flush() — drop stale deltas superseded by a full part update.
+     *
+     * The outer loop is guarded by [running] and coroutine [isActive] so [stop] cleanly
+     * terminates the consumer: a bare `while (true)` would keep the coroutine alive across
+     * a stop→start cycle if a final event landed in [batchChannel] between the cancel and
+     * the next suspension point. The inner drain breaks on empty (it is bounded by the
+     * number of events in one 16ms window), so cancellation is checked on the next
+     * `receive`/`delay`.
      */
     private suspend fun flushLoop() {
-        while (true) {
+        while (running.get() && currentCoroutineContext().isActive) {
             // Wait for at least one event
             val first = batchChannel.receive()
             val batch = mutableListOf(first)

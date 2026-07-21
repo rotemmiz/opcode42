@@ -120,6 +120,13 @@ class ChatViewModel @Inject constructor(
     private var lastContextTokens: TokenUsage? = null
     private var lastContextLimit: Int? = null
 
+    // Cached todo list keyed by a cheap signature of the todowrite tool inputs, so the
+    // O(messages × parts) scan in [extractTodos] doesn't re-run on every SSE text delta
+    // (it fires ~60×/s during streaming, but the todo set only changes when a todowrite
+    // tool call is added or its state updates — not on every token of prose).
+    private var todosCache: List<TodoItem> = emptyList()
+    private var todosSignature: String = ""
+
     /** Lazily-fetched `/vcs/diff` patches (the heavier sibling of [_changedFiles]) for the diff
      *  viewer: fetched once on the first tapped row, reused for later taps, and invalidated on each
      *  idle refresh so a finished turn re-fetches. Guarded by [vcsDiffLock] for the read-or-fetch. */
@@ -174,7 +181,7 @@ class ChatViewModel @Inject constructor(
                 childSessionMessages = childMessages,
                 sessionStatus = snap.status,
                 retryAttempt = snap.retryAttempt,
-                todos = extractTodos(messages, snap.parts),
+                todos = memoizedTodos(messages, snap.parts),
                 agentMode = lastModelled?.mode ?: lastModelled?.agent
                     ?: messages.lastOrNull { it.mode != null }?.mode
                     ?: messages.lastOrNull { it.agent != null }?.agent,
@@ -304,16 +311,35 @@ class ChatViewModel @Inject constructor(
             // Parts are keyed by messageID (live SSE parts supersede REST-loaded parts). The repo's
             // loadDiff is idempotent and fire-and-forget; we still pre-filter already-loaded diffs
             // (from the snapshot) to avoid spawning no-op coroutines on every streaming delta.
+            //
+            // Performance: this collector fires on EVERY SSE delta (≈60/s during a turn). The
+            // original implementation iterated all messages × parts and launched a coroutine per
+            // unfilled PatchPart on every delta — burning a CPU core + hitting the diffInFlight
+            // sync lock hundreds of times a second while streaming. The auto-load only needs to
+            // run when the part set actually changes (in practice: when the session settles to
+            // idle), so we gate on the session status AND dedupe consecutive snapshots by a
+            // stable signature of the pending PatchPart messageID set.
             viewModelScope.launch {
+                var lastSignature: String? = null
                 chatRepo.observe(sessionId).collect { snap ->
+                    // Skip during active streaming — the part set is in flux, the diff fetcher
+                    // would race the stream, and launching coroutines per delta is the CPU
+                    // burn this whole guard exists to prevent. "idle"/unknown/initial load all
+                    // fall through; "busy"/"running"/"retry" are the streaming states.
+                    if (snap.status == "busy" || snap.status == "running" || snap.status == "retry") return@collect
                     val dir = snap.session?.directory ?: return@collect
-                    snap.messages.forEach { msg ->
+                    // Build the set of PatchPart messageIDs that still need a diff fetch.
+                    val pending = snap.messages.flatMap { msg ->
                         val parts = snap.parts[msg.id] ?: msg.parts
                         parts.filterIsInstance<PatchPart>()
                             .filter { it.messageID !in snap.diffs }
-                            .forEach { patch ->
-                                viewModelScope.launch { chatRepo.loadDiff(sessionId, patch.messageID, dir) }
-                            }
+                            .map { it.messageID }
+                    }.distinct()
+                    val signature = pending.joinToString(",")
+                    if (signature == lastSignature) return@collect // same parts; nothing new
+                    lastSignature = signature
+                    pending.forEach { messageId ->
+                        viewModelScope.launch { chatRepo.loadDiff(sessionId, messageId, dir) }
                     }
                 }
             }
@@ -574,6 +600,23 @@ class ChatViewModel @Inject constructor(
                 .onFailure { emitError("subagent", it) }
         }
     }
+
+    /**
+     * Memoized [extractTodos] — recomputes only when the relevant input changes, not on every
+     * SSE text delta. The signature is built from the IDs + status of `todowrite` tool parts
+     * (the only fields that affect the parsed todo list); pure-prose deltas produce the same
+     * signature and skip the O(messages × parts) scan + JSON allocation. Reads/writes
+     * [todosCache]/[todosSignature]; safe because the uiState combine runs on a single
+     * dispatcher (Dispatchers.Default) and is serialized by the StateFlow consumer.
+     */
+    private fun memoizedTodos(messages: List<Message>, parts: Map<String, List<Part>>): List<TodoItem> {
+        val sig = todosSignatureFor(messages, parts)
+        if (sig == todosSignature) return todosCache
+        val computed = extractTodos(messages, parts)
+        todosSignature = sig
+        todosCache = computed
+        return computed
+    }
 }
 
 /**
@@ -608,3 +651,18 @@ private fun extractTodos(messages: List<Message>, parts: Map<String, List<Part>>
     }
     return latest
 }
+
+/** Cheap signature of the inputs that [extractTodos] actually reads — the `todowrite`
+ *  ToolParts' (messageID, partID, status) tuples. A streaming prose delta changes none
+ *  of these, so the signature stays stable across deltas and the memoized caller skips. */
+private fun todosSignatureFor(messages: List<Message>, parts: Map<String, List<Part>>): String =
+    buildString {
+        for (msg in messages) {
+            val msgParts = parts[msg.id] ?: msg.parts
+            for (part in msgParts) {
+                if (part !is ToolPart || part.tool != "todowrite") continue
+                append(part.messageID).append(':').append(part.id).append(':')
+                    .append(part.state.status).append('|')
+            }
+        }
+    }

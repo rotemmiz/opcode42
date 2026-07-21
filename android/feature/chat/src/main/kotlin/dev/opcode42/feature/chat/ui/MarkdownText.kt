@@ -12,7 +12,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -201,11 +206,36 @@ internal fun buildInlineSpans(
 
 // ─── Composable ───────────────────────────────────────────────────────────────
 
+/**
+ * Minimum interval between re-parses while a part is actively streaming. The daemon emits
+ * `message.part.delta` per token (often tens per second), and each delta grows the TextPart's
+ * `text` — so `remember(text) { parse(text) }` re-parsed the *entire* growing markdown on
+ * every delta (60×/s of progressively larger strings), which dominated the recompose cost.
+ * The parsed blocks are only re-read when `text` crosses a throttle boundary or the part
+ * settles (`streaming = false`); the live `text` is still shown via the streaming tail
+ * (see [MarkdownText]), so the user sees every token — only the *block structure*
+ * (paragraphs/code/headers) is debounced, and the difference is invisible at streaming speed.
+ */
+private const val STREAMING_PARSE_INTERVAL_MS = 120L
+
 @Composable
-fun MarkdownText(text: String, modifier: Modifier = Modifier) {
+fun MarkdownText(text: String, modifier: Modifier = Modifier, streaming: Boolean = false) {
     // Memoize the parse: during streaming the parent recomposes on every SSE delta, and
     // re-parsing unchanged text parts each time is a hot-path allocation/CPU sink.
-    val blocks = remember(text) { parse(text) }
+    //
+    // While [streaming], we further throttle the parse to one per STREAMING_PARSE_INTERVAL_MS
+    // (and on the final settle) — see [streamingParseKey]. The structured blocks render from
+    // the throttled snapshot; any text that arrived *after* the snapshot (the streaming tail)
+    // is appended as a plain [Text] so the user sees every token — only the *block structure*
+    // (paragraphs/code/headers) is debounced, and the difference is invisible at streaming
+    // speed. Once [streaming] flips to false the parse runs immediately on the final text.
+    val parseKey = streamingParseKey(text, streaming)
+    val blocks = remember(parseKey) { parse(parseKey) }
+    // The tail is the text that arrived after the last throttled parse snapshot. It's only
+    // non-empty while streaming (settled text has parseKey == text).
+    val tail = if (streaming && text.length > parseKey.length && text.startsWith(parseKey)) {
+        text.substring(parseKey.length)
+    } else null
     Column(modifier = modifier) {
         for (block in blocks) {
             when (block) {
@@ -220,7 +250,48 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier) {
                 )
             }
         }
+        if (tail != null) {
+            // Plain Text for the just-arrived tokens; the next throttled parse will fold
+            // them into the structured view. Plain Text is much cheaper than a full block
+            // parse + span build — the whole point of the throttle.
+            Text(
+                text = tail,
+                style = dev.opcode42.core.design.theme.Opcode42Typography.bodyMedium,
+                color = OnSurface,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 1.dp),
+            )
+        }
     }
+}
+
+/**
+ * While streaming, advance the parsed-text snapshot at most once per
+ * [STREAMING_PARSE_INTERVAL_MS]. When not streaming (or on the final settle), pass [text]
+ * through unchanged so the parse reflects the complete text immediately.
+ *
+ * Implementation: a [mutableStateOf] holding the snapshot we last parsed. A side-effect
+ * [LaunchedEffect] keyed on [streaming] (NOT on `text` — re-keying on every delta would
+ * cancel the loop and defeat the throttle) polls the latest [text] via
+ * [rememberUpdatedState] + a self-feeding delay loop; while streaming it coalesces bursts
+ * of deltas into one update per interval, and on the transition to `streaming = false`
+ * it immediately snaps to the final text. This keeps the parse off the recomposition hot
+ * path — only the LaunchedEffect's poll loop runs per interval, not per delta.
+ */
+@Composable
+private fun streamingParseKey(text: String, streaming: Boolean): String {
+    var snapshot by remember { mutableStateOf(text) }
+    val latestText by rememberUpdatedState(text)
+    LaunchedEffect(streaming) {
+        if (!streaming) {
+            snapshot = latestText // settled (or never was streaming): parse the exact final text
+        } else {
+            while (true) {
+                snapshot = latestText
+                kotlinx.coroutines.delay(STREAMING_PARSE_INTERVAL_MS)
+            }
+        }
+    }
+    return snapshot
 }
 
 @Composable
