@@ -49,6 +49,7 @@ class QuestionCardTest {
         resolvedAnswers: List<List<String>>? = null,
         resolvedSkipped: Boolean = false,
         isReplying: Boolean = false,
+        pendingCount: Int = 1,
     ): Pair<MutableList<List<List<String>>>, MutableList<Unit>> {
         val replies = mutableListOf<List<List<String>>>()
         val rejects = mutableListOf<Unit>()
@@ -61,6 +62,7 @@ class QuestionCardTest {
                     onReply = { replies += it },
                     onReject = { rejects += Unit },
                     isReplying = isReplying,
+                    pendingCount = pendingCount,
                 )
             }
         }
@@ -128,6 +130,24 @@ class QuestionCardTest {
         composeRule.onNodeWithText("Skipped").assertIsDisplayed()
         composeRule.onNodeWithText("Submit").assertIsNotDisplayed()
         assertNull(replies.firstOrNull())
+        assertEquals(0, rejects.size)
+    }
+
+    @Test
+    fun pendingCountGreaterThanOne_showsOneOfNBadge() {
+        render(question(listOf(singleSelect(listOf("opt1")))), pendingCount = 2)
+        composeRule.onNodeWithText("1 of 2").assertIsDisplayed()
+    }
+
+    @Test
+    fun isReplying_disablesSubmitAndSkip() {
+        // PR 1.6 — the double-tap guard: Submit/Skip are disabled while a reply is in
+        // flight, so a second tap before the REST round-trip lands fires no extra reply.
+        val (replies, rejects) = render(question(listOf(singleSelect(listOf("opt1")))), isReplying = true)
+        composeRule.onNodeWithText("opt1").performClick()
+        composeRule.onNodeWithText("Submit").performClick()
+        composeRule.onNodeWithText("Skip").performClick()
+        assertEquals(0, replies.size)
         assertEquals(0, rejects.size)
     }
 }

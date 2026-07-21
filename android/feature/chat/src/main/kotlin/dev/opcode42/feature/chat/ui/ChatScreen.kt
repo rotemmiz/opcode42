@@ -162,6 +162,24 @@ fun ChatScreen(
     val resolvedQuestions = remember { mutableStateMapOf<String, List<List<String>>>() }
     val skippedQuestions = remember { mutableStateMapOf<String, Boolean>() }
 
+    // PR 1.6 — Double-tap guard: the request id a reply is currently in-flight for, or null.
+    // Set synchronously on tap (so a second tap before the network round-trip lands is a
+    // no-op via `isReplying`), and cleared once the corresponding pending entry is gone from
+    // the store — which happens on the reply's SSE confirmation, the optimistic clear, or
+    // the 404-swallow path (PR 1.3) when the request was already resolved server-side.
+    var replyingPermission by remember { mutableStateOf<String?>(null) }
+    var replyingQuestion by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(uiState.pendingPermissions) {
+        if (replyingPermission != null && uiState.pendingPermissions.none { it.id == replyingPermission }) {
+            replyingPermission = null
+        }
+    }
+    LaunchedEffect(uiState.pendingQuestions) {
+        if (replyingQuestion != null && uiState.pendingQuestions.none { it.id == replyingQuestion }) {
+            replyingQuestion = null
+        }
+    }
+
     val sessionDirectory = uiState.session?.directory
     var showInfoSheet by remember { mutableStateOf(false) }
     var showOverflow by remember { mutableStateOf(false) }
@@ -577,13 +595,16 @@ fun ChatScreen(
                                     resolvedSkipped = skippedQuestions.contains(pendingQuestion!!.id),
                                     onReply = { answers ->
                                         resolvedQuestions[pendingQuestion!!.id] = answers
+                                        replyingQuestion = pendingQuestion!!.id
                                         viewModel.replyQuestion(pendingQuestion!!.id, answers)
                                     },
                                     onReject = {
                                         skippedQuestions[pendingQuestion!!.id] = true
+                                        replyingQuestion = pendingQuestion!!.id
                                         viewModel.rejectQuestion(pendingQuestion!!.id)
                                     },
-                                    isReplying = false, // PR 1.6 wires this
+                                    isReplying = replyingQuestion == pendingQuestion!!.id,
+                                    pendingCount = uiState.pendingQuestions.size,
                                 )
                             }
                         }
@@ -641,8 +662,12 @@ fun ChatScreen(
         pendingPermission?.let { req ->
             PermissionSheet(
                 permission = req,
-                onReply = { reply, message -> viewModel.replyPermission(req.id, reply, message) },
-                isReplying = false, // PR 1.6 wires this
+                onReply = { reply, message ->
+                    replyingPermission = req.id
+                    viewModel.replyPermission(req.id, reply, message)
+                },
+                isReplying = replyingPermission == req.id,
+                pendingCount = uiState.pendingPermissions.size,
             )
         }
 

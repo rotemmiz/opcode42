@@ -1,5 +1,8 @@
 package dev.opcode42.feature.chat.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -131,5 +134,67 @@ class PermissionSheetTest {
         render(permission(), isReplying = true)
         composeRule.onNodeWithText("Send feedback with deny").assertDoesNotExist()
         composeRule.onNodeWithText("Send").assertDoesNotExist()
+    }
+
+    @Test
+    fun doubleTapDeny_firesOnReplyExactlyOnceWhenIsReplyingFlipsOnFirstTap() {
+        // PR 1.6 — the double-tap guard: the caller sets `isReplying` synchronously on the
+        // first tap (before the REST round-trip lands), so a second tap before the sheet
+        // clears lands on a disabled Deny/Send and fires no extra reply. This test models
+        // the ChatScreen wiring: onReply sets the replying id, which drives isReplying true,
+        // which disables all buttons until the caller clears it. PR 3.4's deny-with-feedback
+        // flow: the first Deny tap expands the feedback field (no reply); Send fires the
+        // reply, which flips isReplying true and replaces Send with a spinner — so a second
+        // Send tap finds no node and fires nothing.
+        val replies = mutableListOf<Pair<String, String?>>()
+        var replying by mutableStateOf(false)
+        composeRule.setContent {
+            Opcode42Theme {
+                PermissionSheetContent(
+                    permission = permission(),
+                    onReply = { reply, message ->
+                        replies += reply to message
+                        replying = true
+                    },
+                    isReplying = replying,
+                )
+            }
+        }
+        composeRule.onNodeWithText("Deny").performClick()
+        composeRule.onNodeWithText("Send").performClick()
+        // isReplying is now true → the Send button is replaced by a spinner. The "Send"
+        // text is gone, so a second tap cannot land — only one reply was fired.
+        composeRule.onNodeWithText("Send").assertDoesNotExist()
+        org.junit.Assert.assertEquals(listOf("reject" to null), replies)
+    }
+
+    @Test
+    fun pendingCountGreaterThanOne_showsOneOfNBadge() {
+        composeRule.setContent {
+            Opcode42Theme {
+                PermissionSheetContent(
+                    permission = permission(),
+                    onReply = { _, _ -> },
+                    isReplying = false,
+                    pendingCount = 2,
+                )
+            }
+        }
+        composeRule.onNodeWithText("1 of 2").assertIsDisplayed()
+    }
+
+    @Test
+    fun pendingCountOne_omitsBadge() {
+        composeRule.setContent {
+            Opcode42Theme {
+                PermissionSheetContent(
+                    permission = permission(),
+                    onReply = { _, _ -> },
+                    isReplying = false,
+                    pendingCount = 1,
+                )
+            }
+        }
+        composeRule.onNodeWithText("1 of 1").assertDoesNotExist()
     }
 }

@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -70,6 +72,7 @@ fun SessionPendingActions(
     onReply: (List<List<String>>) -> Unit,
     onSkip: () -> Unit,
     modifier: Modifier = Modifier,
+    isReplying: Boolean = false,
 ) {
     val buttonPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
     when {
@@ -97,15 +100,37 @@ fun SessionPendingActions(
                         onClick = onDeny,
                         modifier = Modifier.weight(1f).heightIn(min = 34.dp),
                         contentPadding = buttonPadding,
+                        enabled = !isReplying,
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error,
                         ),
-                    ) { Text("Deny", fontSize = 13.sp) }
+                    ) {
+                        if (isReplying) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        } else {
+                            Text("Deny", fontSize = 13.sp)
+                        }
+                    }
                     Button(
                         onClick = onApprove,
                         modifier = Modifier.weight(1f).heightIn(min = 34.dp),
                         contentPadding = buttonPadding,
-                    ) { Text("Approve", fontSize = 13.sp) }
+                        enabled = !isReplying,
+                    ) {
+                        if (isReplying) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        } else {
+                            Text("Approve", fontSize = 13.sp)
+                        }
+                    }
                 }
             }
         }
@@ -120,6 +145,7 @@ fun SessionPendingActions(
                     buttonPadding = buttonPadding,
                     onReply = onReply,
                     onSkip = onSkip,
+                    isReplying = isReplying,
                 )
                 return
             }
@@ -131,6 +157,7 @@ fun SessionPendingActions(
                     buttonPadding = buttonPadding,
                     onReply = onReply,
                     onSkip = onSkip,
+                    isReplying = isReplying,
                 )
             } else {
                 // No-options / custom-only: free-text field + Reply / Skip.
@@ -140,6 +167,7 @@ fun SessionPendingActions(
                     buttonPadding = buttonPadding,
                     onReply = onReply,
                     onSkip = onSkip,
+                    isReplying = isReplying,
                 )
             }
         }
@@ -161,6 +189,7 @@ private fun StructuredQuestionActions(
     buttonPadding: PaddingValues,
     onReply: (List<List<String>>) -> Unit,
     onSkip: () -> Unit,
+    isReplying: Boolean,
 ) {
     val multiple = info.multiple == true
     val multiQuestion = question.questions.size > 1
@@ -193,12 +222,14 @@ private fun StructuredQuestionActions(
                     FilterChip(
                         selected = opt.label in selected,
                         onClick = {
+                            if (isReplying) return@FilterChip
                             if (opt.label in selected) {
                                 selected.remove(opt.label)
                             } else {
                                 selected.add(opt.label)
                             }
                         },
+                        enabled = !isReplying,
                         label = { Text(opt.label, fontSize = 12.5.sp, maxLines = 1) },
                     )
                 }
@@ -209,13 +240,24 @@ private fun StructuredQuestionActions(
                     onClick = onSkip,
                     modifier = Modifier.weight(1f).heightIn(min = 34.dp),
                     contentPadding = buttonPadding,
+                    enabled = !isReplying,
                 ) { Text("Skip", fontSize = 13.sp) }
                 Button(
                     onClick = { onReply(menuMultiSelectSubmitReply(selected.toList())) },
                     modifier = Modifier.weight(1f).heightIn(min = 34.dp),
                     contentPadding = buttonPadding,
-                    enabled = selected.isNotEmpty(),
-                ) { Text("Submit", fontSize = 13.sp) }
+                    enabled = !isReplying && selected.isNotEmpty(),
+                ) {
+                    if (isReplying) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Text("Submit", fontSize = 13.sp)
+                    }
+                }
             }
         } else {
             info.options.forEach { opt ->
@@ -225,6 +267,7 @@ private fun StructuredQuestionActions(
                         .fillMaxWidth()
                         .heightIn(min = 34.dp),
                     contentPadding = buttonPadding,
+                    enabled = !isReplying,
                 ) { Text(opt.label, fontSize = 13.sp, maxLines = 1) }
                 Spacer(Modifier.height(4.dp))
             }
@@ -233,7 +276,18 @@ private fun StructuredQuestionActions(
                     onClick = onSkip,
                     modifier = Modifier.weight(1f).heightIn(min = 34.dp),
                     contentPadding = buttonPadding,
-                ) { Text("Skip", fontSize = 13.sp) }
+                    enabled = !isReplying,
+                ) {
+                    if (isReplying) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    } else {
+                        Text("Skip", fontSize = 13.sp)
+                    }
+                }
             }
         }
     }
@@ -251,6 +305,7 @@ private fun FreeTextQuestionActions(
     buttonPadding: PaddingValues,
     onReply: (List<List<String>>) -> Unit,
     onSkip: () -> Unit,
+    isReplying: Boolean,
 ) {
     var answer by rememberSaveable(label) { mutableStateOf("") }
     Column(modifier.fillMaxWidth()) {
@@ -270,6 +325,7 @@ private fun FreeTextQuestionActions(
             modifier = Modifier.fillMaxWidth(),
             minLines = 1,
             maxLines = 3,
+            enabled = !isReplying,
         )
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -277,13 +333,24 @@ private fun FreeTextQuestionActions(
                 onClick = onSkip,
                 modifier = Modifier.weight(1f).heightIn(min = 34.dp),
                 contentPadding = buttonPadding,
+                enabled = !isReplying,
             ) { Text("Skip", fontSize = 13.sp) }
             Button(
                 onClick = { onReply(menuFreeTextReply(answer)) },
                 modifier = Modifier.weight(1f).heightIn(min = 34.dp),
                 contentPadding = buttonPadding,
-                enabled = answer.isNotBlank(),
-            ) { Text("Reply", fontSize = 13.sp) }
+                enabled = !isReplying && answer.isNotBlank(),
+            ) {
+                if (isReplying) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Text("Reply", fontSize = 13.sp)
+                }
+            }
         }
     }
 }

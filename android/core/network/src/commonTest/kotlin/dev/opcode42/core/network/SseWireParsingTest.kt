@@ -256,6 +256,20 @@ class SseWireParsingTest {
     }
 
     @Test
+    fun `session_idle maps to SessionStatus idle`() {
+        // E18: the deprecated `session.idle` event (still emitted by some daemons)
+        // falls through to Unknown without an explicit branch; map it to the same
+        // SessionStatus(idle) that `session.status` with `type:"idle"` produces.
+        val raw = sse("session.idle", """{"sessionID":"ses_1"}""")
+        val ev = parser.parse(raw)
+        assertTrue(ev is AppEvent.SessionStatus)
+        ev as AppEvent.SessionStatus
+        assertEquals("ses_1", ev.sessionId)
+        assertEquals("idle", ev.status)
+        assertNull(ev.retryAttempt)
+    }
+
+    @Test
     fun `permission_asked decodes request directly from properties`() {
         // EventPermissionAsked.properties IS the PermissionRequest — wire shape per
         // packages/schema/src/v1/permission.ts (id, sessionID, permission, patterns,
