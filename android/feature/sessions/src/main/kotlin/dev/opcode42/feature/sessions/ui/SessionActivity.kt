@@ -11,13 +11,16 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -51,7 +54,9 @@ fun SessionStatusSpinner(status: String?, modifier: Modifier = Modifier) {
  * Inline, in-menu affordance for a session that needs the user — surfaced directly
  * in the sessions list so it can be answered without opening that session:
  *  - a pending **permission** renders compact Approve / Deny buttons,
- *  - a pending **question** (free-text) renders a small text field + Reply / Skip.
+ *  - a pending **question** with options renders each option label as a quick
+ *    single-tap reply (single-select) or toggle chips + Submit (multi-select);
+ *    a no-options / `custom`-only question keeps the free-text field + Reply / Skip.
  *
  * Renders nothing when neither is present. Callers place this below the row's
  * clickable title so tapping a button doesn't also open the session.
@@ -62,7 +67,7 @@ fun SessionPendingActions(
     question: QuestionRequest?,
     onApprove: () -> Unit,
     onDeny: () -> Unit,
-    onReply: (String) -> Unit,
+    onReply: (List<List<String>>) -> Unit,
     onSkip: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -105,42 +110,213 @@ fun SessionPendingActions(
             }
         }
         question != null -> {
-            // rememberSaveable so a half-typed answer survives the row scrolling out of
-            // the LazyColumn (or a config change) — the menu is the point of answering here.
-            var answer by rememberSaveable(question.id) { mutableStateOf("") }
-            Column(modifier.fillMaxWidth()) {
-                Text(
-                    text = question.message ?: "The agent has a question",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
+            val info = question.questions.firstOrNull()
+            if (info == null) {
+                // Degenerate: no structured questions. Keep a free-text fallback so the
+                // user can still answer from the menu.
+                FreeTextQuestionActions(
+                    label = question.message ?: "The agent has a question",
+                    modifier = modifier,
+                    buttonPadding = buttonPadding,
+                    onReply = onReply,
+                    onSkip = onSkip,
                 )
-                Spacer(Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = answer,
-                    onValueChange = { answer = it },
-                    placeholder = { Text("Your answer", fontSize = 13.sp) },
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 1,
-                    maxLines = 3,
+                return
+            }
+            if (info.options.isNotEmpty()) {
+                StructuredQuestionActions(
+                    question = question,
+                    info = info,
+                    modifier = modifier,
+                    buttonPadding = buttonPadding,
+                    onReply = onReply,
+                    onSkip = onSkip,
                 )
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = onSkip,
-                        modifier = Modifier.weight(1f).heightIn(min = 34.dp),
-                        contentPadding = buttonPadding,
-                    ) { Text("Skip", fontSize = 13.sp) }
-                    Button(
-                        onClick = { onReply(answer) },
-                        modifier = Modifier.weight(1f).heightIn(min = 34.dp),
-                        contentPadding = buttonPadding,
-                        enabled = answer.isNotBlank(),
-                    ) { Text("Reply", fontSize = 13.sp) }
-                }
+            } else {
+                // No-options / custom-only: free-text field + Reply / Skip.
+                FreeTextQuestionActions(
+                    label = info.question.ifBlank { "The agent has a question" },
+                    modifier = modifier,
+                    buttonPadding = buttonPadding,
+                    onReply = onReply,
+                    onSkip = onSkip,
+                )
             }
         }
     }
 }
+
+/**
+ * Structured question with option labels: single-select renders each label as a
+ * one-tap quick reply; multi-select renders toggle chips + Submit (and Skip).
+ * The menu only handles the first question; a multi-question request shows a
+ * "N questions — open session to answer all" hint above the first question's
+ * options so the user knows to open the session for the rest.
+ */
+@Composable
+private fun StructuredQuestionActions(
+    question: QuestionRequest,
+    info: dev.opcode42.core.model.QuestionInfo,
+    modifier: Modifier,
+    buttonPadding: PaddingValues,
+    onReply: (List<List<String>>) -> Unit,
+    onSkip: () -> Unit,
+) {
+    val multiple = info.multiple == true
+    val multiQuestion = question.questions.size > 1
+    // Per-tap selections for multi-select. A SnapshotStateList (observed on add/remove) so
+    // toggling a chip recomposes the chips + the Submit enable state. Keyed by the request
+    // id + question text so a re-shown sheet for a new request starts fresh.
+    val selected = remember(question.id, info.question) { mutableStateListOf<String>() }
+    Column(modifier.fillMaxWidth()) {
+        if (multiQuestion) {
+            Text(
+                text = "${question.questions.size} questions — open session to answer all",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+        }
+        Text(
+            text = info.question.ifBlank { "The agent has a question" },
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(6.dp))
+        if (multiple) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                info.options.forEach { opt ->
+                    FilterChip(
+                        selected = opt.label in selected,
+                        onClick = {
+                            if (opt.label in selected) {
+                                selected.remove(opt.label)
+                            } else {
+                                selected.add(opt.label)
+                            }
+                        },
+                        label = { Text(opt.label, fontSize = 12.5.sp, maxLines = 1) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = onSkip,
+                    modifier = Modifier.weight(1f).heightIn(min = 34.dp),
+                    contentPadding = buttonPadding,
+                ) { Text("Skip", fontSize = 13.sp) }
+                Button(
+                    onClick = { onReply(menuMultiSelectReply(selected.toList())!!) },
+                    modifier = Modifier.weight(1f).heightIn(min = 34.dp),
+                    contentPadding = buttonPadding,
+                    enabled = selected.isNotEmpty(),
+                ) { Text("Submit", fontSize = 13.sp) }
+            }
+        } else {
+            info.options.forEach { opt ->
+                OutlinedButton(
+                    onClick = { onReply(menuSingleSelectReply(opt.label)) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 34.dp),
+                    contentPadding = buttonPadding,
+                ) { Text(opt.label, fontSize = 13.sp, maxLines = 1) }
+                Spacer(Modifier.height(4.dp))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = onSkip,
+                    modifier = Modifier.weight(1f).heightIn(min = 34.dp),
+                    contentPadding = buttonPadding,
+                ) { Text("Skip", fontSize = 13.sp) }
+            }
+        }
+    }
+}
+
+/**
+ * Free-text question (no options / custom-only / degenerate): an `OutlinedTextField`
+ * + Reply / Skip. `rememberSaveable` keyed by the label so a half-typed answer
+ * survives the row scrolling out of the LazyColumn.
+ */
+@Composable
+private fun FreeTextQuestionActions(
+    label: String,
+    modifier: Modifier,
+    buttonPadding: PaddingValues,
+    onReply: (List<List<String>>) -> Unit,
+    onSkip: () -> Unit,
+) {
+    var answer by rememberSaveable(label) { mutableStateOf("") }
+    Column(modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(6.dp))
+        OutlinedTextField(
+            value = answer,
+            onValueChange = { answer = it },
+            placeholder = { Text("Your answer", fontSize = 13.sp) },
+            textStyle = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 1,
+            maxLines = 3,
+        )
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = onSkip,
+                modifier = Modifier.weight(1f).heightIn(min = 34.dp),
+                contentPadding = buttonPadding,
+            ) { Text("Skip", fontSize = 13.sp) }
+            Button(
+                onClick = { onReply(menuFreeTextReply(answer)) },
+                modifier = Modifier.weight(1f).heightIn(min = 34.dp),
+                contentPadding = buttonPadding,
+                enabled = answer.isNotBlank(),
+            ) { Text("Reply", fontSize = 13.sp) }
+        }
+    }
+}
+
+/**
+ * Build the `List<List<String>>` answers shape the wire contract expects
+ * (`{ answers: string[][] }`) from the menu's quick reply. The menu only answers
+ * the first question, so the outer list has exactly one inner list of labels.
+ * Pure so it can be unit-tested without a Compose test rule.
+ */
+internal fun buildMenuQuestionReply(labels: List<String>): List<List<String>> = listOf(labels)
+
+/**
+ * The menu's reply for a single-select option tap — one label, wrapped as a
+ * single-element outer list. Pure so the single-tap quick-reply behavior is
+ * unit-testable.
+ */
+internal fun menuSingleSelectReply(label: String): List<List<String>> = buildMenuQuestionReply(listOf(label))
+
+/**
+ * The menu's reply for a multi-select Submit — the selected labels (in the order
+ * the user toggled them), wrapped as a single-element outer list. Pure so the
+ * multi-select submit behavior is unit-testable. Returns null when nothing is
+ * selected (Submit is disabled in that case; this lets a test assert "no reply
+ * fired").
+ */
+internal fun menuMultiSelectReply(selected: List<String>): List<List<String>>? =
+    if (selected.isEmpty()) null else buildMenuQuestionReply(selected)
+
+/**
+ * The menu's reply for the free-text field — the typed text, wrapped as a
+ * single-element outer list. The caller gates on `text.isNotBlank()` (the Reply
+ * button is disabled when blank). Pure so the free-text reply behavior is
+ * unit-testable.
+ */
+internal fun menuFreeTextReply(text: String): List<List<String>> = buildMenuQuestionReply(listOf(text))

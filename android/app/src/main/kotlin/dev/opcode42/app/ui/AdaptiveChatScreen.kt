@@ -278,8 +278,8 @@ fun AdaptiveChatScreen(
                 onFork = { id -> sessionListViewModel.forkSession(id) { onNavigateToSession(it.id) } },
                 onDelete = sessionListViewModel::deleteSession,
                 onReplyPermission = { id, reply -> sessionListViewModel.replyPermission(id, reply) },
-                onReplyQuestion = { id, answer ->
-                    sessionListViewModel.replyQuestion(id, listOf(listOf(answer)))
+                onReplyQuestion = { id, answers ->
+                    sessionListViewModel.replyQuestion(id, answers)
                 },
                 onSkipQuestion = sessionListViewModel::rejectQuestion,
                 onCollapse = onCollapse,
@@ -507,7 +507,7 @@ internal fun NavRailPane(
     onFork: (String) -> Unit,
     onDelete: (String) -> Unit,
     onReplyPermission: (String, String) -> Unit,
-    onReplyQuestion: (String, String) -> Unit,
+    onReplyQuestion: (String, List<List<String>>) -> Unit,
     onSkipQuestion: (String) -> Unit,
     onCollapse: () -> Unit,
     onExpand: () -> Unit,
