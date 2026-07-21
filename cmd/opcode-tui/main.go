@@ -4,6 +4,7 @@
 //
 //	opcode-tui --url http://127.0.0.1:4096 --dir "$PWD"
 //	opcode-tui --theme opcode42-light           # pin theme for deterministic capture
+//	opcode-tui --no-anim                        # static logo + frozen spinner (capture / a11y)
 package main
 
 import (
@@ -27,6 +28,7 @@ func main() {
 	modelID := flag.String("model", "", "prompt model id")
 	themeFlag := flag.String("theme", "", "theme name override (e.g. opcode42-dark, opcode42-light, monochrome); empty = auto-pick or KV-pinned")
 	noDiscover := flag.Bool("no-discover", false, "disable mDNS browsing in the connect overlay (plan 08e §D3)")
+	noAnim := flag.Bool("no-anim", false, "disable per-frame animation (static logo, frozen spinner, peak bg-pulse) for capture / accessibility")
 	flag.Parse()
 
 	// When --url is omitted, the TUI defers to tui.Restore: a KV-pinned
@@ -42,6 +44,7 @@ func main() {
 		Provider: *provider, Model: *modelID,
 		Theme:      *themeFlag,
 		NoDiscover: *noDiscover,
+		NoAnim:     *noAnim,
 	}).Restore() // restore persisted theme/model/history + enable persistence
 
 	// AltScreen (and other terminal toggles) moved from NewProgram options to

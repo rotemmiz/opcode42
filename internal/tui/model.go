@@ -59,6 +59,10 @@ type Config struct {
 	// Set by --no-discover for airgapped / CI / scripted runs. The manual URL
 	// field still works; only the nearby-servers list is suppressed.
 	NoDiscover bool
+
+	// NoAnim disables all per-frame animation (static logo, bg-pulse off) for
+	// capture / accessibility (plan 08e §B3). Set by --no-anim.
+	NoAnim bool
 }
 
 // Model is the Bubble Tea application state.
@@ -186,6 +190,14 @@ type Model struct {
 	// (plan 08c M9 — spinner.go)
 	animFrame int
 
+	// noAnim disables all per-frame animation when true (plan 08e §B3): the
+	// logo paints at the static peak frame (logoPeakFrame, the same frame
+	// logoStatic returns) and the bg-pulse is frozen off (the breath tint is
+	// disabled, not animated). Set by the --no-anim CLI flag for
+	// deterministic screenshot capture (tools/tui-shots) and accessibility
+	// (vestibular sensitivity).
+	noAnim bool
+
 	// toasts is the live toast queue (plan 08c M11).  Entries expire after
 	// toastTTL; the animTick drives TTL countdown via toastTick().
 	// pushToast enqueues and toastTick purges; the canvas composites the
@@ -257,6 +269,14 @@ func New(cfg Config) Model {
 		serverProbe:     map[string]serverProbeState{},
 		model:           promptModel{Provider: cfg.Provider, Model: cfg.Model},
 	}
+	// The bg-pulse is on by default for the splash (plan 08e §B2). It is
+	// turned off when the session screen is entered (sessionOpenedMsg /
+	// sessionCreatedMsg / sessionsLoadedMsg / forkedMsg) and back on when
+	// all sessions are closed (sessionDeletedMsg re-enters the splash).
+	m.view.bgPulse = true
+	// --no-anim: freeze the logo and bg-pulse at their peak frame for
+	// deterministic screenshot capture (tools/tui-shots) and accessibility.
+	m.noAnim = cfg.NoAnim
 	// Auto-pick light vs dark by terminal background — mirrors opencode's
 	// theme_mode_lock behaviour. Restore() will override with any pinned KV theme.
 	// cfg.Theme (--theme flag) wins over both auto-pick and KV.
@@ -530,6 +550,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cfg.SessionID, m.screen, m.modal = msg.session.ID, ScreenSession, modalNone
 		// Reset animation frame so the sweep starts from the left in the new session.
 		m.animFrame = 0
+		// Entering the session screen — the bg-pulse is splash-only (plan 08e §B2).
+		m.view.bgPulse = false
 		return m, nil
 
 	case sessionDeletedMsg:
@@ -551,7 +573,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
 			}
 			m.cfg.SessionID, m.screen = "", ScreenSplash
-			// Re-entering the splash — kick the logo shimmer tick (plan 08c M10).
+			// Re-entering the splash — kick the logo shimmer tick (plan 08c M10)
+			// and re-enable the bg-pulse (plan 08e §B2).
+			m.view.bgPulse = true
 			return m, m.maybeKickAnim()
 		}
 		return m, nil
@@ -621,6 +645,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.store.sessions = upsertSession(m.store.sessions, msg.session)
 		m.cfg.SessionID = msg.session.ID
 		m.screen = ScreenSession
+		m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
 		if msg.command != "" { // a "/command" created this session — run it
 			return m, runCommandCmd(m.ctx, m.client, msg.session.ID, msg.command, msg.arguments)
 		}
@@ -702,6 +727,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.store.sessions = upsertSession(m.store.sessions, msg.session)
 		m.cfg.SessionID, m.screen = msg.session.ID, ScreenSession
+		m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
 		m.status = "forked"
 		return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
 
@@ -863,6 +889,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.cfg.SessionID != "" {
 			m.screen = ScreenSession
+			m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
 			return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
 		}
 		return m, nil

@@ -350,3 +350,160 @@ func TestColumnColorDark(t *testing.T) {
 		}
 	}
 }
+
+// ── logoStatic (plan 08e §B3) ──────────────────────────────────────────────────
+
+// TestLogoStatic_BrightestFrame asserts that logoStatic returns the same row
+// count as logoFrame at the peak frame, and that its text content matches the
+// padded glyph rows (the shimmer only changes colors, never text). logoStatic
+// is the deterministic, non-animated render used by --no-anim and captures.
+func TestLogoStatic_BrightestFrame(t *testing.T) {
+	p := theme.Default()
+	static := logoStatic(p)
+	animated := logoFrame(logoPeakFrame, p)
+	if len(static) != len(animated) {
+		t.Errorf("logoStatic row count %d != logoFrame(peak) row count %d", len(static), len(animated))
+	}
+	if len(static) != len(opcode42Glyph) {
+		t.Errorf("logoStatic row count %d != glyph row count %d", len(static), len(opcode42Glyph))
+	}
+	// logoStatic must equal logoFrame at the peak frame (it's defined as that call).
+	for i := range static {
+		if static[i] != animated[i] {
+			t.Errorf("logoStatic row %d != logoFrame(peak) row %d:\n static: %q\n anim:   %q", i, i, static[i], animated[i])
+		}
+	}
+	// Stripped text must equal the padded glyph rows.
+	for i, row := range static {
+		plain := stripANSI(row)
+		want := opcode42Glyph[i]
+		for len([]rune(want)) < logoWidth {
+			want += " "
+		}
+		if plain != want {
+			t.Errorf("logoStatic row %d text mismatch:\n got:  %q\n want: %q", i, plain, want)
+		}
+	}
+}
+
+// TestLogoStatic_Deterministic asserts that logoStatic is a pure function —
+// same palette always yields the same output. Required for deterministic
+// screenshot capture (tools/tui-shots).
+func TestLogoStatic_Deterministic(t *testing.T) {
+	p := theme.Default()
+	a := logoStatic(p)
+	b := logoStatic(p)
+	for i := range a {
+		if a[i] != b[i] {
+			t.Errorf("logoStatic not deterministic: row %d differs on repeat calls", i)
+		}
+	}
+}
+
+// TestLogoStatic_AllPalettes asserts logoStatic produces valid output (5 rows,
+// correct text) on every registered palette — the static render must work on
+// light, dark, and mono themes for captures in all modes.
+func TestLogoStatic_AllPalettes(t *testing.T) {
+	for _, named := range theme.Palettes() {
+		static := logoStatic(named.Palette)
+		if len(static) != len(opcode42Glyph) {
+			t.Errorf("palette=%s: logoStatic row count %d, want %d", named.Name, len(static), len(opcode42Glyph))
+			continue
+		}
+		for i, row := range static {
+			plain := stripANSI(row)
+			want := opcode42Glyph[i]
+			for len([]rune(want)) < logoWidth {
+				want += " "
+			}
+			if plain != want {
+				t.Errorf("palette=%s row %d text mismatch: got %q want %q", named.Name, i, plain, want)
+			}
+		}
+	}
+}
+
+// ── breathAt / bgPulseColor (plan 08e §B2) ─────────────────────────────────────
+
+// TestBreathAt_Range asserts that breathAt always returns a value in
+// [breathBase, breathBase+ambientAmp] ⊂ [0,1] for any frame. The breath is the
+// ambient floor (0.04) plus the ambient bell (peak 0.36), so the range is
+// [0.04, 0.40].
+func TestBreathAt_Range(t *testing.T) {
+	const breathBase = 0.04
+	const ambientAmp = 0.36
+	for frame := 0; frame < shimmerPeriodFrames*2; frame++ {
+		b := breathAt(frame)
+		if b < 0 || b > 1 {
+			t.Errorf("breathAt(%d) = %.6f outside [0,1]", frame, b)
+		}
+		if b < breathBase-1e-9 {
+			t.Errorf("breathAt(%d) = %.6f below breathBase %.2f", frame, b, breathBase)
+		}
+		if b > breathBase+ambientAmp+1e-9 {
+			t.Errorf("breathAt(%d) = %.6f above breathBase+ambientAmp %.2f", frame, b, breathBase+ambientAmp)
+		}
+	}
+}
+
+// TestBreathAt_PeakAtMidSpan asserts the breath peaks at the mid-span frame
+// (phase = ambientCenter = 0.5 → frame = 23 of 46), where the ambient bell is
+// maximal. This is the "synchronized to the shimmer period" guarantee: the
+// bg-pulse breathes in lockstep with the shimmer sweep (both peak at frame 23).
+func TestBreathAt_PeakAtMidSpan(t *testing.T) {
+	peak := breathAt(logoPeakFrame)
+	floor := breathAt(0)
+	if peak <= floor {
+		t.Errorf("breath at peak frame %d (%.4f) should exceed floor frame 0 (%.4f)", logoPeakFrame, peak, floor)
+	}
+	// The peak should be the maximum across the whole period.
+	for frame := 0; frame < shimmerPeriodFrames; frame++ {
+		b := breathAt(frame)
+		if b > peak+1e-9 {
+			t.Errorf("breathAt(%d) = %.4f exceeds peak breathAt(%d) = %.4f", frame, b, logoPeakFrame, peak)
+		}
+	}
+}
+
+// TestBreathAt_Periodic asserts the breath is periodic with the shimmer period:
+// frame N and N+shimmerPeriodFrames produce the same breath value.
+func TestBreathAt_Periodic(t *testing.T) {
+	for _, frame := range []int{0, 7, 15, 23, 30} {
+		b1 := breathAt(frame)
+		b2 := breathAt(frame + shimmerPeriodFrames)
+		if b1 != b2 {
+			t.Errorf("breathAt not periodic: %d=%.6f vs %d=%.6f", frame, b1, frame+shimmerPeriodFrames, b2)
+		}
+	}
+}
+
+// TestBgPulseColor_SubtleTint asserts that bgPulseColor returns a color that
+// differs from the plain Bg at the peak breath frame (the tint is applied)
+// and equals the plain Bg only when the breath is at its floor (a no-op tint
+// at the quietest frame is acceptable — the pulse is "subtle").
+func TestBgPulseColor_SubtleTint(t *testing.T) {
+	p := theme.Default()
+	peak := bgPulseColor(logoPeakFrame, p)
+	if peak == p.Bg {
+		t.Errorf("bgPulseColor at peak frame == plain Bg %s (no tint applied)", p.Bg)
+	}
+	// The tint should be a lerp toward the accent, so it must be a valid hex.
+	s := string(peak)
+	if !strings.HasPrefix(s, "#") || len(s) != 7 {
+		t.Errorf("bgPulseColor(peak) invalid hex: %q", s)
+	}
+}
+
+// TestBgPulseColor_AllPalettes asserts bgPulseColor produces a valid hex color
+// on every registered palette (the bg-pulse must not break light/mono themes).
+func TestBgPulseColor_AllPalettes(t *testing.T) {
+	for _, named := range theme.Palettes() {
+		for _, frame := range []int{0, logoPeakFrame, 30, 45} {
+			c := bgPulseColor(frame, named.Palette)
+			s := string(c)
+			if !strings.HasPrefix(s, "#") || len(s) != 7 {
+				t.Errorf("palette=%s frame=%d: bgPulseColor invalid hex %q", named.Name, frame, s)
+			}
+		}
+	}
+}

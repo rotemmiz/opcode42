@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // U7 — chrome: the bottom status bar and the right sidebar (design components.jsx
@@ -237,8 +239,7 @@ func (m Model) sidebarView() string {
 		foot.WriteString(s.Faint.Render(cwd) + "\n")
 	}
 	foot.WriteString(
-		lipgloss.NewStyle().Foreground(s.P.Green).Render("•") +
-			" " + s.Base.Render("Opcode42") + s.Faint.Render(" dev"),
+		footerMicroLogo(s.P) + " " + s.Base.Render("Opcode42") + s.Faint.Render(" dev"),
 	)
 
 	pad := m.height - lipgloss.Height(body) - lipgloss.Height(foot.String())
@@ -323,4 +324,26 @@ func collapseHome(p string) string {
 		return "~" + p[i:]
 	}
 	return p
+}
+
+// footerMicroLogo returns a compact 1-row block-pixel mark for the sidebar
+// footer version chip (plan 08e §B4), replacing the plain "•" bullet with a
+// small inline mark that echoes the splash wordmark's block-pixel idiom.
+//
+// The mark is derived from opcode42Glyph: the "o" letter's filled columns
+// (cols 4-6) of the mid row, which render as a solid 3-block "███" — compact
+// enough for the 1-line footer (a 3-row micro-logo would break the layout)
+// and "subtle, not gimmicky" per the plan's guidance. Colored in the theme
+// Green (the same color the bullet used) so the version chip reads as before.
+func footerMicroLogo(p theme.Palette) string {
+	row := []rune(opcode42Glyph[2]) // mid row of the wordmark
+	var b strings.Builder
+	for _, x := range []int{4, 5, 6} { // the "o" letter's columns
+		if x < len(row) && row[x] == '█' {
+			b.WriteRune('█')
+		} else {
+			b.WriteRune(' ')
+		}
+	}
+	return lipgloss.NewStyle().Foreground(p.Green).Render(b.String())
 }
