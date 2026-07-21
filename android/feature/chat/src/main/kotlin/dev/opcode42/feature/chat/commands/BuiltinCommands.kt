@@ -19,7 +19,7 @@ val builtinCommands: List<BuiltinCommand> = listOf(
     ShareCommand,
     ArchiveCommand,
     DeleteCommand,
-    // Coming soon — shown disabled until the supporting screens land.
+    // Review/restore actions — open their own sheet from the palette.
     DiffCommand,
     TimelineCommand,
     VariantCommand,

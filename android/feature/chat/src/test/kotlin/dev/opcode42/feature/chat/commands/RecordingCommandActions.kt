@@ -16,6 +16,7 @@ class RecordingCommandActions(
     override fun openTerminal() { calls += "openTerminal" }
     override fun openInfo() { calls += "openInfo" }
     override fun openDiffViewer() { calls += "openDiffViewer" }
+    override fun openTimeline() { calls += "openTimeline" }
     override fun renameSession() { calls += "renameSession" }
     override fun forkSession() { calls += "forkSession" }
     override fun summarize() { calls += "summarize" }
