@@ -18,7 +18,7 @@ import (
 
 func main() {
 	cwd, _ := os.Getwd()
-	url := flag.String("url", "http://127.0.0.1:4096", "daemon base URL")
+	url := flag.String("url", "", "daemon base URL (empty = KV-pinned server_url or first-run connect overlay)")
 	dir := flag.String("dir", cwd, "project directory (x-opencode-directory routing)")
 	session := flag.String("session", "", "session id to open on start")
 	username := flag.String("username", "", "Basic auth username")
@@ -26,13 +26,22 @@ func main() {
 	provider := flag.String("provider", "", "prompt model provider id (else resolved from /config)")
 	modelID := flag.String("model", "", "prompt model id")
 	themeFlag := flag.String("theme", "", "theme name override (e.g. opcode42-dark, opcode42-light, monochrome); empty = auto-pick or KV-pinned")
+	noDiscover := flag.Bool("no-discover", false, "disable mDNS browsing in the connect overlay (plan 08e §D3)")
 	flag.Parse()
 
+	// When --url is omitted, the TUI defers to tui.Restore: a KV-pinned
+	// server_url is applied directly, otherwise the connect overlay opens on
+	// startup (plan 08e §D3). --no-discover suppresses the overlay's mDNS
+	// browser but the manual URL field still works. We pass "" so Restore
+	// can distinguish "no --url" from "--url=http://…".
+	urlVal := *url
+
 	model := tui.New(tui.Config{
-		URL: *url, Directory: *dir, SessionID: *session,
+		URL: urlVal, Directory: *dir, SessionID: *session,
 		Username: *username, Password: *password,
 		Provider: *provider, Model: *modelID,
-		Theme: *themeFlag,
+		Theme:      *themeFlag,
+		NoDiscover: *noDiscover,
 	}).Restore() // restore persisted theme/model/history + enable persistence
 
 	// AltScreen (and other terminal toggles) moved from NewProgram options to
