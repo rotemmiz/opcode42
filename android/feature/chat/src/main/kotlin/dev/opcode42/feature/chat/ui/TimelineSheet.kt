@@ -1,7 +1,6 @@
 package dev.opcode42.feature.chat.ui
 
 import dev.opcode42.core.design.theme.*
-import dev.opcode42.core.design.text.StartEllipsisText
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,10 +14,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,9 +47,10 @@ import dev.opcode42.core.model.TextPart
  * `session.revert`); the server returns the updated [dev.opcode42.core.model.Session],
  * which the caller applies to the store and then reloads the message list.
  *
- * The preview text is the first [TextPart] of each turn (tool calls and patch parts
- * are omitted — the timeline is a turn-level navigator, not a transcript). Rows are
- * disabled while a revert is in flight and a confirmation step guards the action.
+ * The preview text is the turn's [TextPart]s joined (tool calls and patch parts are
+ * omitted — the timeline is a turn-level navigator, not a transcript), end-ellipsized
+ * so the start of the prompt stays visible. A confirmation dialog guards the revert
+ * (it truncates the session); the caller dismisses the sheet on confirm.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,7 +65,7 @@ fun TimelineSheet(
             .filter { it.role == "user" || it.role == "assistant" }
             .sortedBy { it.time.created }
     }
-    var revertingId by remember { mutableStateOf<String?>(null) }
+    var pendingRevert by remember { mutableStateOf<Message?>(null) }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -98,23 +99,44 @@ fun TimelineSheet(
                 items(rows, key = { it.id }) { msg ->
                     TimelineRow(
                         message = msg,
-                        busy = revertingId != null,
-                        onRevert = {
-                            revertingId = msg.id
-                            onRevert(msg.id)
-                        },
+                        onRevert = { pendingRevert = msg },
                     )
                     HorizontalDivider(color = Hairline)
                 }
             }
         }
     }
+
+    pendingRevert?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingRevert = null },
+            containerColor = SurfaceContainerHigh,
+            title = { Text("Revert to here", color = OnSurface, fontWeight = FontWeight.SemiBold) },
+            text = {
+                Text(
+                    text = "Revert this session to this turn? Everything after it will be undone.",
+                    color = OnSurfaceVariant,
+                    fontSize = 13.sp,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingRevert = null
+                        onRevert(target.id)
+                    },
+                ) { Text("Revert", color = Error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRevert = null }) { Text("Cancel", color = OnSurfaceVariant) }
+            },
+        )
+    }
 }
 
 @Composable
 private fun TimelineRow(
     message: Message,
-    busy: Boolean,
     onRevert: () -> Unit,
 ) {
     val preview = remember(message.parts) { previewText(message.parts) }
@@ -146,13 +168,13 @@ private fun TimelineRow(
             )
             Spacer(Modifier.size(2.dp))
             if (preview.isNotBlank()) {
-                StartEllipsisText(
+                Text(
                     text = preview,
-                    style = TextStyle(
-                        fontFamily = Opcode42Mono,
-                        fontSize = 13.sp,
-                        color = OnSurface,
-                    ),
+                    fontFamily = Opcode42Mono,
+                    fontSize = 13.sp,
+                    color = OnSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else {
@@ -170,10 +192,10 @@ private fun TimelineRow(
             text = "Revert to here",
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
-            color = if (busy) OnSurfaceFaint else LinkCyan,
+            color = LinkCyan,
             modifier = Modifier
                 .clip(RoundedCornerShape(6.dp))
-                .then(if (busy) Modifier else Modifier.clickable(onClick = onRevert))
+                .clickable(onClick = onRevert)
                 .padding(horizontal = 10.dp, vertical = 6.dp),
         )
     }
