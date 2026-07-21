@@ -70,20 +70,24 @@ func TestBrowse_LoopbackRoundTrip(t *testing.T) {
 	}
 }
 
-// TestBrowse_FilterByPrefix publishes a service whose instance name does NOT
-// match the opencode-/opcode42- prefixes and asserts Browse drops it. The
-// browse runs with a short timeout; if anything arrives, the filter is broken.
+// TestBrowse_FilterByPrefix publishes two services — one matching the prefix
+// (opcode42-<port>) and one not (other-service) — and asserts Browse surfaces
+// only the matching one. The matching service doubles as a control: if it
+// arrives, mDNS is working on loopback, so the absence of other-service is
+// attributable to the prefix filter, not a transport failure.
 func TestBrowse_FilterByPrefix(t *testing.T) {
-	port := freePort(t)
-	srv := registerLoopback(t, "other-service", "_http._tcp.", port, []string{"path=/"})
-	defer srv.Shutdown()
+	matchPort := freePort(t)
+	matchInstance := "opcode42-" + strconv.Itoa(matchPort)
+	matchSrv := registerLoopback(t, matchInstance, "_http._tcp.", matchPort, []string{"path=/"})
+	defer matchSrv.Shutdown()
+
+	otherPort := freePort(t)
+	otherSrv := registerLoopback(t, "other-service", "_http._tcp.", otherPort, []string{"path=/"})
+	defer otherSrv.Shutdown()
 
 	time.Sleep(200 * time.Millisecond)
 
-	// Short timeout: the non-matching service is published, so if the filter
-	// is broken we'd see it quickly. 1.5s is enough for the resolver's first
-	// query to land.
-	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	out, err := Browse(ctx, []string{"_http._tcp."}, []string{"opcode42-"})
@@ -91,8 +95,23 @@ func TestBrowse_FilterByPrefix(t *testing.T) {
 		t.Fatalf("Browse: %v", err)
 	}
 
+	var sawMatch, sawOther bool
+	var otherSvc DiscoveredService
 	for svc := range out {
-		t.Errorf("filter should have dropped %q, got %+v", svc.Name, svc)
+		switch svc.Name {
+		case matchInstance:
+			sawMatch = true
+		case "other-service":
+			sawOther = true
+			otherSvc = svc
+		}
+	}
+
+	if !sawMatch {
+		t.Fatalf("control service %s did not arrive — mDNS loopback transport not working in this env", matchInstance)
+	}
+	if sawOther {
+		t.Errorf("filter should have dropped other-service, but it surfaced: host=%s port=%d", otherSvc.Host, otherSvc.Port)
 	}
 }
 
