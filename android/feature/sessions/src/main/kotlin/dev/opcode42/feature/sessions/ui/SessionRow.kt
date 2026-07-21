@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -168,6 +169,42 @@ internal fun SessionRow(
     val accent = Secondary // hoisted: a @Composable token can't be read inside a draw/offset lambda
     val hasChildren = children.isNotEmpty()
 
+    // PR 1.6 — Double-tap guard: the request id a reply is currently in-flight for, or null.
+    // Set synchronously on tap (so a second tap before the network round-trip is a no-op via
+    // `isReplying`), and cleared once the pending entry leaves — which happens on the reply's
+    // SSE confirmation, the optimistic clear, or the 404-swallow path (PR 1.3) when the request
+    // was already resolved server-side. Tracked per-row inside the LazyColumn so each session
+    // owns its own in-flight id without a shared hoisted state object.
+    var replyingPermissionId by remember { mutableStateOf<String?>(null) }
+    var replyingQuestionId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(pendingPermission) {
+        if (replyingPermissionId != null && pendingPermission?.id != replyingPermissionId) {
+            replyingPermissionId = null
+        }
+    }
+    LaunchedEffect(pendingQuestion) {
+        if (replyingQuestionId != null && pendingQuestion?.id != replyingQuestionId) {
+            replyingQuestionId = null
+        }
+    }
+    val guardedOnApprove = {
+        pendingPermission?.let { replyingPermissionId = it.id }
+        onApprove()
+    }
+    val guardedOnDeny = {
+        pendingPermission?.let { replyingPermissionId = it.id }
+        onDeny()
+    }
+    val guardedOnReply = { answers: List<List<String>> ->
+        pendingQuestion?.let { replyingQuestionId = it.id }
+        onReply(answers)
+    }
+    val guardedOnSkip = {
+        pendingQuestion?.let { replyingQuestionId = it.id }
+        onSkip()
+    }
+    val isReplying = replyingPermissionId != null || replyingQuestionId != null
+
     val open by remember { derivedStateOf { progress() > 0.5f } }
     val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
@@ -255,10 +292,11 @@ internal fun SessionRow(
                         onToggleExpand = { expanded = !expanded },
                         pendingPermission = pendingPermission,
                         pendingQuestion = pendingQuestion,
-                        onApprove = onApprove,
-                        onDeny = onDeny,
-                        onReply = onReply,
-                        onSkip = onSkip,
+                        onApprove = guardedOnApprove,
+                        onDeny = guardedOnDeny,
+                        onReply = guardedOnReply,
+                        onSkip = guardedOnSkip,
+                        isReplying = isReplying,
                     )
                 } else {
                     FullListRow(
@@ -273,10 +311,11 @@ internal fun SessionRow(
                         onToggleExpand = { expanded = !expanded },
                         pendingPermission = pendingPermission,
                         pendingQuestion = pendingQuestion,
-                        onApprove = onApprove,
-                        onDeny = onDeny,
-                        onReply = onReply,
-                        onSkip = onSkip,
+                        onApprove = guardedOnApprove,
+                        onDeny = guardedOnDeny,
+                        onReply = guardedOnReply,
+                        onSkip = guardedOnSkip,
+                        isReplying = isReplying,
                     )
                 }
                 DropdownMenu(
@@ -351,6 +390,7 @@ private fun CompactRailRow(
     onDeny: () -> Unit,
     onReply: (List<List<String>>) -> Unit,
     onSkip: () -> Unit,
+    isReplying: Boolean,
 ) {
     // Flip the structural bits (drop the inline actions) once, at the midpoint — not per frame.
     val open by remember { derivedStateOf { progress() > 0.5f } }
@@ -525,6 +565,7 @@ private fun CompactRailRow(
                 modifier = Modifier
                     .graphicsLayer { alpha = progress() }
                     .padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+                isReplying = isReplying,
             )
         }
     }
@@ -550,6 +591,7 @@ private fun FullListRow(
     onDeny: () -> Unit,
     onReply: (List<List<String>>) -> Unit,
     onSkip: () -> Unit,
+    isReplying: Boolean,
 ) {
     Column(
         Modifier
@@ -618,6 +660,7 @@ private fun FullListRow(
                 onReply = onReply,
                 onSkip = onSkip,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+                isReplying = isReplying,
             )
         }
     }

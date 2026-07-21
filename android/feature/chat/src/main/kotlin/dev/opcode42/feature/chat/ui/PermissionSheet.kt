@@ -38,6 +38,7 @@ fun PermissionSheet(
     permission: PermissionRequest,
     onReply: (reply: String, message: String?) -> Unit,
     isReplying: Boolean,
+    pendingCount: Int = 1,
 ) {
     ModalBottomSheet(
         onDismissRequest = { /* non-dismissible — user must tap a reply */ },
@@ -45,7 +46,12 @@ fun PermissionSheet(
         containerColor = SurfaceContainerHigh,
         tonalElevation = 0.dp,
     ) {
-        PermissionSheetContent(permission = permission, onReply = onReply, isReplying = isReplying)
+        PermissionSheetContent(
+            permission = permission,
+            onReply = onReply,
+            isReplying = isReplying,
+            pendingCount = pendingCount,
+        )
     }
 }
 
@@ -60,6 +66,7 @@ fun PermissionSheetContent(
     permission: PermissionRequest,
     onReply: (reply: String, message: String?) -> Unit,
     isReplying: Boolean,
+    pendingCount: Int = 1,
 ) {
     val showAlways = permission.always.isNotEmpty()
     var feedbackExpanded by remember { mutableStateOf(false) }
@@ -88,6 +95,14 @@ fun PermissionSheetContent(
             Text(
                 text = permission.patterns.joinToString(", "),
                 style = MaterialTheme.typography.bodyMedium,
+                color = OnSurfaceVariant,
+            )
+        }
+        if (pendingCount > 1) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "1 of $pendingCount",
+                style = MaterialTheme.typography.labelMedium,
                 color = OnSurfaceVariant,
             )
         }
@@ -197,6 +212,7 @@ fun QuestionCard(
     onReject: () -> Unit,
     isReplying: Boolean,
     modifier: Modifier = Modifier,
+    pendingCount: Int = 1,
 ) {
     val questions = question.questions
     val total = questions.size.coerceAtLeast(1)
@@ -245,6 +261,14 @@ fun QuestionCard(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
+            if (pendingCount > 1) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "1 of $pendingCount",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                )
+            }
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = customTexts[0],
@@ -301,6 +325,14 @@ fun QuestionCard(
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
         )
+        if (pendingCount > 1) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "1 of $pendingCount",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+            )
+        }
         if (info.question.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
             Text(

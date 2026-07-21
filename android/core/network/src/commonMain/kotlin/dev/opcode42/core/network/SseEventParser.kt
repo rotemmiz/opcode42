@@ -38,6 +38,14 @@ class SseEventParser {
                         statusObj?.get("attempt")?.jsonPrimitive?.contentOrNull?.toIntOrNull() else null,
                 )
             }
+            // E18: `session.idle` is a deprecated event still emitted by some daemons
+            // (the current contract uses `session.status` with `status.type: "idle"`).
+            // Map it to the same SessionStatus so those daemons drive the spinner down.
+            "session.idle" ->
+                AppEvent.SessionStatus(
+                    sessionId = p["sessionID"]?.jsonPrimitive?.content ?: "",
+                    status = "idle",
+                )
 
             // message.updated wraps the message info under `info`
             // (EventMessageUpdated.properties = {sessionID, info}).
