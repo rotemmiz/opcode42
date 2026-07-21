@@ -38,6 +38,7 @@ import (
 	"github.com/rotemmiz/opcode42/internal/engine/llm"
 	"github.com/rotemmiz/opcode42/internal/engine/message"
 	"github.com/rotemmiz/opcode42/internal/engine/permission"
+	"github.com/rotemmiz/opcode42/internal/engine/question"
 	"github.com/rotemmiz/opcode42/internal/engine/registry"
 	"github.com/rotemmiz/opcode42/internal/engine/tool"
 	"github.com/rotemmiz/opcode42/internal/instance"
@@ -285,6 +286,58 @@ func TestOpcode42Parity_PermissionRoundTrip(t *testing.T) {
 
 	// And the overlay must clear (optimistically and/or via permission.replied).
 	d.pump(func(m Model) bool { return m.pendingPermission() == nil })
+	d.m.stream.Close()
+}
+
+// TestOpcode42Parity_QuestionRoundTrip proves the blocking question overlay works
+// end-to-end against Opcode42: a real question.asked (published by the daemon's
+// question manager, the exact path the `question` tool uses) surfaces in the TUI;
+// the user rejects it; the TUI POSTs /question/{id}/reject; the daemon's Ask()
+// unblocks with ErrRejected; the overlay clears. This closes the U13 flow set
+// (health, SSE, session, prompt, permission, question, abort) on the v2 canvas.
+func TestOpcode42Parity_QuestionRoundTrip(t *testing.T) {
+	r := newOpcode42Rig(t)
+	d := newDriver(t, r.newModel())
+	d.pump(func(m Model) bool { return m.conn == Connected && m.stream != nil })
+
+	askDone := make(chan error, 1)
+	go func() {
+		_, err := r.inst.Questions.Ask(context.Background(), "ses_x",
+			[]question.Info{{
+				Question: "Pick a color",
+				Header:   "Color",
+				Options: []question.Option{
+					{Label: "red"}, {Label: "green"}, {Label: "blue"},
+				},
+			}})
+		askDone <- err
+	}()
+
+	d.pump(func(m Model) bool { return m.pendingQuestion() != nil })
+
+	if got := d.m.pendingQuestion(); got == nil || len(got.Questions) != 1 ||
+		got.Questions[0].Question != "Pick a color" {
+		t.Fatalf("pending question = %+v, want Color/Pick a color", got)
+	}
+	frame := stripANSI(d.m.renderView())
+	for _, want := range []string{"Pick a color", "red", "green", "blue"} {
+		if !strings.Contains(frame, want) {
+			t.Fatalf("question overlay missing %q in rendered view", want)
+		}
+	}
+
+	d.inject(key("r"))
+
+	select {
+	case err := <-askDone:
+		if err != question.ErrRejected {
+			t.Fatalf("Ask err = %v, want ErrRejected", err)
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("daemon Ask never unblocked after the TUI rejected")
+	}
+
+	d.pump(func(m Model) bool { return m.pendingQuestion() == nil })
 	d.m.stream.Close()
 }
 
