@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.opcode42.core.data.SessionRepository
+import dev.opcode42.core.data.isNotFound
 import dev.opcode42.core.data.toUserMessage
 import dev.opcode42.core.model.PermissionRequest
 import dev.opcode42.core.model.QuestionRequest
@@ -296,21 +297,24 @@ class SessionListViewModel @Inject constructor(
     /** Approve or deny a session's pending permission from the menu. */
     fun replyPermission(requestId: String, reply: String, message: String? = null) {
         viewModelScope.launch {
-            sessionRepo.replyPermission(requestId, reply, message).onFailure { emitError("reply", it) }
+            sessionRepo.replyPermission(requestId, reply, message)
+                .onFailure { if (!it.isNotFound()) emitError("reply", it) }
         }
     }
 
     /** Answer a session's pending question from the menu. */
     fun replyQuestion(requestId: String, answers: List<List<String>>) {
         viewModelScope.launch {
-            sessionRepo.replyQuestion(requestId, answers).onFailure { emitError("reply", it) }
+            sessionRepo.replyQuestion(requestId, answers)
+                .onFailure { if (!it.isNotFound()) emitError("reply", it) }
         }
     }
 
     /** Skip a session's pending question from the menu. */
     fun rejectQuestion(requestId: String) {
         viewModelScope.launch {
-            sessionRepo.rejectQuestion(requestId).onFailure { emitError("reject", it) }
+            sessionRepo.rejectQuestion(requestId)
+                .onFailure { if (!it.isNotFound()) emitError("reject", it) }
         }
     }
 }

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.opcode42.core.data.ChatRepository
 import dev.opcode42.core.data.SessionRepository
+import dev.opcode42.core.data.isNotFound
 import dev.opcode42.core.data.toUserMessage
 import dev.opcode42.core.model.*
 import dev.opcode42.core.store.ConnectionState
@@ -283,7 +284,10 @@ class ChatViewModel @Inject constructor(
                     .map { it.status }
                     .distinctUntilChanged()
                     .filter { it == "idle" }
-                    .collect { refresh() }
+                    .collect {
+                        refresh()
+                        sessionRepo.reconcilePending()
+                    }
             }
             // Reload messages after a reconnection (GlobalDisposed wipes state)
             viewModelScope.launch {
@@ -291,7 +295,10 @@ class ChatViewModel @Inject constructor(
                     .distinctUntilChanged()
                     .drop(1) // skip initial state; init already called loadMessages()
                     .filter { it is ConnectionState.Connected }
-                    .collect { loadMessages() }
+                    .collect {
+                        loadMessages()
+                        sessionRepo.reconcilePending()
+                    }
             }
             // C4 — Watch for new PatchParts and load diff content for each one not yet fetched.
             // Parts are keyed by messageID (live SSE parts supersede REST-loaded parts). The repo's
@@ -519,20 +526,23 @@ class ChatViewModel @Inject constructor(
     /** A8 — Permission reply */
     fun replyPermission(requestId: String, reply: String, message: String? = null) {
         viewModelScope.launch {
-            sessionRepo.replyPermission(requestId, reply, message).onFailure { emitError("reply", it) }
+            sessionRepo.replyPermission(requestId, reply, message)
+                .onFailure { if (!it.isNotFound()) emitError("reply", it) }
         }
     }
 
     /** D3 — Question reply: sends `{ answers: string[][] }` per the wire contract. */
     fun replyQuestion(requestId: String, answers: List<List<String>>) {
         viewModelScope.launch {
-            sessionRepo.replyQuestion(requestId, answers).onFailure { emitError("reply", it) }
+            sessionRepo.replyQuestion(requestId, answers)
+                .onFailure { if (!it.isNotFound()) emitError("reply", it) }
         }
     }
 
     fun rejectQuestion(requestId: String) {
         viewModelScope.launch {
-            sessionRepo.rejectQuestion(requestId).onFailure { emitError("reject", it) }
+            sessionRepo.rejectQuestion(requestId)
+                .onFailure { if (!it.isNotFound()) emitError("reject", it) }
         }
     }
 

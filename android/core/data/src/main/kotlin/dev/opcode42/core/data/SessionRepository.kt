@@ -54,6 +54,14 @@ interface SessionRepository {
     suspend fun replyQuestion(requestId: String, answers: List<List<String>>): Result<Unit>
     suspend fun rejectQuestion(requestId: String): Result<Unit>
 
+    /**
+     * Re-fetch the daemon's pending permissions + questions and replace the store's maps
+     * (PR 1.3). Both calls are wrapped so a 404 on one endpoint doesn't blank the other; the
+     * reconcile replaces — any pending request the daemon no longer has is cleared (fixes the
+     * "stuck forever" class when an SSE event was missed or the request was answered elsewhere).
+     */
+    suspend fun reconcilePending(): Result<Unit>
+
     /** G1 — Daemon version from `GET /global/health` (for the Settings About section). */
     suspend fun fetchDaemonVersion(): String?
 }
@@ -151,6 +159,15 @@ class DefaultSessionRepository @Inject constructor(
     override suspend fun rejectQuestion(requestId: String): Result<Unit> = resultOf {
         client.rejectQuestion(requestId)
         store.dispatch(AppEvent.QuestionRejected(requestId))
+    }
+
+    override suspend fun reconcilePending(): Result<Unit> = resultOf {
+        val perms = runCatching { client.listPermissions() }.getOrDefault(emptyList())
+        val qs = runCatching { client.listQuestions() }.getOrDefault(emptyList())
+        val permsBySession = perms.groupBy { it.sessionID }
+        val qsBySession = qs.groupBy { it.sessionID }
+        store.dispatch(AppEvent.PermissionsReconciled(permsBySession))
+        store.dispatch(AppEvent.QuestionsReconciled(qsBySession))
     }
 
     override suspend fun fetchDaemonVersion(): String? =

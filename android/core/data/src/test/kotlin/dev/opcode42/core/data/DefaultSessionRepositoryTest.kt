@@ -1,5 +1,8 @@
 package dev.opcode42.core.data
 
+import dev.opcode42.core.model.AppEvent
+import dev.opcode42.core.model.PermissionRequest
+import dev.opcode42.core.model.QuestionRequest
 import dev.opcode42.core.sdk.BaseUrlProvider
 import dev.opcode42.core.sdk.HttpTransport
 import dev.opcode42.core.sdk.Opcode42Client
@@ -103,5 +106,64 @@ class DefaultSessionRepositoryTest {
 
         assertTrue(result.isFailure)
         assertEquals(emptyList<String>(), store.state.value.sessions.map { it.id })
+    }
+
+    @Test fun reconcilePending_replacesStoreWithDaemonTruth() = runTest {
+        // Seed the store with two pending permissions (as if two PermissionAsked SSE events
+        // had arrived). The daemon now reports only one of them — the stale request must be
+        // cleared (reconcile replaces, not merges).
+        store.dispatch(AppEvent.PermissionAsked(PermissionRequest(id = "per_1", sessionID = "ses_1", permission = "bash")))
+        store.dispatch(AppEvent.PermissionAsked(PermissionRequest(id = "per_2", sessionID = "ses_1", permission = "read")))
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val url = request.requestUrl!!
+                return when {
+                    url.encodedPath == "/permission" -> MockResponse().setBody(
+                        """[{"id":"per_1","sessionID":"ses_1","permission":"bash","patterns":[],"always":[],"metadata":{}}]""",
+                    )
+                    url.encodedPath == "/question" -> MockResponse().setBody("[]")
+                    else -> MockResponse().setResponseCode(404)
+                }
+            }
+        }
+
+        val result = repo.reconcilePending()
+
+        assertTrue(result.isSuccess)
+        val perms = store.state.value.permissions
+        assertEquals(listOf("ses_1"), perms.keys.toList())
+        assertEquals(listOf("per_1"), perms["ses_1"]?.map { it.id })
+    }
+
+    @Test fun reconcilePending_survives404OnOneEndpoint() = runTest {
+        // An older daemon build 404s /permission; the reconcile must still run /question and
+        // dispatch its result. The failed call yields emptyList() via getOrDefault, so the
+        // permissions map is emptied (replace semantics), not left stale.
+        store.dispatch(AppEvent.PermissionAsked(PermissionRequest(id = "per_1", sessionID = "ses_1", permission = "bash")))
+        store.dispatch(AppEvent.QuestionAsked(QuestionRequest(id = "qst_1", sessionID = "ses_2")))
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val url = request.requestUrl!!
+                return when {
+                    url.encodedPath == "/permission" -> MockResponse().setResponseCode(404).setBody("not found")
+                    url.encodedPath == "/question" -> MockResponse().setBody(
+                        """[{"id":"qst_1","sessionID":"ses_2","questions":[{"question":"Continue?","header":"h","options":[{"label":"Yes"}]}]}]""",
+                    )
+                    else -> MockResponse().setResponseCode(404)
+                }
+            }
+        }
+
+        val result = repo.reconcilePending()
+
+        assertTrue(result.isSuccess)
+        // permissions: the 404 → emptyList() → replace empties the map (stale per_1 is gone).
+        assertTrue(store.state.value.permissions.isEmpty())
+        // questions: /question succeeded → the daemon's list replaces the store's map.
+        val qs = store.state.value.questions
+        assertEquals(listOf("ses_2"), qs.keys.toList())
+        assertEquals(listOf("qst_1"), qs["ses_2"]?.map { it.id })
     }
 }
