@@ -1,13 +1,17 @@
 package dev.opcode42.core.design.theme
 
+import android.os.Build
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -177,12 +181,27 @@ private fun Opcode42Colors.toM3Scheme(dark: Boolean) = if (dark) {
     )
 }
 
+/**
+ * Whether the Material You dynamic color scheme should be used: the user opt-in
+ * (`dynamicColor`) AND the platform supports it (Android 12 / API 31+). Extracted as
+ * a pure function so the gate is unit-testable without a Compose/Android runtime.
+ */
+fun shouldUseDynamicColor(dynamicColor: Boolean, sdkInt: Int = Build.VERSION.SDK_INT): Boolean =
+    dynamicColor && sdkInt >= Build.VERSION_CODES.S
+
 @Composable
 fun Opcode42Theme(
     darkTheme: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colors = if (darkTheme) DarkOpcode42Colors else LightOpcode42Colors
+    val context = LocalContext.current
+    val m3ColorScheme = if (shouldUseDynamicColor(dynamicColor)) {
+        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else {
+        colors.toM3Scheme(darkTheme)
+    }
     val m3Shapes = androidx.compose.material3.Shapes(
         extraSmall = Opcode42Shapes.xs,
         small = Opcode42Shapes.sm,
@@ -199,7 +218,7 @@ fun Opcode42Theme(
     )
     CompositionLocalProvider(LocalOpcode42Colors provides colors) {
         MaterialTheme(
-            colorScheme = colors.toM3Scheme(darkTheme),
+            colorScheme = m3ColorScheme,
             shapes = m3Shapes,
             typography = m3Typography,
             content = content,

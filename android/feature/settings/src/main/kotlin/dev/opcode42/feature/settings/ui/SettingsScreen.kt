@@ -1,5 +1,6 @@
 package dev.opcode42.feature.settings.ui
 
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -190,6 +192,8 @@ private fun AppearanceSection(state: SettingsUiState, viewModel: SettingsViewMod
     )
     HorizontalDivider()
 
+    DynamicColorRow(state.dynamicColor, viewModel::setDynamicColor)
+
     if (showThemeDialog) {
         ThemePickerDialog(
             currentMode = state.themeMode,
@@ -200,6 +204,34 @@ private fun AppearanceSection(state: SettingsUiState, viewModel: SettingsViewMod
             onDismiss = { showThemeDialog = false },
         )
     }
+}
+
+@Composable
+private fun DynamicColorRow(
+    enabled: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    val supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    ListItem(
+        headlineContent = { Text("Dynamic color (Material You)") },
+        supportingContent = {
+            Text(if (supported) "Match colors to your wallpaper" else "Requires Android 12+")
+        },
+        leadingContent = { Icon(Icons.Default.Palette, contentDescription = null) },
+        trailingContent = {
+            Switch(
+                checked = enabled && supported,
+                onCheckedChange = onChange,
+                enabled = supported,
+            )
+        },
+        modifier = if (supported) {
+            Modifier.clickable { onChange(!enabled) }
+        } else {
+            Modifier
+        },
+    )
+    HorizontalDivider()
 }
 
 @Composable
