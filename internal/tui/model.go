@@ -64,6 +64,14 @@ type Config struct {
 	// NoAnim disables all per-frame animation (static logo, bg-pulse off) for
 	// capture / accessibility (plan 08e §B3). Set by --no-anim.
 	NoAnim bool
+
+	// Sixel forces Sixel capability detection on (plan 08e §E2). Set by
+	// --sixel for terminals that support Sixel graphics (VT340+:
+	// "xterm -ti vt340", mlterm, wezterm, kitty) but don't advertise it via
+	// $TERM. Image rendering is still gated behind viewState.images
+	// (ctrl+x i); this flag only flips the capability probe so sixel escapes
+	// are emitted instead of the placeholder when images are enabled.
+	Sixel bool
 }
 
 // Model is the Bubble Tea application state.
@@ -199,6 +207,11 @@ type Model struct {
 	// (vestibular sensitivity).
 	noAnim bool
 
+	// sixel forces Sixel capability on (plan 08e §E2). Set by the --sixel
+	// CLI flag; read by renderImagePart's capability probe. Image rendering
+	// is still gated behind viewState.images (ctrl+x i).
+	sixel bool
+
 	// toasts is the live toast queue (plan 08c M11).  Entries expire after
 	// toastTTL; the animTick drives TTL countdown via toastTick().
 	// pushToast enqueues and toastTick purges; the canvas composites the
@@ -278,6 +291,9 @@ func New(cfg Config) Model {
 	// --no-anim: freeze the logo and bg-pulse at their peak frame for
 	// deterministic screenshot capture (tools/tui-shots) and accessibility.
 	m.noAnim = cfg.NoAnim
+	// --sixel: force Sixel capability on for terminals that support it but
+	// don't advertise it via $TERM (plan 08e §E2).
+	m.sixel = cfg.Sixel
 	// Auto-pick light vs dark by terminal background — mirrors opencode's
 	// theme_mode_lock behaviour. Restore() will override with any pinned KV theme.
 	// cfg.Theme (--theme flag) wins over both auto-pick and KV.
@@ -1439,6 +1455,16 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.focusOrOpenPTY() // embedded terminal (ctrl+] to exit)
 	case "w":
 		return m.stashDraft(), nil // park the current composer draft
+	case "i":
+		// Toggle inline image rendering for image file parts (plan 08e §E2).
+		// Default off: most terminals can't decode Sixel/iTerm2 escapes and
+		// emitting them to an unsupported terminal produces garbage. When
+		// on, renderImagePart probes the terminal and emits the matching
+		// escape (Sixel or iTerm2 inline) or falls back to a placeholder
+		// glyph when no support is advertised.
+		m.view.images = !m.view.images
+		m.status = toggleHint("images", m.view.images)
+		return m, nil
 	case "down":
 		return m.enterFirstChild() // descend into the first sub-agent child
 	case "up":
