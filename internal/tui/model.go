@@ -845,6 +845,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.diff.open { // reviewer was closed while the fetch was in flight
 			return m, nil
 		}
+		if msg.gen != m.diff.gen { // a fetch from a prior source (before a ctrl+x s toggle) — discard
+			return m, nil
+		}
 		m.diff.loading = false
 		if msg.err != nil {
 			m.diff.err = msg.err

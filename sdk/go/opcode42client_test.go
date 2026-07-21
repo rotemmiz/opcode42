@@ -228,3 +228,87 @@ func TestDeleteJSON_DecodesResponse(t *testing.T) {
 		t.Fatalf("delete-json wrong: method=%q out=%+v", gotMethod, out)
 	}
 }
+
+// vcsFile is the test-local shape matching VcsFileDiff / SnapshotFileDiff
+// (file, patch, additions, deletions, status) — used by both VCSDiff and
+// VCSStatus tests (VCSStatus leaves patch empty).
+type vcsFile struct {
+	File      string `json:"file"`
+	Patch     string `json:"patch"`
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
+	Status    string `json:"status"`
+}
+
+func TestVCSDiff_SendsQueryAndDecodes(t *testing.T) {
+	var gotPath, gotDir, gotMode string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotDir = r.URL.Query().Get("directory")
+		gotMode = r.URL.Query().Get("mode")
+		_, _ = io.WriteString(w, `[{"file":"a.go","patch":"@@ -1 +1 @@\n-x\n+y\n","additions":1,"deletions":1,"status":"modified"}]`)
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, Options{Directory: "/repo", HTTPClient: srv.Client()})
+
+	var out []vcsFile
+	if err := c.VCSDiff(context.Background(), "/repo", "git", &out); err != nil {
+		t.Fatalf("VCSDiff: %v", err)
+	}
+	if gotPath != "/vcs/diff" || gotDir != "/repo" || gotMode != "git" {
+		t.Fatalf("query wrong: path=%q dir=%q mode=%q", gotPath, gotDir, gotMode)
+	}
+	if len(out) != 1 || out[0].File != "a.go" || out[0].Patch == "" || out[0].Additions != 1 {
+		t.Fatalf("decode wrong: %+v", out)
+	}
+}
+
+func TestVCSDiff_DefaultsModeToGit(t *testing.T) {
+	var gotMode string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMode = r.URL.Query().Get("mode")
+		_, _ = io.WriteString(w, `[]`)
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, Options{HTTPClient: srv.Client()})
+	if err := c.VCSDiff(context.Background(), "", "", &[]vcsFile{}); err != nil {
+		t.Fatalf("VCSDiff: %v", err)
+	}
+	if gotMode != "git" {
+		t.Fatalf("mode default = %q, want git", gotMode)
+	}
+}
+
+func TestVCSStatus_SendsQueryAndDecodes(t *testing.T) {
+	var gotPath, gotDir, gotMode string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotDir = r.URL.Query().Get("directory")
+		gotMode = r.URL.Query().Get("mode")
+		_, _ = io.WriteString(w, `[{"file":"b.go","additions":2,"deletions":0,"status":"added"}]`)
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, Options{Directory: "/repo", HTTPClient: srv.Client()})
+
+	var out []vcsFile
+	if err := c.VCSStatus(context.Background(), "/repo", &out); err != nil {
+		t.Fatalf("VCSStatus: %v", err)
+	}
+	if gotPath != "/vcs/status" || gotDir != "/repo" || gotMode != "" {
+		t.Fatalf("query wrong: path=%q dir=%q mode=%q", gotPath, gotDir, gotMode)
+	}
+	if len(out) != 1 || out[0].File != "b.go" || out[0].Patch != "" || out[0].Status != "added" {
+		t.Fatalf("decode wrong: %+v", out)
+	}
+}
+
+func TestVCSDiff_PassesNonOKAsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotImplemented) // the opcode42 daemon's current 501 stub
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, Options{HTTPClient: srv.Client()})
+	if err := c.VCSDiff(context.Background(), "", "git", &[]vcsFile{}); err == nil {
+		t.Fatal("expected error for 501, got nil")
+	}
+}

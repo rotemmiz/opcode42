@@ -256,6 +256,36 @@ func (c *Opcode42Client) Delete(ctx context.Context, path string) error {
 	return nil
 }
 
+// VCSDiff fetches the working-tree diff with patches: GET /vcs/diff?directory=<dir>&mode=git.
+// The response is an array of VcsFileDiff (file, patch, additions, deletions, status) — the same
+// wire shape as SnapshotFileDiff (opencode packages/sdk/openapi.json:22402; the opcode42 daemon
+// exposes the same route, currently as a 501 stub until a real VCS handler lands). dst receives
+// the decoded array; the caller chooses the concrete element type (e.g. tui.SnapshotFileDiff),
+// so the SDK stays free of a TUI import. mode defaults to "git" when empty.
+func (c *Opcode42Client) VCSDiff(ctx context.Context, directory, mode string, dst any) error {
+	if mode == "" {
+		mode = "git"
+	}
+	q := url.Values{}
+	if directory != "" {
+		q.Set("directory", directory)
+	}
+	q.Set("mode", mode)
+	return c.GetJSON(ctx, "/vcs/diff?"+q.Encode(), dst)
+}
+
+// VCSStatus fetches the working-tree changed files without patches: GET /vcs/status?directory=<dir>.
+// The response is an array of VcsFileStatus (file, additions, deletions, status) — VcsFileDiff
+// minus the patch field (opencode packages/sdk/openapi.json:22382). dst receives the decoded
+// array; the caller chooses the concrete element type.
+func (c *Opcode42Client) VCSStatus(ctx context.Context, directory string, dst any) error {
+	q := url.Values{}
+	if directory != "" {
+		q.Set("directory", directory)
+	}
+	return c.GetJSON(ctx, "/vcs/status?"+q.Encode(), dst)
+}
+
 // BaseURL returns the daemon base URL.
 func (c *Opcode42Client) BaseURL() string { return c.baseURL }
 

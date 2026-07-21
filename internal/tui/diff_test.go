@@ -1,13 +1,19 @@
 package tui
 
 import (
+	"context"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"charm.land/lipgloss/v2"
 
 	"github.com/rotemmiz/opcode42/internal/tui/theme"
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // withDiff builds a model with an open, loaded diff reviewer (files pre-sorted
@@ -134,6 +140,24 @@ func TestDiffLoaded_Error(t *testing.T) {
 	m, _ = step(t, m, diffLoadedMsg{err: errors.New("boom")})
 	if m.diff.err == nil || m.diff.loading {
 		t.Fatalf("error should surface + clear loading, err=%v loading=%v", m.diff.err, m.diff.loading)
+	}
+}
+
+// TestDiffLoaded_DiscardsStaleGen asserts a diffLoadedMsg whose gen does not
+// match m.diff.gen is discarded — the correctness guard for a rapid ctrl+x s
+// toggle where a fetch from the prior source is still in flight (plan 08e §E1).
+func TestDiffLoaded_DiscardsStaleGen(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m.diff = diffState{open: true, loading: true, source: sourceSession, gen: 2, folded: map[int]bool{}}
+	// A response stamped with the prior gen (1) must not populate the reviewer.
+	m, _ = step(t, m, diffLoadedMsg{gen: 1, files: []SnapshotFileDiff{{File: "stale.go"}}})
+	if len(m.diff.files) != 0 || !m.diff.loading {
+		t.Fatalf("stale-gen load should be discarded: files=%d loading=%v", len(m.diff.files), m.diff.loading)
+	}
+	// A response with the current gen (2) populates as usual.
+	m, _ = step(t, m, diffLoadedMsg{gen: 2, files: []SnapshotFileDiff{{File: "fresh.go"}}})
+	if len(m.diff.files) != 1 || m.diff.files[0].File != "fresh.go" {
+		t.Fatalf("current-gen load should populate: %+v", m.diff.files)
 	}
 }
 
@@ -510,5 +534,160 @@ func TestRenderGutter_VisibleWidth(t *testing.T) {
 			t.Errorf("renderGutter(%d,%d,%d): visible width %d, want %d\nraw: %q",
 				tc.old, tc.new, tc.kind, got, gutterTotalWidth, gutter)
 		}
+	}
+}
+
+// ─── E1: VCS working-tree diff source ───────────────────────────────────────
+
+// vcsDiffServer is a stand-in daemon serving /vcs/diff and /session/{id}/diff
+// with canned file lists, recording the paths hit (in order) for assertions.
+type vcsDiffServer struct {
+	srv   *httptest.Server
+	mu    sync.Mutex
+	paths []string
+}
+
+func newVCSDiffServer() *vcsDiffServer {
+	r := &vcsDiffServer{}
+	r.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		r.mu.Lock()
+		r.paths = append(r.paths, req.URL.Path)
+		r.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		switch req.URL.Path {
+		case "/vcs/diff":
+			_, _ = io.WriteString(w, `[{"file":"wt/a.go","patch":"@@ -1 +1 @@\n-x\n+y\n","additions":1,"deletions":1,"status":"modified"}]`)
+		case "/session/ses_1/diff":
+			_, _ = io.WriteString(w, `[{"file":"ses/b.go","patch":"@@ -1 +1 @@\n-old\n+new\n","additions":1,"deletions":1,"status":"modified"}]`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	return r
+}
+
+func (r *vcsDiffServer) hit(p string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, got := range r.paths {
+		if got == p {
+			return true
+		}
+	}
+	return false
+}
+
+// TestDiffCtrlS_TogglesSource presses ctrl+x then s inside the diff reviewer
+// and asserts the source flips session↔working-tree and a reload is issued.
+func TestDiffCtrlS_TogglesSource(t *testing.T) {
+	rs := newVCSDiffServer()
+	defer rs.srv.Close()
+
+	m := New(Config{URL: rs.srv.URL, SessionID: "ses_1"})
+	m.client, _ = opcode42client.New(rs.srv.URL, opcode42client.Options{HTTPClient: rs.srv.Client()})
+	m.diff = diffState{open: true, source: sourceSession, showTree: false, folded: map[int]bool{}, files: []SnapshotFileDiff{{File: "ses/b.go"}}}
+
+	// ctrl+x sets the in-reviewer leader, does not toggle yet.
+	m, _ = step(t, m, key("ctrl+x"))
+	if !m.diff.leader || m.diff.source != sourceSession {
+		t.Fatalf("ctrl+x should set leader without toggling: leader=%v source=%v", m.diff.leader, m.diff.source)
+	}
+	// s toggles to working tree and kicks off a reload (loading + cmd).
+	m, cmd := step(t, m, key("s"))
+	if m.diff.leader {
+		t.Fatal("chord key should clear the leader")
+	}
+	if m.diff.source != sourceWorkingTree {
+		t.Fatalf("ctrl+x s should toggle to working tree, source=%v", m.diff.source)
+	}
+	if !m.diff.loading || cmd == nil {
+		t.Fatalf("toggle should issue a reload: loading=%v cmd=%v", m.diff.loading, cmd != nil)
+	}
+	// Second toggle returns to session.
+	m, _ = step(t, m, key("ctrl+x"))
+	m, _ = step(t, m, key("s"))
+	if m.diff.source != sourceSession {
+		t.Fatalf("second toggle should return to session, source=%v", m.diff.source)
+	}
+}
+
+// TestLoadDiffCmd_WorkingTree fires loadDiffCmd with source=workingTree and
+// asserts the returned msg carries the /vcs/diff files (not the session diff).
+func TestLoadDiffCmd_WorkingTree(t *testing.T) {
+	rs := newVCSDiffServer()
+	defer rs.srv.Close()
+	c, _ := opcode42client.New(rs.srv.URL, opcode42client.Options{HTTPClient: rs.srv.Client()})
+
+	cmd := loadDiffCmd(context.Background(), c, "ses_1", "/repo", sourceWorkingTree, 1)
+	msg := cmd()
+	loaded, ok := msg.(diffLoadedMsg)
+	if !ok {
+		t.Fatalf("expected diffLoadedMsg, got %T", msg)
+	}
+	if loaded.err != nil {
+		t.Fatalf("load err: %v", loaded.err)
+	}
+	if len(loaded.files) != 1 || loaded.files[0].File != "wt/a.go" {
+		t.Fatalf("working-tree files wrong: %+v", loaded.files)
+	}
+	if !rs.hit("/vcs/diff") || rs.hit("/session/ses_1/diff") {
+		t.Fatalf("should hit /vcs/diff only, paths=%v", rs.paths)
+	}
+}
+
+// TestLoadDiffCmd_Session confirms the session source still hits
+// /session/{id}/diff (the pre-E1 path is unchanged).
+func TestLoadDiffCmd_Session(t *testing.T) {
+	rs := newVCSDiffServer()
+	defer rs.srv.Close()
+	c, _ := opcode42client.New(rs.srv.URL, opcode42client.Options{HTTPClient: rs.srv.Client()})
+
+	cmd := loadDiffCmd(context.Background(), c, "ses_1", "/repo", sourceSession, 1)
+	msg := cmd()
+	loaded, ok := msg.(diffLoadedMsg)
+	if !ok {
+		t.Fatalf("expected diffLoadedMsg, got %T", msg)
+	}
+	if loaded.err != nil {
+		t.Fatalf("load err: %v", loaded.err)
+	}
+	if len(loaded.files) != 1 || loaded.files[0].File != "ses/b.go" {
+		t.Fatalf("session files wrong: %+v", loaded.files)
+	}
+	if !rs.hit("/session/ses_1/diff") || rs.hit("/vcs/diff") {
+		t.Fatalf("should hit /session/ses_1/diff only, paths=%v", rs.paths)
+	}
+}
+
+// TestDiffView_ShowsSourceLabel asserts the rendered summary indicates the
+// source ("session" vs "working tree") so a toggled user knows which view they
+// are in.
+func TestDiffView_ShowsSourceLabel(t *testing.T) {
+	m := withDiff()
+	// withDiff seeds a session-source reviewer.
+	out := m.diffView()
+	if !strings.Contains(out, "session") {
+		t.Fatalf("session source view missing 'session' label: %q", firstLine(out))
+	}
+	// Switch to working tree (keep the same files for the render) and re-check.
+	m.diff.source = sourceWorkingTree
+	if out := m.diffView(); !strings.Contains(out, "working tree") {
+		t.Fatalf("working-tree source view missing 'working tree' label: %q", firstLine(out))
+	}
+}
+
+// TestDiffView_WorkingTreeEmptyState confirms the empty state names the source
+// (so a "no changes" message after a toggle is not mistaken for the session).
+func TestDiffView_WorkingTreeEmptyState(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	m.width, m.height = 80, 24
+	m.diff = diffState{open: true, source: sourceWorkingTree, files: nil, folded: map[int]bool{}}
+	out := m.diffView()
+	if !strings.Contains(out, "No working-tree changes") {
+		t.Fatalf("working-tree empty state missing label: %q", firstLine(out))
+	}
+	m.diff.source = sourceSession
+	if out := m.diffView(); !strings.Contains(out, "No changes in this session") {
+		t.Fatalf("session empty state missing label: %q", firstLine(out))
 	}
 }

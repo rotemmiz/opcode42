@@ -18,10 +18,13 @@ import (
 // Diff viewer (plan 08b §1). A full-screen reviewer over GET /session/{id}/diff:
 // a file-tree pane on the left and the selected file's unified patch on the
 // right (foldable, scrollable). v1 is unified + single-patch + file tree;
-// split/side-by-side and a VCS working-tree source are follow-ups.
+// split/side-by-side is a follow-up. The working-tree source (GET /vcs/diff,
+// plan 08e §E1) toggles in via ctrl+x s — same viewer, different fetch.
 
 // SnapshotFileDiff is one file's change in a session diff (wire shape
 // SnapshotFileDiff: file path, unified patch text, line counts, status).
+// The VcsFileDiff wire shape (GET /vcs/diff) is identical, so the working-tree
+// source decodes into the same struct (opencode packages/sdk/openapi.json:22402).
 type SnapshotFileDiff struct {
 	File      string `json:"file"`
 	Patch     string `json:"patch"`
@@ -30,11 +33,35 @@ type SnapshotFileDiff struct {
 	Status    string `json:"status"` // added | deleted | modified
 }
 
+// diffSource selects where the reviewer draws its files from.
+type diffSource int
+
+const (
+	// sourceSession is GET /session/{id}/diff — the accumulated session patch.
+	sourceSession diffSource = iota
+	// sourceWorkingTree is GET /vcs/diff?directory=<dir>&mode=git — the live
+	// working-tree changes (the heavier sibling of /vcs/status, with patches).
+	sourceWorkingTree
+)
+
+// String returns the human label for the summary header ("session"/"working tree").
+func (s diffSource) String() string {
+	switch s {
+	case sourceWorkingTree:
+		return "working tree"
+	default:
+		return "session"
+	}
+}
+
 // diffState is the full-screen diff reviewer's state (zero value = closed).
 type diffState struct {
 	open     bool
 	loading  bool
 	err      error
+	source   diffSource         // session (default) or working tree (ctrl+x s)
+	leader   bool               // ctrl+x pressed inside the reviewer, awaiting the chord key
+	gen      int                // load generation: a stale diffLoadedMsg (from a prior source/toggle) is discarded
 	files    []SnapshotFileDiff // sorted by path on load
 	treeRows []diffRow          // flattened tree, cached on load (files-only dependency)
 	sel      int                // selected file index (into files)
@@ -43,19 +70,34 @@ type diffState struct {
 	showTree bool               // file-tree pane visible
 }
 
-// diffLoadedMsg carries a session diff (GET /session/{id}/diff).
+// diffLoadedMsg carries a diff (session or working-tree) into the reviewer.
+// gen ties the response to the load that issued it so a stale fetch (e.g. from
+// a prior source before a ctrl+x s toggle) is discarded rather than populating
+// the reviewer with the wrong source's files.
 type diffLoadedMsg struct {
+	gen   int
 	files []SnapshotFileDiff
 	err   error
 }
 
 // loadDiffCmd fetches the session's accumulated diff (no messageID anchor in v1
-// — a message cursor would let "diff this turn"; that's a follow-up).
-func loadDiffCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID string) tea.Cmd {
+// — a message cursor would let "diff this turn"; that's a follow-up). When
+// source is sourceWorkingTree it fetches GET /vcs/diff?directory=<dir>&mode=git
+// instead (plan 08e §E1); directory comes from the resolved config and may be
+// empty (the daemon falls back to its cwd). Both paths return the same
+// SnapshotFileDiff shape, so the loaded handler is unchanged. gen stamps the
+// returned msg so the handler can discard a stale fetch (from a prior source).
+func loadDiffCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID, directory string, source diffSource, gen int) tea.Cmd {
 	return func() tea.Msg {
 		var files []SnapshotFileDiff
-		err := c.GetJSON(ctx, "/session/"+sessionID+"/diff", &files)
-		return diffLoadedMsg{files: files, err: err}
+		var err error
+		switch source {
+		case sourceWorkingTree:
+			err = c.VCSDiff(ctx, directory, "git", &files)
+		default:
+			err = c.GetJSON(ctx, "/session/"+sessionID+"/diff", &files)
+		}
+		return diffLoadedMsg{gen: gen, files: files, err: err}
 	}
 }
 
@@ -65,13 +107,48 @@ func (m Model) openDiff() (Model, tea.Cmd) {
 		m.status = "open a session to review its diff"
 		return m, nil
 	}
-	m.diff = diffState{open: true, loading: true, showTree: !m.diffTreeHidden, folded: map[int]bool{}}
-	return m, loadDiffCmd(m.ctx, m.client, m.cfg.SessionID)
+	m.diff = diffState{open: true, loading: true, source: sourceSession, showTree: !m.diffTreeHidden, folded: map[int]bool{}}
+	m.diff.gen = 1
+	return m, loadDiffCmd(m.ctx, m.client, m.cfg.SessionID, m.cfg.Directory, sourceSession, m.diff.gen)
+}
+
+// reloadDiff re-fetches the reviewer's current source (used after a source
+// toggle). The reviewer must already be open. Bumps gen so a fetch in flight
+// from the prior source is discarded on arrival. Resets sel/scroll/folded
+// because the file set changes entirely between sources (a stale folded[idx]
+// would wrongly collapse the new set's same-indexed file).
+func (m Model) reloadDiff() (Model, tea.Cmd) {
+	m.diff.gen++
+	m.diff.loading = true
+	m.diff.err = nil
+	m.diff.files = nil
+	m.diff.treeRows = nil
+	m.diff.sel, m.diff.scroll = 0, 0
+	m.diff.folded = map[int]bool{}
+	return m, loadDiffCmd(m.ctx, m.client, m.cfg.SessionID, m.cfg.Directory, m.diff.source, m.diff.gen)
 }
 
 // handleDiffKey routes keys while the diff reviewer is open.
 func (m Model) handleDiffKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// ctrl+x leader inside the reviewer: the next key is a chord (ctrl+x s
+	// toggles the source — matches opencode's diff_switch_source, plan 08e §E1).
+	if m.diff.leader {
+		m.diff.leader = false
+		if msg.String() == "s" {
+			if m.diff.source == sourceSession {
+				m.diff.source = sourceWorkingTree
+			} else {
+				m.diff.source = sourceSession
+			}
+			m.status = "diff source: " + m.diff.source.String()
+			return m.reloadDiff()
+		}
+		return m, nil
+	}
 	switch msg.String() {
+	case "ctrl+x":
+		m.diff.leader = true
+		return m, nil
 	case "esc", "q":
 		m.diff = diffState{} // close + clear
 		return m, nil
@@ -192,7 +269,11 @@ func (m Model) diffView() string {
 	case m.diff.err != nil:
 		return m.diffCenter(lipgloss.NewStyle().Foreground(s.P.Red).Render("diff failed: "+m.diff.err.Error()) + "\n\n" + s.Faint.Render("esc close"))
 	case len(m.diff.files) == 0:
-		return m.diffCenter(s.Base.Render("No changes in this session.") + "\n\n" + s.Faint.Render("esc close"))
+		empty := "No changes in this session."
+		if m.diff.source == sourceWorkingTree {
+			empty = "No working-tree changes."
+		}
+		return m.diffCenter(s.Base.Render(empty) + "\n\n" + s.Faint.Render("esc close"))
 	}
 
 	width, height := m.width, m.height
@@ -208,10 +289,10 @@ func (m Model) diffView() string {
 	for _, f := range m.diff.files {
 		adds, dels = adds+f.Additions, dels+f.Deletions
 	}
-	summary := s.Section.Render("Diff") + s.Faint.Render(fmt.Sprintf(" · %d files · ", len(m.diff.files))) +
+	summary := s.Section.Render("Diff") + s.Faint.Render(fmt.Sprintf(" · %s · %d files · ", m.diff.source, len(m.diff.files))) +
 		lipgloss.NewStyle().Foreground(s.P.Green).Render(fmt.Sprintf("+%d", adds)) + " " +
 		lipgloss.NewStyle().Foreground(s.P.Red).Render(fmt.Sprintf("-%d", dels))
-	hints := s.Faint.Render("j/k file · space fold · ctrl+d/u scroll · t tree · esc close")
+	hints := s.Faint.Render("j/k file · space fold · ctrl+d/u scroll · t tree · ctrl+x s source · esc close")
 	bodyH := height - 2 // summary + hints
 	if bodyH < 1 {
 		bodyH = 1
