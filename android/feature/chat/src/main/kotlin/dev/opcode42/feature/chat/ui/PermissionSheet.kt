@@ -3,9 +3,11 @@ package dev.opcode42.feature.chat.ui
 import dev.opcode42.core.design.theme.*
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -18,7 +20,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.opcode42.core.model.PermissionRequest
 import dev.opcode42.core.model.QuestionRequest
 
@@ -226,6 +234,10 @@ fun QuestionCard(
         return
     }
 
+    // Pending questions stay expanded — the user must answer before continuing — but the
+    // card uses the same collapsible shell as every other tool card, so a resolved card
+    // (rendered briefly before the store clears the entry) collapses to the header.
+    var expanded by remember(question.id) { mutableStateOf(true) }
     var step by remember(question.id) { mutableIntStateOf(0) }
     // Per-question selected labels + custom text. Keyed by question index so a half-answered
     // wizard restores when the card is dismissed and re-shown for the same request id.
@@ -245,53 +257,82 @@ fun QuestionCard(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.secondaryContainer)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+    val headerText = if (questions.isNotEmpty()) {
+        questions[step].header.takeIf { it.isNotBlank() } ?: "Question"
+    } else {
+        "Question"
+    }
+
+    CollapsibleToolCard(
+        expanded = expanded,
+        onToggle = { expanded = !expanded },
+        modifier = modifier,
+        leading = {
+            Icon(
+                Icons.AutoMirrored.Filled.HelpOutline,
+                contentDescription = null,
+                tint = HeaderPurple,
+                modifier = Modifier.size(16.dp),
+            )
+        },
+        title = {
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(color = HeaderPurple, fontWeight = FontWeight.Medium)) {
+                        append(headerText)
+                    }
+                },
+                fontFamily = Opcode42Mono,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        },
+        trailing = {
+            if (pendingCount > 1) {
+                Text(
+                    text = "1 of $pendingCount",
+                    fontFamily = Opcode42Mono,
+                    fontSize = 11.sp,
+                    color = OnSurfaceFaint,
+                )
+            }
+        },
     ) {
         if (questions.isEmpty()) {
             // Edge case: a question request with no structured questions. Fall back to a
             // free-text input so the user can still answer.
-            Text(
-                text = "The agent is waiting for input",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            if (pendingCount > 1) {
-                Spacer(Modifier.height(4.dp))
+            Column(Modifier.padding(12.dp)) {
                 Text(
-                    text = "1 of $pendingCount",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                    text = "The agent is waiting for input",
+                    style = Opcode42Typography.bodySmall,
+                    color = OnSurfaceVariant,
                 )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = customTexts[0],
+                    onValueChange = { customTexts[0] = it },
+                    label = { Text("Your answer") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 1,
+                    maxLines = 4,
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = onReject,
+                        modifier = Modifier.weight(1f),
+                        enabled = !isReplying,
+                    ) { Text("Skip") }
+                    Button(
+                        onClick = { onReply(listOf(listOf(customTexts[0]))) },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isReplying && customTexts[0].isNotBlank(),
+                    ) { Text("Submit") }
+                }
             }
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = customTexts[0],
-                onValueChange = { customTexts[0] = it },
-                label = { Text("Your answer") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 1,
-                maxLines = 4,
-            )
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
-                    onClick = onReject,
-                    modifier = Modifier.weight(1f),
-                    enabled = !isReplying,
-                ) { Text("Skip") }
-                Button(
-                    onClick = { onReply(listOf(listOf(customTexts[0]))) },
-                    modifier = Modifier.weight(1f),
-                    enabled = !isReplying && customTexts[0].isNotBlank(),
-                ) { Text("Submit") }
-            }
-            return@Column
+            return@CollapsibleToolCard
         }
 
         val info = questions[step]
@@ -299,125 +340,126 @@ fun QuestionCard(
         val multiple = info.multiple == true
         val allowCustom = info.custom != false
 
-        // Progress segments for multi-question wizards.
-        if (total > 1) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-            ) {
-                repeat(total) { i ->
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(3.dp)
-                            .clip(MaterialTheme.shapes.small)
-                            .background(
-                                if (i <= step) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.outlineVariant
-                            )
-                    )
-                }
-            }
-        }
-
-        Text(
-            text = info.header.takeIf { it.isNotBlank() } ?: "Question",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-        )
-        if (pendingCount > 1) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "1 of $pendingCount",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
-            )
-        }
-        if (info.question.isNotBlank()) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = info.question,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-
-        val selected = selections[step]
-        fun toggle(label: String) {
-            val next = selected.toMutableSet()
-            if (multiple) {
-                if (label in next) next.remove(label) else next.add(label)
-            } else {
-                next.clear()
-                next.add(label)
-            }
-            selections[step] = next
-            if (customActive[step]) {
-                customActive[step] = false
-                customTexts[step] = ""
-            }
-        }
-
-        // Options
-        if (info.options.isNotEmpty()) {
-            info.options.forEach { opt ->
-                val checked = opt.label in selected
-                SelectableOptionRow(
-                    label = opt.label,
-                    description = opt.description,
-                    checked = checked,
-                    multiple = multiple,
-                    onClick = { toggle(opt.label) },
-                )
-            }
-        }
-
-        // Custom answer row
-        if (allowCustom) {
-            val customSelected = customActive[step]
-            Spacer(Modifier.height(4.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(MaterialTheme.shapes.small)
-                    .clickable {
-                        if (multiple) {
-                            customActive[step] = !customSelected
-                        } else {
-                            selections[step] = mutableSetOf()
-                            customActive[step] = !customSelected
-                            if (!customSelected) customTexts[step] = ""
-                        }
+        Column(Modifier.padding(12.dp)) {
+            // Progress segments for multi-question wizards.
+            if (total > 1) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                ) {
+                    repeat(total) { i ->
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .height(3.dp)
+                                .clip(MaterialTheme.shapes.small)
+                                .background(
+                                    if (i <= step) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.outlineVariant
+                                )
+                        )
                     }
-                    .padding(vertical = 8.dp),
-            ) {
+                }
+            }
+
+            if (info.question.isNotBlank()) {
+                Text(
+                    text = info.question,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnSurface,
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+
+            val selected = selections[step]
+            fun toggle(label: String) {
+                val next = selected.toMutableSet()
                 if (multiple) {
-                    Checkbox(
-                        checked = customSelected,
-                        onCheckedChange = {
-                            customActive[step] = it
-                            if (!it) customTexts[step] = ""
-                        },
-                    )
+                    if (label in next) next.remove(label) else next.add(label)
                 } else {
-                    RadioButton(
-                        selected = customSelected,
-                        onClick = {
-                            selections[step] = mutableSetOf()
-                            customActive[step] = true
-                        },
+                    next.clear()
+                    next.add(label)
+                }
+                selections[step] = next
+                if (customActive[step]) {
+                    customActive[step] = false
+                    customTexts[step] = ""
+                }
+            }
+
+            // Options
+            if (info.options.isNotEmpty()) {
+                info.options.forEach { opt ->
+                    val checked = opt.label in selected
+                    SelectableOptionRow(
+                        label = opt.label,
+                        description = opt.description,
+                        checked = checked,
+                        multiple = multiple,
+                        onClick = { toggle(opt.label) },
                     )
                 }
-                Text(
-                    text = "Type your own answer",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
             }
-            if (customSelected) {
-                Spacer(Modifier.height(8.dp))
+
+            // Custom answer row
+            if (allowCustom) {
+                val customSelected = customActive[step]
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable {
+                            if (multiple) {
+                                customActive[step] = !customSelected
+                            } else {
+                                selections[step] = mutableSetOf()
+                                customActive[step] = !customSelected
+                                if (!customSelected) customTexts[step] = ""
+                            }
+                        }
+                        .padding(vertical = 8.dp),
+                ) {
+                    if (multiple) {
+                        Checkbox(
+                            checked = customSelected,
+                            onCheckedChange = {
+                                customActive[step] = it
+                                if (!it) customTexts[step] = ""
+                            },
+                        )
+                    } else {
+                        RadioButton(
+                            selected = customSelected,
+                            onClick = {
+                                selections[step] = mutableSetOf()
+                                customActive[step] = true
+                            },
+                        )
+                    }
+                    Text(
+                        text = "Type your own answer",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = OnSurface,
+                    )
+                }
+                if (customSelected) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = customTexts[step],
+                        onValueChange = { customTexts[step] = it },
+                        label = { Text("Your answer") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 1,
+                        maxLines = 4,
+                    )
+                }
+            }
+
+            // Edge case: no options and custom disabled → free-text input anyway (can't
+            // send an empty answer).
+            if (info.options.isEmpty() && !allowCustom) {
                 OutlinedTextField(
                     value = customTexts[step],
                     onValueChange = { customTexts[step] = it },
@@ -427,67 +469,54 @@ fun QuestionCard(
                     maxLines = 4,
                 )
             }
-        }
 
-        // Edge case: no options and custom disabled → free-text input anyway (can't
-        // send an empty answer).
-        if (info.options.isEmpty() && !allowCustom) {
-            OutlinedTextField(
-                value = customTexts[step],
-                onValueChange = { customTexts[step] = it },
-                label = { Text("Your answer") },
+            Spacer(Modifier.height(16.dp))
+
+            // Build the answer for the current step → validity check.
+            fun currentAnswer(): List<String> = buildList {
+                addAll(selected)
+                if (customActive[step] && customTexts[step].isNotBlank()) add(customTexts[step])
+            }
+            val canAdvance = currentAnswer().isNotEmpty() || (info.options.isEmpty() && !allowCustom && customTexts[step].isNotBlank())
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 1,
-                maxLines = 4,
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Build the answer for the current step → validity check.
-        fun currentAnswer(): List<String> = buildList {
-            addAll(selected)
-            if (customActive[step] && customTexts[step].isNotBlank()) add(customTexts[step])
-        }
-        val canAdvance = currentAnswer().isNotEmpty() || (info.options.isEmpty() && !allowCustom && customTexts[step].isNotBlank())
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            if (total > 1 && step > 0) {
+            ) {
+                if (total > 1 && step > 0) {
+                    OutlinedButton(
+                        onClick = { step-- },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isReplying,
+                    ) { Text("Back") }
+                }
                 OutlinedButton(
-                    onClick = { step-- },
+                    onClick = onReject,
                     modifier = Modifier.weight(1f),
                     enabled = !isReplying,
-                ) { Text("Back") }
-            }
-            OutlinedButton(
-                onClick = onReject,
-                modifier = Modifier.weight(1f),
-                enabled = !isReplying,
-            ) { Text("Skip") }
-            if (isLast) {
-                Button(
-                    onClick = {
-                        // Collect answers for all questions in order.
-                        val answers = (0 until total).map { i ->
-                            buildList {
-                                addAll(selections[i])
-                                if (customActive[i] && customTexts[i].isNotBlank()) add(customTexts[i])
+                ) { Text("Skip") }
+                if (isLast) {
+                    Button(
+                        onClick = {
+                            // Collect answers for all questions in order.
+                            val answers = (0 until total).map { i ->
+                                buildList {
+                                    addAll(selections[i])
+                                    if (customActive[i] && customTexts[i].isNotBlank()) add(customTexts[i])
+                                }
                             }
-                        }
-                        onReply(answers)
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = !isReplying && canAdvance,
-                ) { Text("Submit") }
-            } else {
-                Button(
-                    onClick = { step++ },
-                    modifier = Modifier.weight(1f),
-                    enabled = !isReplying && canAdvance,
-                ) { Text("Next") }
+                            onReply(answers)
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isReplying && canAdvance,
+                    ) { Text("Submit") }
+                } else {
+                    Button(
+                        onClick = { step++ },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isReplying && canAdvance,
+                    ) { Text("Next") }
+                }
             }
         }
     }
@@ -496,6 +525,8 @@ fun QuestionCard(
 /**
  * The resolved (post-answer) history row. Non-interactive — shows what was answered or that
  * the question was skipped. Lives in the stream until the store clears the pending entry.
+ * Uses the same hairline `SurfaceContainer` shell as the tool cards so a resolved question
+ * reads as part of the stream, not a leftover modal artifact.
  */
 @Composable
 private fun ResolvedQuestionRow(
@@ -508,17 +539,30 @@ private fun ResolvedQuestionRow(
         resolvedAnswers != null -> "Answered: " + resolvedAnswers.joinToString(", ") { it.joinToString(", ") }
         else -> "Answered"
     }
-    Text(
-        text = label,
-        style = MaterialTheme.typography.bodyMedium,
-        color = OnSurfaceVariant,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.secondaryContainer)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-    )
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .clip(Opcode42Shapes.sm)
+            .background(SurfaceContainer)
+            .border(1.dp, Hairline, Opcode42Shapes.sm)
+            .heightIn(min = 46.dp)
+            .padding(horizontal = 12.dp),
+    ) {
+        Icon(
+            Icons.AutoMirrored.Filled.HelpOutline,
+            contentDescription = null,
+            tint = OnSurfaceFaint,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            text = label,
+            fontFamily = Opcode42Mono,
+            fontSize = 13.sp,
+            color = OnSurfaceVariant,
+        )
+    }
 }
 
 @Composable

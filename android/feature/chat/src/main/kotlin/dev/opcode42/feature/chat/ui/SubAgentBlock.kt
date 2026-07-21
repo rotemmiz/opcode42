@@ -4,8 +4,6 @@ import dev.opcode42.core.design.brand.Spinner
 import dev.opcode42.core.design.theme.*
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,18 +14,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -128,28 +121,19 @@ fun SubAgentBlock(
         }
     }
 
-    Column(
-        modifier = modifier
-            .padding(horizontal = 14.dp, vertical = 4.dp)
-            .clip(Opcode42Shapes.sm)
-            .background(SurfaceContainer)
-            .border(1.dp, OutlineVariant, Opcode42Shapes.sm),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 46.dp)
-                .clickable { expanded = !expanded }
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
+    CollapsibleToolCard(
+        expanded = expanded,
+        onToggle = { expanded = !expanded },
+        modifier = modifier,
+        leading = {
             Icon(
                 Icons.Default.AutoAwesome,
                 contentDescription = null,
                 tint = HeaderPurple,
                 modifier = Modifier.size(16.dp),
             )
+        },
+        title = {
             Text(
                 text = buildAnnotatedString {
                     withStyle(SpanStyle(color = HeaderPurple, fontWeight = FontWeight.Medium)) {
@@ -165,65 +149,57 @@ fun SubAgentBlock(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+        },
+        trailing = {
             SubAgentStatus(part)
-            Icon(
-                if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                contentDescription = null,
-                tint = OnSurfaceVariant,
-                modifier = Modifier.size(16.dp),
+        },
+    ) {
+        // The child session's transcript (loaded on first expand). If the child id
+        // is unknown or the load hasn't completed, fall back to the task_result text.
+        if (childId != null && childMessages.isNotEmpty()) {
+            ChildTranscript(
+                messages = childMessages,
+                onNavigateToSession = { onNavigateToSession(childId) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else if (result != null) {
+            Text(
+                text = result,
+                style = Opcode42Typography.bodySmall,
+                color = OnSurfaceVariant,
+                modifier = Modifier
+                    .background(SurfaceContainerLowest)
+                    .fillMaxWidth()
+                    .padding(12.dp),
+            )
+        } else if (isRunning) {
+            Text(
+                text = "Subagent is working…",
+                style = Opcode42Typography.bodySmall,
+                color = OnSurfaceVariant,
+                modifier = Modifier.padding(12.dp),
             )
         }
 
-        if (expanded) {
-            HorizontalDivider(color = Hairline)
-
-            // The child session's transcript (loaded on first expand). If the child id
-            // is unknown or the load hasn't completed, fall back to the task_result text.
-            if (childId != null && childMessages.isNotEmpty()) {
-                ChildTranscript(
-                    messages = childMessages,
-                    onNavigateToSession = { onNavigateToSession(childId) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            } else if (result != null) {
-                Text(
-                    text = result,
-                    style = Opcode42Typography.bodySmall,
-                    color = OnSurfaceVariant,
-                    modifier = Modifier
-                        .background(SurfaceContainerLowest)
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                )
-            } else if (isRunning) {
-                Text(
-                    text = "Subagent is working…",
-                    style = Opcode42Typography.bodySmall,
-                    color = OnSurfaceVariant,
-                    modifier = Modifier.padding(12.dp),
-                )
-            }
-
-            // "Open in new view" — navigate to the child session as its own chat.
-            if (childId != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(8.dp),
-                    horizontalArrangement = Arrangement.End,
+        // "Open in new view" — navigate to the child session as its own chat.
+        if (childId != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                OutlinedButton(
+                    onClick = { onNavigateToSession(childId) },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 12.dp, vertical = 4.dp,
+                    ),
                 ) {
-                    OutlinedButton(
-                        onClick = { onNavigateToSession(childId) },
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            horizontal = 12.dp, vertical = 4.dp,
-                        ),
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.OpenInNew,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                        )
-                        Spacer(Modifier.size(4.dp))
-                        Text("Open in new view", fontSize = 12.sp)
-                    }
+                    Icon(
+                        Icons.AutoMirrored.Filled.OpenInNew,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text("Open in new view", fontSize = 12.sp)
                 }
             }
         }

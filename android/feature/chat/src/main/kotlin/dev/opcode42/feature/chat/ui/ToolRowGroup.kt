@@ -117,9 +117,9 @@ private fun ToolRowView(row: ToolRow) {
 private val EDIT_TOOL_NAMES = setOf("edit", "patch")
 private val GLOB_TOOL_NAMES = setOf("grep", "glob", "list", "ls")
 
-/** Tools that are surfaced elsewhere (todos sheet) and skipped from tool rows. */
+/** Tools that are surfaced elsewhere (todos sheet, QuestionCard) and skipped from tool rows. */
 internal fun ToolPart.isHiddenFromRows(): Boolean =
-    tool == "todowrite" || tool == "todoread"
+    tool == "todowrite" || tool == "todoread" || tool.lowercase() == "question"
 
 /** Tools whose output/content deserves a dedicated block, not a compact row. */
 internal fun ToolPart.rendersAsOwnBlock(): Boolean =
