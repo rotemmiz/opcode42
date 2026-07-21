@@ -100,6 +100,15 @@ type Part struct {
 	Tool      string          `json:"tool,omitempty"`
 	CallID    string          `json:"callID,omitempty"`
 	State     json.RawMessage `json:"state,omitempty"`
+
+	// File-part fields (type == "file"; plan 08e §E2). Mime is the file's
+	// content type (e.g. "image/png"). URL carries the bytes for inline
+	// images as a "data:<mime>;base64,<payload>" URL (the shape opencode's
+	// pasteAttachment emits — packages/tui/src/component/prompt/index.tsx:1246
+	// and image/image.ts:148). Filename is the optional display name.
+	Mime     string `json:"mime,omitempty"`
+	URL      string `json:"url,omitempty"`
+	Filename string `json:"filename,omitempty"`
 }
 
 // Permission is a pending permission request (permission.asked) awaiting a reply.

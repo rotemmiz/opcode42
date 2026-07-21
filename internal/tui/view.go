@@ -32,6 +32,16 @@ type viewState struct {
 	// being filtered out (the flat main list filters parentID != nil; the
 	// subtree view shows them). Toggled by `t` in the sessions modal only.
 	sessionsSubtree bool
+
+	// images toggles inline image rendering for image file parts (plan 08e
+	// §E2). Default off: most terminals can't decode Sixel or iTerm2 inline
+	// escapes, and emitting those escapes to an unsupported terminal produces
+	// garbage on screen. When on, renderImagePart probes the terminal
+	// (TERM_PROGRAM for iTerm2/WezTerm, TERM/OPCODE42_SIXEL/Config.Sixel for
+	// Sixel) and emits the matching escape; when the probe fails or the part
+	// has no decodable bytes, it falls back to a placeholder glyph. Toggled
+	// by ctrl+x i.
+	images bool
 }
 
 // toggleHint returns a one-line status string describing a toggle's new value.

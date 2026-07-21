@@ -29,6 +29,7 @@ func main() {
 	themeFlag := flag.String("theme", "", "theme name override (e.g. opcode42-dark, opcode42-light, monochrome); empty = auto-pick or KV-pinned")
 	noDiscover := flag.Bool("no-discover", false, "disable mDNS browsing in the connect overlay (plan 08e §D3)")
 	noAnim := flag.Bool("no-anim", false, "disable per-frame animation (static logo, frozen spinner, peak bg-pulse) for capture / accessibility")
+	sixel := flag.Bool("sixel", false, "force Sixel capability on for image rendering (plan 08e §E2); images still require ctrl+x i to display")
 	flag.Parse()
 
 	// When --url is omitted, the TUI defers to tui.Restore: a KV-pinned
@@ -45,6 +46,7 @@ func main() {
 		Theme:      *themeFlag,
 		NoDiscover: *noDiscover,
 		NoAnim:     *noAnim,
+		Sixel:      *sixel,
 	}).Restore() // restore persisted theme/model/history + enable persistence
 
 	// AltScreen (and other terminal toggles) moved from NewProgram options to

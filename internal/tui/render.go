@@ -118,6 +118,17 @@ func (m Model) renderMessage(msg Message, parts []Part) string {
 				continue
 			}
 			out = append(out, m.toolRow(p))
+		case "file":
+			// Plan 08e §E2: image file parts render inline (Sixel/iTerm2)
+			// when viewState.images is on and a terminal capability is
+			// advertised; otherwise a placeholder glyph. Non-image file parts
+			// render as a chip (filename + mime) so they're still visible in
+			// the conversation record. renderImagePart handles both paths.
+			if strings.HasPrefix(p.Mime, "image/") {
+				out = append(out, m.renderImagePart(p))
+			} else {
+				out = append(out, m.fileChip(p))
+			}
 		}
 	}
 	// Surface an assistant turn's error (auth, overflow, rate limit, …) — never
