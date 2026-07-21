@@ -1172,107 +1172,67 @@ func (m Model) effectiveAgent() string {
 	return "build"
 }
 
-// View renders the active screen (or the command overlay when one is open). The
-// default theme renders on the terminal's native background (no full-screen fill,
-// so it doesn't paint a mismatched box); an explicitly chosen light/mono theme
-// paints its background so it stays legible on any terminal.
+// View renders the active screen via the v2 canvas compositor (plan 08e §A1+A2).
 // View satisfies bubbletea v2's Model interface, which now returns a tea.View
-// struct (was a string in v1). The whole-frame compositing still happens in
-// renderView; this wrapper just declares the program-level terminal toggles
-// that used to be tea.NewProgram options (AltScreen replaces tea.WithAltScreen
-// in cmd/opcode-tui/main.go).
+// struct (was a string in v1). The wrapper declares the program-level terminal
+// toggles that used to be tea.NewProgram options (AltScreen replaces
+// tea.WithAltScreen in cmd/opcode-tui/main.go).
+//
+// The whole-frame compositing lives in composeView (canvas.go): it builds a
+// NewCanvas(w,h), fills the base with the theme Bg, and composes each pane and
+// overlay as a Layer at its (x,y,z). Every cell is owned by the canvas — no
+// terminal-default bleed, no manual bg re-emit, no string-splice overlays.
 func (m Model) View() tea.View {
-	v := tea.NewView(m.renderView())
+	v := tea.NewView(m.composeView())
 	v.AltScreen = true
 	return v
 }
 
-func (m Model) renderView() string {
-	var body string
-	switch {
-	case m.pendingPermission() != nil:
-		body = m.permissionView()
-	case m.pendingQuestion() != nil:
-		body = m.questionView()
-	case m.diff.open:
-		body = m.diffView()
-	case m.modal != modalNone:
-		body = m.modalView()
-	case m.screen == ScreenSession:
-		body = m.viewSession()
-	default:
-		body = m.viewSplash()
-	}
-	if m.width == 0 || m.height == 0 {
-		return body
-	}
-	// Composite onto a full-screen canvas painted with the theme background. This
-	// truncates each row to width (no wrapping → the frame never exceeds m.height,
-	// so the terminal doesn't scroll the footer/sidebar) and paints every gap/empty
-	// cell with the base bg (mirrors opencode's opentui per-cell compositor). A plain
-	// lipgloss Background wrap can't do this — its inner resets leave a black void.
-	filled := paintBackground(body, m.width, m.height, m.styles.P.Bg)
-	// Composite the toast overlay onto the bottom-right of the Bg-filled frame.
-	// overlayToasts replaces the rightmost N columns of the last K rows with the
-	// toast box; each toast cell carries its own BgElev background so it renders
-	// correctly over the Bg-filled surface (plan 08c M11).
-	return m.overlayToasts(filled)
-}
+// renderView is the v1 render entry, retained as a thin shim around the v2
+// composeView so tests that call renderView() keep working through the
+// transition. New code should call composeView directly.
+//
+// Deprecated: use composeView (the v2 canvas path). This shim exists only to
+// keep the existing test surface green while the canvas adoption lands; a
+// follow-up will migrate the tests over and delete this alias.
+func (m Model) renderView() string { return m.composeView() }
 
-// viewSplash renders the wordmark, the composer, and the connection status.
+// viewSplash renders the splash screen content as a single string, used by
+// the pre-resize fallback (width/height == 0) and by composeView's splash
+// layer when dimensions are known. The canvas composites this content over
+// the base Bg fill, so the splash needs only to render its own foreground —
+// no per-line Bg fill, no Place/Center wrapping (the canvas does the centering
+// by positioning the layer).
 func (m Model) viewSplash() string {
 	s := m.styles
-	// Each splash line is rendered as a single full-width, center-aligned, Bg-painted
-	// style → one SGR run per line, so the whole row (text + padding) carries the
-	// theme background with no mid-line reset. Lipgloss emits a reset after every
-	// styled run, so per-segment backgrounds leave the rest of the row transparent
-	// (terminal-dark bleed on a light terminal); one style per line avoids that
-	// entirely. plan 08c Tier 0.
 	w := m.width
 	if w <= 0 {
-		// No layout yet — fall back to plain stacking (used only before the first
-		// WindowSizeMsg; View() returns body unpainted in that case anyway).
+		// Pre-first-resize: stack the elements plain (no centering, no bg fill).
 		return lipgloss.JoinVertical(lipgloss.Center,
 			s.Base.Bold(true).Render("opcode42"), "", m.composerView(), "",
 			s.Faint.Render("enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit"))
 	}
-	fill := func(st lipgloss.Style, content string) string {
-		return st.Background(s.P.Bg).Width(w).Align(lipgloss.Center).Render(content)
-	}
-	blank := lipgloss.NewStyle().Background(s.P.Bg).Width(w).Render("")
-
-	// Block-pixel "opcode42" logo with left→right shimmer sweep (plan 08c M10).
-	// logoFrame returns one string per row; each row is then full-width Bg-filled via
-	// fill() so no transparent cell escapes to the terminal background.
 	logoRows := logoFrame(m.animFrame, s.P)
 	logoLines := make([]string, len(logoRows))
 	for i, row := range logoRows {
-		logoLines[i] = fill(lipgloss.NewStyle(), row)
+		logoLines[i] = lipgloss.NewStyle().Width(w).Align(lipgloss.Center).Render(row)
 	}
 	wordmark := lipgloss.JoinVertical(lipgloss.Left, logoLines...)
 
 	composer := m.composerView()
-	if ac := m.autocompleteView(); ac != "" {
-		composer = lipgloss.JoinVertical(lipgloss.Left, ac, composer)
-	}
-	// The composer is a fixed-width bordered block; center it on a Bg-filled row.
-	composer = lipgloss.PlaceHorizontal(w, lipgloss.Center, composer,
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(s.P.Bg)))
+	composer = lipgloss.PlaceHorizontal(w, lipgloss.Center, composer)
 
-	status := fill(s.Faint, m.statusLine())
+	statusLine := m.statusLine()
 	if m.err != nil {
-		status = fill(lipgloss.NewStyle().Foreground(s.P.Red), m.err.Error())
+		statusLine = m.err.Error()
 	}
-	hint := fill(s.Faint, "enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit")
+	status := lipgloss.NewStyle().Foreground(s.P.FgFaint).Width(w).Align(lipgloss.Center).Render(statusLine)
+	hint := lipgloss.NewStyle().Foreground(s.P.FgFaint).Width(w).Align(lipgloss.Center).Render("enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit")
+	blank := lipgloss.NewStyle().Width(w).Render("")
 
 	body := lipgloss.JoinVertical(lipgloss.Left, wordmark, blank, composer, blank, hint, blank, status)
 	if m.height == 0 {
 		return body
 	}
-	// Body rows are already full-width Bg-painted; Place only adds vertical padding,
-	// which WithWhitespaceBackground fills with the theme Bg too.
-	return lipgloss.Place(w, m.height, lipgloss.Center, lipgloss.Center, body,
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(s.P.Bg)))
+	return lipgloss.Place(w, m.height, lipgloss.Center, lipgloss.Center, body)
 }
-
-func (m Model) viewSession() string { return m.renderSession() }
