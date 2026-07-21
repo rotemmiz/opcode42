@@ -100,7 +100,11 @@ func (m Model) handleQuestionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		// Final step: build prior steps + this one WITHOUT mutating qAnswers, so a
 		// failed reply can be retried without double-appending the last answer.
+		// Clear qRejecting so a prior failed reject attempt doesn't taint this
+		// reply's answered-card state (plan 08e §E4: reply records labels, not
+		// Skipped).
 		m.qReplying = true
+		m.qRejecting = false
 		return m, replyQuestionCmd(m.ctx, m.client, q.ID, m.finalAnswers(info))
 	}
 	return m, nil

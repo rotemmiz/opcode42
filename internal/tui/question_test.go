@@ -308,6 +308,43 @@ func TestQuestionRepliedMsg_LocalRejectRecordsSkipped(t *testing.T) {
 	}
 }
 
+// TestQuestion_ReplyAfterFailedRejectRecordsLabels asserts that a reply
+// following a FAILED reject records the labels (not Skipped). The qRejecting
+// flag must be cleared on the reply attempt so a prior failed reject doesn't
+// taint the reply's answered-card state (plan 08e §E4).
+func TestQuestion_ReplyAfterFailedRejectRecordsLabels(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
+		{Question: "Q", Options: []QuestionOption{opt("a"), opt("b")}},
+	}))
+	// Reject attempt fails (non-404) — qRejecting stays true, qReplying false.
+	m, _ = step(t, m, key("r"))
+	m, _ = step(t, m, questionRepliedMsg{id: "qst_1", err: errTest})
+	if m.qReplying {
+		t.Fatal("a failed reject should clear qReplying")
+	}
+	if !m.qRejecting {
+		t.Fatal("qRejecting should be retained after a failed reject (the user may retry the reject)")
+	}
+	// Now the user changes their mind and replies with "a" (enter).
+	m, _ = step(t, m, key("enter"))
+	if m.qRejecting {
+		t.Fatal("the reply's enter branch must clear qRejecting so the reply records labels, not Skipped")
+	}
+	m, _ = step(t, m, questionRepliedMsg{id: "qst_1"})
+	got := m.store.answeredQuestions["ses_1"]
+	if len(got) != 1 {
+		t.Fatalf("one answered card expected; got %+v", got)
+	}
+	if got[0].Skipped {
+		t.Fatal("a reply after a failed reject should record Skipped=false (labels win)")
+	}
+	if len(got[0].Answers) != 1 || got[0].Answers[0][0] != "a" {
+		t.Fatalf("the reply labels should be recorded; got %+v", got[0].Answers)
+	}
+}
+
 // TestQuestionRepliedMsg_SSEArrivesFirst_UpgradesWithLabels asserts the
 // out-of-order edge case: if the SSE question.replied event arrives BEFORE the
 // local questionRepliedMsg, the SSE event is deferred (not applied) so the
