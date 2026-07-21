@@ -492,13 +492,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleModalKey(msg)
 		}
 		// ctrl+x leader: the next key is a chord (design app.jsx:227-237).
+		// The which-key overlay (plan 08e §F2) renders the chord options as a
+		// Z=15 layer over the status bar instead of mutating m.status — the
+		// status line keeps carrying connection/model state, and the overlay
+		// is a dedicated, transient affordance. whichKeyView() reads m.leader.
 		if m.leader {
 			m.leader = false
 			return m.handleLeaderKey(msg)
 		}
 		if msg.String() == "ctrl+x" {
 			m.leader = true
-			m.status = "ctrl+x — l sessions · n new · m model · a agent · g timeline · s status · c connect · b sidebar · t tasks · y copy · r thinking · f fold thought · o tools · v fold tool · > open task child · e editor · d diff · ` terminal · w stash · ↓ child · ↑ parent · [ ] siblings"
+			return m, nil
+		}
+		// F1 opens the help overlay (plan 08e §F3) — matches opencode's
+		// keybindings dialog trigger. Static content generated from the
+		// keybind table (helpRows); the same overlay is reachable via
+		// ctrl+x h and /help.
+		if msg.String() == "f1" {
+			m.modal, m.modalSel = modalHelp, 0
 			return m, nil
 		}
 		// The slash popup captures nav/accept/dismiss keys; other keys fall
@@ -1368,6 +1379,12 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "s":
 		m.modal, m.modalSel = modalStatus, 0
+		return m, nil
+	case "h":
+		// ctrl+x h opens the help overlay (plan 08e §F3) — same target as F1
+		// and /help. The leader is cleared by the caller (handleLeaderKey is
+		// reached only after m.leader is reset to false).
+		m.modal, m.modalSel = modalHelp, 0
 		return m, nil
 	case "c":
 		// Open the connect overlay (plan 08e §D2): mDNS browser + manual URL.

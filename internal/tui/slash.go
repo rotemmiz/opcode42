@@ -42,6 +42,7 @@ var builtinCommands = []slashItem{
 	{name: "/stash", desc: "Stashed prompt drafts", kind: slashBuiltin},
 	{name: "/status", desc: "Connection status", kind: slashBuiltin},
 	{name: "/connect", desc: "Connect to a daemon (mDNS + URL)", kind: slashBuiltin},
+	{name: "/help", desc: "Keybindings & commands reference", kind: slashBuiltin},
 }
 
 // acMode is what the composer popup is completing.
@@ -292,6 +293,11 @@ func (m Model) acceptSlash() (tea.Model, tea.Cmd) {
 				cmd = startDiscoverCmd(m.discoverCtx)
 			}
 			return m, cmd
+		case "/help":
+			// Open the help overlay (plan 08e §F3) — same target as F1 and
+			// ctrl+x h. Static content generated from helpRows().
+			m.modal, m.modalSel = modalHelp, 0
+			return m, nil
 		}
 		return m, nil
 	}
