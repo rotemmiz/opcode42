@@ -114,11 +114,27 @@ func TestMCPStatus(t *testing.T) {
 
 func TestViewToggles_ViaLeader(t *testing.T) {
 	m := New(Config{URL: "http://x"})
-	// ctrl+x r toggles thinking visibility.
+	// Plan 17 §D1: hideThinking now defaults to true (collapsed, matching
+	// opencode's full-TUI "hide" default). ctrl+x r toggles to "show" mode.
+	if !m.view.hideThinking {
+		t.Fatal("default hideThinking should be true (collapsed)")
+	}
+	m, _ = step(t, m, key("ctrl+x"))
+	m, _ = step(t, m, key("r"))
+	if m.view.hideThinking {
+		t.Fatal("ctrl+x r should toggle hideThinking to false (show mode)")
+	}
+	// ctrl+x r again toggles back to hide.
 	m, _ = step(t, m, key("ctrl+x"))
 	m, _ = step(t, m, key("r"))
 	if !m.view.hideThinking {
-		t.Fatal("ctrl+x r should hide thinking")
+		t.Fatal("ctrl+x r should toggle hideThinking back to true (hide mode)")
+	}
+	// ctrl+x f toggles the per-reasoning expanded signal (plan 17 §D1).
+	m, _ = step(t, m, key("ctrl+x"))
+	m, _ = step(t, m, key("f"))
+	if !m.view.expandedThinking {
+		t.Fatal("ctrl+x f should toggle expandedThinking to true")
 	}
 	// ctrl+x o toggles tool output.
 	m, _ = step(t, m, key("ctrl+x"))

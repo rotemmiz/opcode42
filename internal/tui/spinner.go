@@ -72,20 +72,18 @@ func animTickCmd() tea.Cmd {
 //     continuously while on the home screen (plan 08c M10).  The tick cadence is
 //     the same 100ms as the spinner; the shimmer advances slowly (46 frames per
 //     full sweep) so CPU impact is negligible.
-//     (tool spinner in toolRow / scannerFrame spinner label).
 //   - At least one live (non-expired) toast is in the queue (plan 08c M11).
 //     The animTick drives the toast TTL countdown; toastsLive() stays true until
 //     all toasts expire, at which point the tick self-stops and the queue drains.
+//   - A reasoning part is streaming (plan 17 §D4): Time.End == 0 but the part
+//     has accumulated text. The spinner-style header ("Thinking: <title>")
+//     reuses the animTick + scannerFrame infra, so the tick must reschedule
+//     to keep the sweep moving while the part is still streaming. Once the
+//     daemon sets Time.End the part finalizes and the static "Thought ·
+//     <duration>" header takes over — no animation needed.
 //
-// Idle-safety: on ScreenSession with no running tools and no live toasts this
-// returns false, stopping the tick.  The splash case only fires while screen ==
-// ScreenSplash; switching to a session screen with no active tools/toasts
-// immediately goes idle again.
-//
-// Rationale: the SSE stream delivers message.part.updated events continuously
-// during a turn; as long as there is a running tool the assistant is active.
-// Once all tools reach "completed"/"error" the animation stops naturally on the
-// next animTickMsg check.
+// Idle-safety: on ScreenSession with no running tools, no streaming reasoning
+// parts, and no live toasts this returns false, stopping the tick.
 func (m Model) animating() bool {
 	// Logo shimmer: keep ticking while the splash/home screen is visible so the
 	// shimmer sweep advances each frame.  ScreenSplash is the initial state and
@@ -113,6 +111,17 @@ func (m Model) animating() bool {
 						return true
 					}
 				}
+			}
+			// Plan 17 §D4: a streaming reasoning part drives the
+			// "Thinking: <title>" scanner header. The sweep animates only
+			// while the part is still streaming (Time.End == 0). Once done
+			// the static "Thought · <duration>" header takes over and no
+			// longer needs the animTick. We require non-empty text so a
+			// freshly-created (empty) reasoning part does not spin up the
+			// tick on its own — the first delta kicks it via
+			// maybeKickAnim in the sseEventMsg handler.
+			if p.Type == "reasoning" && !p.Time.Done() && strings.TrimSpace(p.Text) != "" {
+				return true
 			}
 		}
 	}

@@ -101,6 +101,14 @@ type Part struct {
 	CallID    string          `json:"callID,omitempty"`
 	State     json.RawMessage `json:"state,omitempty"`
 
+	// Time is the part's start/end timestamps (wire field `time`,
+	// openapi.json ReasoningPart/TextPart.time). Populated from
+	// message.part.updated events. End is 0 while the part is still
+	// streaming; the renderer uses End != 0 as the "isDone" signal
+	// (plan 17 §D4 — matching opencode's ReasoningPart isDone,
+	// tui/routes/session/index.tsx:1585).
+	Time PartTime `json:"time,omitempty"`
+
 	// File-part fields (type == "file"; plan 08e §E2). Mime is the file's
 	// content type (e.g. "image/png"). URL carries the bytes for inline
 	// images as a "data:<mime>;base64,<payload>" URL (the shape opencode's
@@ -109,6 +117,29 @@ type Part struct {
 	Mime     string `json:"mime,omitempty"`
 	URL      string `json:"url,omitempty"`
 	Filename string `json:"filename,omitempty"`
+}
+
+// PartTime carries the part's start/end timestamps (ms since epoch). Start is
+// required by the wire schema; End is set by the daemon when the part
+// finalizes. While End == 0 the part is still streaming.
+type PartTime struct {
+	Start int64 `json:"start"`
+	End   int64 `json:"end,omitempty"`
+}
+
+// Done reports whether the part has finalized (the daemon set Time.End).
+// Used by the reasoning renderer to switch from the streaming spinner header
+// to the static "Thought · <duration>" header (plan 17 §D4).
+func (t PartTime) Done() bool { return t.End != 0 }
+
+// Duration returns End - Start in milliseconds, clamped at zero. Returns 0
+// when the part is still streaming (End == 0) — callers should gate on Done()
+// before formatting the duration for display.
+func (t PartTime) Duration() int64 {
+	if t.End == 0 || t.End < t.Start {
+		return 0
+	}
+	return t.End - t.Start
 }
 
 // Permission is a pending permission request (permission.asked) awaiting a reply.

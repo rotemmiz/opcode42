@@ -93,5 +93,17 @@
     "phase": "D",
     "reason": "Plan 17 Workstream C: Opcode42's TUI keeps the per-tool fold toggle (ctrl+x v) for the inline diff — collapsed shows only the header ('Edit <file> ▸'), expanded shows header + diff. opencode's run mini-TUI has no per-tool fold for the inline diff (the snapshot always renders in full). This is an intentional extension to the run mini-TUI behavior, mirroring opencode's full-TUI diff-viewer plugin (which does have per-file fold). Documented in plans/17-tui-scroll-layout.md §C5.",
     "track": "intentional: per-tool fold toggle (Opcode42 extension, ctrl+x v) for the inline diff"
+  },
+  {
+    "scenario": "tui-thinking-keybind",
+    "phase": "D (plan 17)",
+    "reason": "TUI (plan 17 §D1): Opcode42 binds ctrl+x r (toggle hide/show ThinkingMode) and ctrl+x f (toggle the per-reasoning expanded signal). opencode's full TUI leaves `display_thinking` unbound (`keybind(\"none\")`, packages/tui/src/config/keybind.ts:150), reachable only via the `/thinking` command palette. Opcode42 binding it to a chord is a convenience divergence — opencode users had no keybind at all and had to use the slash command. No wire change; reasoning parts always render at least a 1-line header (matching opencode's full TUI showThinking = createMemo(() => true), packages/tui/src/routes/session/index.tsx:254), so this only affects which affordance the user has to toggle the visibility, not what's rendered.",
+    "track": "intentional: convenience keybind for a palette-only action in opencode"
+  },
+  {
+    "scenario": "tui-thinking-default-hide",
+    "phase": "D (plan 17)",
+    "reason": "TUI (plan 17 §D1): Opcode42 defaults `hideThinking = true` (collapsed, 1-line header). This MATCHES opencode's full-TUI default (\"hide\", packages/tui/src/context/thinking.ts:36) — not a divergence from opencode's full TUI. Logged here as a divergence from opencode's RUN mini-TUI default (\"show\"), which is what the original plan 17 wording picked up before §D1 corrected it: the run mini-TUI (packages/opencode/src/cli/cmd/run/session-data.ts:906-908) DROPS the reasoning part entirely when !input.thinking, while Opcode42's full TUI collapses it to a header. Opcode42 follows opencode's full TUI behavior, NOT the run mini-TUI behavior.",
+    "track": "intentional: matches opencode full-TUI default (\"hide\"); diverges from run mini-TUI default (\"show\" + drop)"
   }
 ]

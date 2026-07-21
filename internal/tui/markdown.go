@@ -71,6 +71,34 @@ type mdCacheEntry struct {
 // stays proportional to (messages × themes seen) which is small.
 type mdCache map[mdCacheKey]mdCacheEntry
 
+// mdBlockCacheKey is the incremental per-stable-block cache key (plan 17 §D3).
+// Streaming markdown grows one delta at a time; rendering the whole part with
+// glamour on every delta is O(n²) over the stream (each frame re-parses every
+// prior block). The incremental cache stores one entry per stable block — a
+// markdown block (paragraph, heading, list, code fence) followed by a blank
+// line or end-of-text — keyed by (partID, blockIdx, width, theme). Only the
+// trailing partial block (no trailing blank line, the "streaming block") is
+// re-rendered each frame; stable blocks serve straight from the cache.
+//
+// Mirrors opencode's commitMarkdownBlocks + _stableBlockCount
+// (run/scrollback.surface.ts:287-305): only new stable blocks are committed;
+// the trailing streaming block re-settles each frame.
+type mdBlockCacheKey struct {
+	partID    string
+	blockIdx  int
+	width     int
+	themeName string
+}
+
+// mdBlockCache is the per-stable-block cache. Like mdCache it is a plain map
+// (reference type) shared across Model copies via the same underlying map.
+// An entry is the rendered ANSI string for one stable block (no trailing
+// newline; the caller joins blocks with "\n\n"). Block indexes are stable:
+// block 0 is always the first blank-line-terminated block in the part's
+// accumulated text, so a hit on (partID, blockIdx, width, theme) means the
+// rendered output is current — no need to invalidate on text growth.
+type mdBlockCache map[mdBlockCacheKey]string
+
 // sp returns a *string holding s — glamour's StylePrimitive fields use
 // pointer semantics so that zero (unset) differs from an explicit value.
 func sp(s string) *string { return &s }
@@ -389,6 +417,11 @@ func hashText(s string) string {
 // Background is p.Bg.  This ensures every row is fully painted to the theme
 // background, matching the full-canvas paint that View() enforces at the outer
 // level (bgfill_test.go regression guard).
+//
+// For streaming parts (text/reasoning whose content grows one delta at a time)
+// prefer renderMarkdownStreaming, which keys on (partID, blockIdx, width, theme)
+// and only re-renders the trailing partial block each frame — avoiding the
+// O(n²) full-text re-parse this path incurs on every delta (plan 17 §D3).
 func (m Model) renderMarkdown(text string) string {
 	width := m.contentWidth()
 	key := mdCacheKey{
@@ -402,6 +435,24 @@ func (m Model) renderMarkdown(text string) string {
 		return entry.rendered
 	}
 
+	rendered := m.renderMarkdownUncached(text, width)
+
+	// Store in cache: m.mdCache is a map (reference type) so this write is
+	// visible through all copies of the Model that share this map.
+	// ensureMDCache must have been called on the *original* Model before View
+	// is called; New() calls it in the constructor.
+	if m.mdCache != nil {
+		m.mdCache[key] = mdCacheEntry{rendered: rendered}
+	}
+
+	return rendered
+}
+
+// renderMarkdownUncached runs glamour over text and applies the anti-bleed
+// background fill. Shared by the full-text cache path (renderMarkdown) and
+// the incremental streaming path (renderMarkdownStreaming), which use the
+// same renderer config + bg fill but different cache strategies.
+func (m Model) renderMarkdownUncached(text string, width int) string {
 	// Build a renderer for the active palette + width.
 	r, err := newMarkdownRenderer(m.styles.P, width)
 	if err != nil {
@@ -435,23 +486,148 @@ func (m Model) renderMarkdown(text string) string {
 	for i, line := range lines {
 		filled[i] = bgFill.Render(line)
 	}
-	result := strings.Join(filled, "\n")
-
-	// Store in cache: m.mdCache is a map (reference type) so this write is
-	// visible through all copies of the Model that share this map.
-	// ensureMDCache must have been called on the *original* Model before View
-	// is called; New() calls it in the constructor.
-	if m.mdCache != nil {
-		m.mdCache[key] = mdCacheEntry{rendered: result}
-	}
-
-	return result
+	return strings.Join(filled, "\n")
 }
 
-// ensureMDCache initialises the markdown render cache if it is nil.
-// Called from New() so that all Model copies share a non-nil map from birth.
+// renderMarkdownStreaming is the incremental streaming render path (plan 17
+// §D3). For a part whose text is growing one delta at a time, the full-text
+// mdCache misses every frame (the SHA-256 key changes on every append) →
+// O(n²) glamour parses over the whole stream. This path keys instead on
+// (partID, blockIdx, width, theme) and only re-renders the trailing partial
+// block each frame; stable blocks (terminated by a blank line) serve
+// straight from the per-block cache.
+//
+// Mirrors opencode's commitMarkdownBlocks + _stableBlockCount
+// (run/scrollback.surface.ts:287-305): only new stable blocks are committed;
+// the trailing streaming block re-settles each frame.
+//
+// Block splitting: a "stable block" is one or more consecutive non-blank
+// lines (paragraph, heading, list, code fence, …) followed by a blank line
+// or end-of-text. The trailing partial block (no trailing blank line) is the
+// "streaming block" — it re-renders each call. Once a blank line arrives, the
+// streaming block finalizes into a new stable block and is cached under its
+// block index; subsequent calls serve it from the cache. Block indexes are
+// stable: block 0 is always the first blank-line-terminated block in the
+// accumulated text, so (partID, blockIdx) is a stable identifier regardless
+// of how much text is appended later.
+//
+// Fallback: when partID is empty (no streaming context — e.g. a one-off
+// render) this falls back to the full-text cache. The benchmark in
+// markdown_test.go (BenchmarkRenderMarkdown_StreamingPart) exercises the
+// incremental path and asserts sub-quadratic scaling over a growing text.
+func (m Model) renderMarkdownStreaming(partID, text string) string {
+	if partID == "" {
+		return m.renderMarkdown(text)
+	}
+	width := m.contentWidth()
+	stable, streaming := splitMarkdownBlocks(text)
+
+	// Stable blocks: serve from the per-block cache; render on miss.
+	out := make([]string, 0, len(stable)+1)
+	for i, blk := range stable {
+		key := mdBlockCacheKey{partID: partID, blockIdx: i, width: width, themeName: m.themeName}
+		if m.mdBlockCache != nil {
+			if cached, ok := m.mdBlockCache[key]; ok {
+				out = append(out, cached)
+				continue
+			}
+		}
+		rendered := m.renderMarkdownUncached(blk, width)
+		if m.mdBlockCache != nil {
+			m.mdBlockCache[key] = rendered
+		}
+		out = append(out, rendered)
+	}
+
+	// Trailing streaming block: re-render each call (it changes every frame).
+	// The streaming block's text is hashed for a tiny one-shot cache so a
+	// re-render of the SAME streaming text (e.g. View() called twice on the
+	// same Model state) is free; the next delta invalidates it. This mirrors
+	// opencode's "the trailing streaming block re-settles each frame".
+	if streaming != "" {
+		streamKey := mdCacheKey{
+			textHash:  hashText(streaming),
+			width:     width,
+			themeName: m.themeName,
+		}
+		if m.mdCache != nil {
+			if cached, ok := m.mdCache[streamKey]; ok {
+				out = append(out, cached.rendered)
+			} else {
+				rendered := m.renderMarkdownUncached(streaming, width)
+				m.mdCache[streamKey] = mdCacheEntry{rendered: rendered}
+				out = append(out, rendered)
+			}
+		} else {
+			out = append(out, m.renderMarkdownUncached(streaming, width))
+		}
+	}
+
+	return strings.Join(out, "\n\n")
+}
+
+// splitMarkdownBlocks splits text into stable blocks + a trailing streaming
+// block. A "stable block" is one or more consecutive non-blank lines followed
+// by a blank line. The trailing partial block (no trailing blank line) is the
+// "streaming block" — the part that is still accumulating deltas.
+//
+// Mirrors opencode's _stableBlockCount semantics (run/scrollback.surface.ts).
+// Returns (stable, streaming) where stable is a slice of block texts (each
+// trimmed of leading/trailing blank lines) and streaming is the trailing
+// partial block (or "" when the text ends on a blank line — nothing is
+// currently streaming).
+//
+// Example:
+//
+//	"# H1\n\nbody para\n\nstill streaming…" →
+//	  stable: ["# H1", "body para"], streaming: "still streaming…"
+//
+// The blank lines finalize each prior block; the missing trailing blank line
+// keeps "still streaming…" as the streaming block (it is not yet finalized).
+func splitMarkdownBlocks(text string) (stable []string, streaming string) {
+	if text == "" {
+		return nil, ""
+	}
+	// Walk the text line-by-line, grouping non-blank runs into blocks. A
+	// block is finalized when a blank line is seen; the block (including any
+	// intra-block blank lines that are part of a multi-line construct like a
+	// code fence) becomes a stable block.
+	lines := strings.Split(text, "\n")
+	var blocks []string
+	var cur []string
+	for _, ln := range lines {
+		if strings.TrimSpace(ln) == "" {
+			// Blank line. If we have content in cur, this blank finalizes it
+			// as a stable block; otherwise it's a leading/inter-block blank
+			// (collapsed — opencode strips leading blanks before commit too).
+			if len(cur) > 0 {
+				blocks = append(blocks, strings.Join(cur, "\n"))
+				cur = nil
+			}
+			continue
+		}
+		cur = append(cur, ln)
+	}
+	if len(cur) > 0 {
+		// Trailing non-blank content with no following blank line: this is
+		// the streaming block. It is NOT appended to `blocks` (the stable
+		// list) — it is returned separately.
+		return blocks, strings.Join(cur, "\n")
+	}
+	// Text ends on a blank line: no streaming block.
+	return blocks, ""
+}
+
+// ensureMDCache initialises the markdown render caches if they are nil.
+// Called from New() so that all Model copies share non-nil maps from birth.
+// Both the full-text cache (mdCache) and the per-stable-block streaming
+// cache (mdBlockCache) are reference-typed maps, so a single ensure on the
+// root Model is enough for all copies to share state.
 func (m *Model) ensureMDCache() {
 	if m.mdCache == nil {
 		m.mdCache = make(mdCache)
+	}
+	if m.mdBlockCache == nil {
+		m.mdBlockCache = make(mdBlockCache)
 	}
 }
