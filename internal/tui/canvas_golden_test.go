@@ -88,8 +88,14 @@ func assertGolden(t *testing.T, name, got string) {
 // wordmark at the peak shimmer frame, the empty composer, the hint line, and
 // the connection status. A drift in the splash geometry (logo origin,
 // composer placement, status text) surfaces as a golden mismatch.
+//
+// termDark is pinned true so applyThemeByName resolves the dark token variant
+// deterministically regardless of the test runner's terminal background
+// (New() probes os.Stdin, which is a non-TTY in CI and defaults to dark, but
+// pinning removes the latent dependency on that default).
 func TestCanvas_Golden_Splash(t *testing.T) {
 	m := New(Config{URL: "http://x"})
+	m.termDark = true
 	m.width, m.height = 80, 24
 	m = m.applyThemeByName("opcode42-dark")
 	m.noAnim = true
@@ -102,9 +108,11 @@ func TestCanvas_Golden_Splash(t *testing.T) {
 // sidebar (context gauge + LSP section), footer composer, and status bar are
 // all exercised. This is the deterministic content frame the harness's
 // conversation tapes (01-conversation) capture; a drift in any pane's
-// geometry or content surfaces as a golden mismatch.
+// geometry or content surfaces as a golden mismatch. termDark is pinned (see
+// TestCanvas_Golden_Splash for rationale).
 func TestCanvas_Golden_Session(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_golden"})
+	m.termDark = true
 	m.screen = ScreenSession
 	m.width, m.height = 100, 60
 	m = m.applyThemeByName("opcode42-dark")
