@@ -10,7 +10,7 @@
                               █   █ █ █   ███ █                                 
                               █   ███ █     █ ███                               
                                                                                 
-┃ Ask anything…                                                                 
+┃ Ask anything... "Fix a TODO in the                                            
                                                                                 
           enter send · ctrl+j newline · ctrl+p commands · ctrl+c quit           
                                                                                 

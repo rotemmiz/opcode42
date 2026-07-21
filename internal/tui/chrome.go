@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"charm.land/lipgloss/v2"
 
@@ -30,12 +31,55 @@ func (m Model) currentSession() *Session {
 	return nil
 }
 
-// modeName is the status bar's "mode" — the active agent, or "build" by default.
+// modeName is the status bar's "mode" label. opencode has two renderings:
+//   - the run mini-TUI shows "BUILD"/"SHELL"/"EXIT" (uppercase) —
+//     footer.view.tsx:384-390.
+//   - the full TUI shows the agent name Title-cased (or "Shell" in shell mode)
+//     — tui/component/prompt/index.tsx:1442-1444 (Locale.titlecase(agent().name)).
+//
+// Opcode42 follows the full-TUI convention: the active agent Title-cased when
+// set (falling back to "Build"), "Shell" when the composer is in `!` shell mode,
+// and "Exit" while the two-press ctrl+c guard is armed. The chip's foreground
+// color (modeColor below) carries the mode semantic; the chip background is a
+// neutral lift (BgSel).
 func (m Model) modeName() string {
-	if m.agent != "" {
-		return m.agent
+	if m.exiting {
+		return "Exit"
 	}
-	return "build"
+	if m.shellMode {
+		return "Shell"
+	}
+	if m.agent != "" {
+		return titleCase(m.agent)
+	}
+	return "Build"
+}
+
+// modeColor is the status-bar chip foreground for the current mode, mirroring
+// opencode's modeColor memo (footer.view.tsx:391-401): error/red for exit,
+// warning/amber for shell, highlight/blue for build.
+func (m Model) modeColor(p theme.Palette) theme.Color {
+	if m.exiting {
+		return p.Red
+	}
+	if m.shellMode {
+		return p.Amber
+	}
+	return p.Blue
+}
+
+// titleCase returns s with its first rune upper-cased and the rest left alone
+// (matching opencode's Locale.titlecase for single-word agent names like
+// "build" → "Build", "researcher" → "Researcher"). Agent names are simple
+// lowercase identifiers from GET /agent, so no locale-aware special-casing
+// is needed.
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	r[0] = unicode.ToUpper(r[0])
+	return string(r)
 }
 
 // sidebarVisible reports whether the right sidebar is shown: only on the session
@@ -82,64 +126,99 @@ func gitBranch(dir string) string {
 	return branch
 }
 
-// statusBarView renders the full-width bottom bar using the opencode grammar:
+// statusBarView renders the full-width bottom bar using the opencode grammar
+// (footer.view.tsx:822-910):
 //
-//   - Mode-line (left): [mode-chip] · model · provider  — matches opencode's
-//     "Build · Big Pickle OpenCode Zen" pattern (scene 03-home-empty).
-//     ModeChip is the accent-bg style; model is dim/primary; provider is faint.
-//   - Footer (right): connection glyph + status · tokens/cost · ctrl+p hint.
+//   - Left:  [mode-chip] · model [variant]  — the chip has a neutral lift bg
+//     (statusAccent ≈ BgSel) with a mode-colored fg (blue/amber/red) and bold
+//     label (opencode footer.view.tsx:824-827, 384-401). The model name follows
+//     in base; the variant, when set, is a bold amber suffix
+//     (footer.view.tsx:872-878). The provider is dropped (footer.view.tsx:430-
+//     435: "Prefer without provider").
+//   - Right: status/spinner · tokens/cost · context hints · ctrl+p commands.
 //
-// Each row is rendered through a single Surface(Bg) style padded to `width` so
-// every cell carries the theme background — no transparent trailing cells.
-// opencode always fills every cell via its opentui compositor; we replicate that
-// here via lipgloss Width(width).Background(Bg). (plan 08c M8 / Tier 0 fill rule)
+// The status bar paints its own surface (BgPanel, a tinted lift of the footer
+// bg — opencode theme.ts:514-519 `status`) so it reads as a distinct chrome
+// row from the composer (which uses BgElev). Each row is rendered through a
+// single Surface(BgPanel) style padded to `width` so every cell carries the
+// background — no transparent trailing cells (plan 08c M8 / Tier 0 fill rule).
 func (m Model) statusBarView(width int) string {
 	s := m.styles
 
-	// Left: mode chip (accent bg) + dim "·" + model name + faint provider.
-	// This matches opencode prompt/index.tsx lines 1571–1583:
-	//   agent-name · model · provider
-	modeChip := s.ModeChip.Render(" " + m.modeName() + " ")
-	left := modeChip
+	// Mode chip: neutral BgSel background, mode-colored foreground, bold label.
+	// opencode's statusAccent is a near-white tint of the footer bg; BgSel is
+	// Opcode42's closest neutral lift (row-hover surface). The mode color is
+	// the FOREGROUND (opencode footer.view.tsx:826) — blue for build, amber
+	// for shell, red for the armed exit guard.
+	chip := lipgloss.NewStyle().
+		Background(s.P.BgSel).
+		Foreground(m.modeColor(s.P)).
+		Bold(true).
+		Padding(0, 1).
+		Render(m.modeName())
+	left := chip
+
+	// Model + variant (provider dropped). opencode footer.view.tsx:864-882:
+	// the model name in base text, the variant as a bold warning-colored
+	// suffix; the provider span is intentionally omitted.
 	if m.model.ok() {
-		// model name in base, provider in faint — mirrors opencode's styling.
-		left += s.Faint.Render(" · ") + s.Base.Render(m.model.Model) +
-			s.Faint.Render(" · ") + s.Faint.Render(m.model.Provider)
+		left += s.Faint.Render(" · ") + s.Base.Render(m.model.Model)
+		if v := m.model.effectiveVariant(); v != "" {
+			left += lipgloss.NewStyle().Foreground(s.P.Amber).Bold(true).Render(" " + v)
+		}
 	}
 
-	// Right: connection dot + status/spinner, token/cost counts, command hint.
-	// When a turn is in progress, show a gradient-scanner "thinking…" label
-	// with a braille spinner in place of the static status text.  This mirrors
-	// opencode's prompt/index.tsx which renders a <Spinner>Working...</Spinner>
-	// while the assistant is active.  The scanner uses the left side of the bar
-	// text — short enough that the sweep is clearly visible.
+	// Status text: opencode footer.view.tsx:402-416. While the exit guard is
+	// armed, prompt the second press; in shell mode at idle, label it "Shell
+	// mode"; otherwise the connection glyph + the store status string. While
+	// a turn is running, a gradient-scanner "thinking…" label replaces the
+	// static status (mirrors opencode's <Spinner>Working...</Spinner>).
 	var right string
-	if m.animating() {
+	if m.exiting {
+		right = s.Faint.Render("press ctrl+c again to exit")
+	} else if m.animating() {
 		frame := spinnerFrames[m.animFrame%len(spinnerFrames)]
 		spinGlyph := lipgloss.NewStyle().Foreground(s.P.Accent()).Render(frame)
 		thinkingLabel := scannerFrame("thinking…", m.animFrame, s.P)
 		right = spinGlyph + " " + thinkingLabel
+	} else if m.shellMode {
+		right = s.Faint.Render("Shell mode")
 	} else {
 		right = m.connGlyph() + s.Faint.Render(" "+m.status)
 	}
+	// Token/cost counts are independent of the status text (opencode
+	// footer.view.tsx:856-862 activityMeta is its own box, shown even while
+	// the exit guard is armed), so they append regardless of mode.
 	if ss := m.currentSession(); ss != nil && ss.Tokens.Total() > 0 {
 		right += s.Faint.Render(" · ") + s.Dim.Render(humanInt(ss.Tokens.Total())+" tok")
 		if ss.Cost > 0 {
 			right += s.Faint.Render(" · ") + s.Dim.Render(fmt.Sprintf("$%.4f", ss.Cost))
 		}
 	}
+	// F6: context hints on the right. opencode footer.view.tsx:884-896 shows
+	// background/queued/subagents chips (key + label) gated by a responsive
+	// width policy. Opcode42 surfaces a subagent count when the open session
+	// has children (its only source of truth for this state).
+	if kids := m.childrenOf(m.cfg.SessionID); len(kids) > 0 {
+		right += s.Faint.Render(" · ") + s.Base.Render(strconv.Itoa(len(kids))) + s.Faint.Render(" subagents")
+	}
 	right += s.Faint.Render(" · ") + s.Base.Render("ctrl+p") + s.Faint.Render(" commands")
 
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		// Too narrow for both — keep the right (status) only, still surface-filled.
-		return s.Surface(s.P.Bg).Width(width).Render(right)
+		return s.Surface(s.P.BgPanel).Width(width).Render(right)
 	}
 	bar := left + strings.Repeat(" ", gap) + right
-	// Surface fill: every cell in the bar row carries the Bg color so the
-	// status bar reads as an owned surface on any terminal (plan 08c M8).
-	return s.Surface(s.P.Bg).Width(width).Render(bar)
+	return s.Surface(s.P.BgPanel).Width(width).Render(bar)
 }
+
+// statusBarBackground is the surface background the status bar paints —
+// opencode's "status" token (a tinted lift of the footer bg, theme.ts:514-519),
+// here BgPanel. Exposed so a test can assert the status bar owns a distinct
+// chrome row from the composer (BgElev) without relying on ANSI emission
+// (plan 17 §F3).
+func (m Model) statusBarBackground() theme.Color { return m.styles.P.BgPanel }
 
 // connGlyph is a colored dot for the connection state.
 func (m Model) connGlyph() string {

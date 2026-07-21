@@ -73,7 +73,7 @@ func TestStatusBar_WidthAndContent(t *testing.T) {
 		}
 	}
 	out := m.statusBarView(120)
-	for _, want := range []string{"build", "gemini-2.5-flash", "commands"} {
+	for _, want := range []string{"Build", "gemini-2.5-flash", "commands"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("status bar missing %q", want)
 		}
@@ -181,44 +181,69 @@ func TestRenderSession_SidebarLayoutFitsWidth(t *testing.T) {
 	}
 }
 
-// TestStatusBar_ModeChipAndProviderChips verifies the M8 chrome grammar:
-// the status bar must contain the mode chip, model name, and provider —
-// matching opencode's "Build · Big Pickle OpenCode Zen" pattern.
-func TestStatusBar_ModeChipAndProviderChips(t *testing.T) {
+// TestStatusBar_ModeChipAndVariant verifies plan 17 §F2: the status bar shows
+// a mode chip (neutral BgSel bg, mode-colored fg, bold Title-cased label), the
+// model name, and a bold amber variant suffix when set; the provider is
+// dropped (opencode footer.view.tsx:430-435).
+func TestStatusBar_ModeChipAndVariant(t *testing.T) {
 	cases := []struct {
-		name     string
-		cfg      Config
-		agent    string
-		wantMode string
-		wantMod  string
-		wantProv string
+		name       string
+		cfg        Config
+		agent      string
+		variant    string
+		wantMode   string
+		wantMod    string
+		wantVar    string // "" = no variant assertion
+		wantNoProv string // provider that must NOT appear
 	}{
 		{
-			name:     "default build mode",
-			cfg:      Config{URL: "http://x", Provider: "anthropic", Model: "claude-sonnet-4"},
-			agent:    "",
-			wantMode: "build",
-			wantMod:  "claude-sonnet-4",
-			wantProv: "anthropic",
+			name:       "default build mode",
+			cfg:        Config{URL: "http://x", Provider: "anthropic", Model: "claude-sonnet-4"},
+			agent:      "",
+			wantMode:   "Build",
+			wantMod:    "claude-sonnet-4",
+			wantNoProv: "anthropic",
 		},
 		{
-			name:     "custom agent mode",
-			cfg:      Config{URL: "http://x", Provider: "openai", Model: "gpt-4o"},
-			agent:    "researcher",
-			wantMode: "researcher",
-			wantMod:  "gpt-4o",
-			wantProv: "openai",
+			name:       "custom agent mode (Title-cased)",
+			cfg:        Config{URL: "http://x", Provider: "openai", Model: "gpt-4o"},
+			agent:      "researcher",
+			wantMode:   "Researcher",
+			wantMod:    "gpt-4o",
+			wantNoProv: "openai",
+		},
+		{
+			name:       "variant shown as bold amber suffix",
+			cfg:        Config{URL: "http://x", Provider: "anthropic", Model: "claude-sonnet-4"},
+			agent:      "",
+			variant:    "sonnet",
+			wantMode:   "Build",
+			wantMod:    "claude-sonnet-4",
+			wantVar:    "sonnet",
+			wantNoProv: "anthropic",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			m := New(tc.cfg)
 			m.agent = tc.agent
+			m.model.Variant = tc.variant
 			out := m.statusBarView(120)
-			for _, want := range []string{tc.wantMode, tc.wantMod, tc.wantProv, "ctrl+p", "commands"} {
+			for _, want := range []string{tc.wantMode, tc.wantMod, "ctrl+p", "commands"} {
 				if !strings.Contains(out, want) {
 					t.Errorf("status bar missing %q\nout: %s", want, out)
 				}
+			}
+			if tc.wantVar != "" && !strings.Contains(out, tc.wantVar) {
+				t.Errorf("status bar missing variant %q\nout: %s", tc.wantVar, out)
+			}
+			// Provider must be dropped (opencode footer.view.tsx:430-435).
+			if tc.wantNoProv != "" && strings.Contains(stripANSI(out), tc.wantNoProv) {
+				t.Errorf("status bar should NOT contain provider %q\nout: %s", tc.wantNoProv, out)
+			}
+			// The old lowercase mode label must not leak through.
+			if strings.Contains(stripANSI(out), " build") {
+				t.Errorf("status bar should not contain the old lowercase 'build' label\nout: %s", out)
 			}
 			// Width invariant must hold.
 			if got := lipgloss.Width(out); got != 120 {

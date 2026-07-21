@@ -20,5 +20,5 @@ Question session
                                                                                 
                                                                                 
                                                                                 
-┃ Ask anything…                                                                 
-  build                               ● connecting to http://x · ctrl+p commands
+┃ Ask anything... "Fix a TODO in the                                            
+ Build                                ● connecting to http://x · ctrl+p commands

@@ -182,10 +182,11 @@ func TestComposer_ReadlineShortcuts(t *testing.T) {
 	}
 }
 
-// TestCtrlC_ClearsInputWhenNonEmpty verifies plan 17 §G4: ctrl+c is
-// context-dependent (opencode prompt-input.tsx:806 + app.tsx:963-966) — with
-// text in the composer it clears the input; with an empty composer it quits.
-// Before §G4 ctrl+c unconditionally quit, diverging from opencode.
+// TestCtrlC_ClearsInputWhenNonEmpty verifies plan 17 §G4 + §F2: ctrl+c is
+// context-dependent (opencode prompt-input.tsx:806 + app.tsx:963-966,
+// footer.ts:987-1006) — with text in the composer it clears the input; with an
+// empty composer it enters a two-press exit guard (first press arms, second
+// quits). Before §G4 ctrl+c unconditionally quit, diverging from opencode.
 func TestCtrlC_ClearsInputWhenNonEmpty(t *testing.T) {
 	// With text → clears, does not quit.
 	m := New(Config{URL: "http://x", Provider: "p", Model: "m", SessionID: "ses_1"})
@@ -199,12 +200,25 @@ func TestCtrlC_ClearsInputWhenNonEmpty(t *testing.T) {
 	if v := next.input.Value(); v != "" {
 		t.Fatalf("ctrl+c should clear the composer, got %q", v)
 	}
+	// Clearing via ctrl+c must also cancel an armed exit guard (opencode
+	// footer.ts:684-692 handleInputClear resets exit on input activity).
+	if next.exiting {
+		t.Fatal("ctrl+c-with-text should not leave the exit guard armed")
+	}
 
-	// With empty composer → quits (tea.Quit is the cmd).
+	// With empty composer → first ctrl+c arms the exit guard (does not quit).
 	m2 := New(Config{URL: "http://x", Provider: "p", Model: "m", SessionID: "ses_1"})
 	m2, _ = step(t, m2, tea.WindowSizeMsg{Width: 80, Height: 24})
-	_, cmd2 := step(t, m2, key("ctrl+c"))
-	if cmd2 == nil {
-		t.Fatal("ctrl+c with empty composer should quit (non-nil cmd)")
+	armed, armCmd := step(t, m2, key("ctrl+c"))
+	if armCmd == nil {
+		t.Fatal("ctrl+c (first) with empty composer should arm the exit guard (non-nil cmd)")
+	}
+	if !armed.exiting {
+		t.Fatal("ctrl+c (first) with empty composer should set exiting=true")
+	}
+	// Second ctrl+c → quits (tea.Quit is the cmd).
+	_, quitCmd := step(t, armed, key("ctrl+c"))
+	if quitCmd == nil {
+		t.Fatal("ctrl+c (second) with empty composer should quit (non-nil cmd)")
 	}
 }

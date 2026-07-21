@@ -102,6 +102,12 @@ type Model struct {
 	input     textarea.Model
 	model     promptModel
 	shellMode bool // composer is in `!` shell mode (submit → POST /session/{id}/shell)
+	// exiting is the two-press ctrl+c exit guard (opencode footer.ts:987-1006):
+	// the first ctrl+c on an empty composer arms it (status bar shows the EXIT
+	// chip + "press ctrl+c again to exit"); a second ctrl+c quits; any other
+	// key, a prompt submit, or a 5s timeout cancels it. Mirrors opencode's
+	// exit counter + armExitTimer.
+	exiting bool
 
 	// Command overlay.
 	modal        modalKind
@@ -259,7 +265,7 @@ func pickDefaultTheme(darkBg bool) string {
 func New(cfg Config) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	ta := textarea.New()
-	ta.Placeholder = "Ask anything…"
+	ta.Placeholder = `Ask anything... "Fix a TODO in the codebase"`
 	ta.Prompt = ""                   // we draw our own blue accent bar (composerView)
 	ta.ShowLineNumbers = false       //
 	ta.CharLimit = 0                 // no limit — prompts can be long
@@ -464,12 +470,11 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// The composer placeholder follows the screen (design app.jsx:355).
-	if m.screen == ScreenSession {
-		m.input.Placeholder = "Reply, or / for commands"
-	} else {
-		m.input.Placeholder = "Ask anything…"
-	}
+	// The composer placeholder follows the mode/screen (opencode
+	// footer.prompt.tsx:284-294): shell mode shows a run-a-command hint, the
+	// splash/first-prompt shows opencode's "Ask anything..." text, and an open
+	// session shows a reply hint (Opcode42 convention).
+	m.input.Placeholder = m.composerPlaceholder()
 	// Keep the composer sized to the current left column: a screen change
 	// (splash→session) or sidebar toggle alters the available width even when no
 	// key was pressed. WindowSizeMsg re-runs this after updating m.width.
@@ -492,6 +497,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// fallthrough at the end of the KeyPressMsg case. Without this case the
 		// message is dropped and cmd+v (macOS bracketed paste) does nothing.
 		m.histIdx = -1
+		m.exiting = false // pasting is input activity — cancel the exit guard
 		var cmd, acCmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		m = m.resizeComposer()
@@ -511,10 +517,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.closePTY()
 			return m, nil
 		}
+		// Any non-ctrl+c keypress cancels the armed two-press exit guard
+		// (opencode footer.ts:684-692 handleInputClear resets exit on input
+		// activity). ctrl+c is handled below and advances/quits instead.
+		if m.exiting && msg.String() != "ctrl+c" {
+			m.exiting = false
+		}
 		// ctrl+c is context-dependent (opencode prompt-input.tsx:806 +
-		// app.tsx:963-966): with text in the composer it clears the input; with an
-		// empty composer it quits the app. A focused PTY keeps the unconditional
-		// quit above via handlePTYKey.
+		// app.tsx:963-966, footer.ts:987-1006): with text in the composer it
+		// clears the input; with an empty composer it enters a two-press
+		// exit guard — the first press shows the EXIT chip + "press ctrl+c
+		// again to exit", the second quits, and any other key / a 5s
+		// timeout cancels it. A focused PTY keeps the unconditional quit
+		// above via handlePTYKey.
 		if msg.String() == "ctrl+c" {
 			if strings.TrimSpace(m.input.Value()) != "" {
 				m.input.SetValue("")
@@ -522,13 +537,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m, acCmd := m.refreshAutocomplete()
 				return m, acCmd
 			}
-			if m.stream != nil {
-				m.stream.Close()
+			if m.exiting {
+				if m.stream != nil {
+					m.stream.Close()
+				}
+				if m.cancel != nil {
+					m.cancel() // cancel any in-flight health/open cmd + SDK work
+				}
+				return m, tea.Quit
 			}
-			if m.cancel != nil {
-				m.cancel() // cancel any in-flight health/open cmd + SDK work
-			}
-			return m, tea.Quit
+			m.exiting = true
+			return m, exitTickCmd()
 		}
 		// A pending permission blocks everything until answered.
 		if m.pendingPermission() != nil {
@@ -625,11 +644,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// prompt-input.tsx:1160); a real "!" mid-text falls through to typing.
 			if !m.shellMode && strings.TrimSpace(m.input.Value()) == "" {
 				m.shellMode = true
+				m.input.Placeholder = m.composerPlaceholder()
 				return m, nil
 			}
 		case "esc":
 			if m.shellMode {
 				m.shellMode = false
+				m.input.Placeholder = m.composerPlaceholder()
+				return m, nil
+			}
+		case "backspace":
+			// Shell mode exits on backspace at cursor offset 0 (opencode
+			// footer.prompt.tsx:1084-1091); a backspace mid-text falls through
+			// to the textarea so the user can still edit.
+			if m.shellMode && m.input.Line() == 0 && m.input.LineInfo().CharOffset == 0 {
+				m.shellMode = false
+				m.input.Placeholder = m.composerPlaceholder()
 				return m, nil
 			}
 		case "enter":
@@ -1229,6 +1259,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Not animating — stop; the next animating state will re-kick via maybeKickAnim.
 		return m, nil
 
+	case exitTickMsg:
+		// The two-press exit guard timed out (opencode footer.ts:954-961):
+		// cancel the armed exit so the status bar drops the EXIT chip.
+		m.exiting = false
+		return m, nil
+
 	// discoverStartedMsg (plan 08e §D2): the mDNS browser has opened. Stash
 	// the channel on m.discoverOut so discoverNextCmd can pump it; if a first
 	// service was already resolved, append it and kick its reachability probe.
@@ -1402,8 +1438,26 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// maxComposerRows caps the auto-growing composer; beyond it the textarea scrolls.
-const maxComposerRows = 8
+// maxComposerRows caps the auto-growing composer; beyond it the textarea
+// scrolls. Matches opencode's TEXTAREA_MAX_ROWS=6 (footer.prompt.tsx:35-37);
+// the full TUI's max(6, floor(height/3)) floor (prompt/index.tsx:1340) is also
+// 6, so 6 is the common cap for any terminal tall enough to show the bar.
+const maxComposerRows = 6
+
+// composerPlaceholder returns the textarea placeholder for the current mode.
+// opencode (footer.prompt.tsx:284-294): shell mode → `Run a command... "git
+// status"`; a first prompt (no messages yet) → `Ask anything... "Fix a TODO in
+// the codebase"`; otherwise empty. Opcode42 keeps a reply hint on the session
+// screen (its own convention) in place of opencode's empty string.
+func (m Model) composerPlaceholder() string {
+	if m.shellMode {
+		return `Run a command... "git status"`
+	}
+	if m.screen != ScreenSession {
+		return `Ask anything... "Fix a TODO in the codebase"`
+	}
+	return "Reply, or / for commands"
+}
 
 // resizeComposer sets the composer's width to the content column and grows its
 // height to fit the current text (clamped to [1, maxComposerRows]). Height is
@@ -1607,6 +1661,7 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
+	m.exiting = false // sending a prompt cancels the armed exit guard
 	if !m.model.ok() {
 		m.status = "no model configured (pass --provider/--model)"
 		return m, nil
