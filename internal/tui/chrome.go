@@ -186,12 +186,13 @@ func (m Model) statusBarView(width int) string {
 	} else {
 		right = m.connGlyph() + s.Faint.Render(" "+m.status)
 	}
-	if !m.exiting {
-		if ss := m.currentSession(); ss != nil && ss.Tokens.Total() > 0 {
-			right += s.Faint.Render(" · ") + s.Dim.Render(humanInt(ss.Tokens.Total())+" tok")
-			if ss.Cost > 0 {
-				right += s.Faint.Render(" · ") + s.Dim.Render(fmt.Sprintf("$%.4f", ss.Cost))
-			}
+	// Token/cost counts are independent of the status text (opencode
+	// footer.view.tsx:856-862 activityMeta is its own box, shown even while
+	// the exit guard is armed), so they append regardless of mode.
+	if ss := m.currentSession(); ss != nil && ss.Tokens.Total() > 0 {
+		right += s.Faint.Render(" · ") + s.Dim.Render(humanInt(ss.Tokens.Total())+" tok")
+		if ss.Cost > 0 {
+			right += s.Faint.Render(" · ") + s.Dim.Render(fmt.Sprintf("$%.4f", ss.Cost))
 		}
 	}
 	// F6: context hints on the right. opencode footer.view.tsx:884-896 shows

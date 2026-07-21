@@ -117,14 +117,20 @@ func TestStatusBar_ExitMode_CancelledByKey(t *testing.T) {
 // `Run a command... "git status"` while in `!` shell mode
 // (footer.prompt.tsx:285-286).
 func TestComposer_Placeholder(t *testing.T) {
-	// Splash / no session → the opencode first-prompt placeholder.
+	// Splash / no session → the opencode first-prompt placeholder. Update()
+	// writes composerPlaceholder() to m.input.Placeholder each frame, so the
+	// textarea (the empty composer) shows it.
 	m := New(Config{URL: "http://x"})
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	if got := m.composerPlaceholder(); !strings.Contains(got, `Ask anything...`) {
-		t.Fatalf("splash placeholder should be opencode's \"Ask anything...\" text, got %q", got)
+	ph := m.composerPlaceholder()
+	if !strings.Contains(ph, `Ask anything...`) {
+		t.Fatalf("splash placeholder should be opencode's \"Ask anything...\" text, got %q", ph)
 	}
-	if got := m.composerPlaceholder(); !strings.Contains(got, "Fix a TODO") {
-		t.Fatalf("splash placeholder should quote a TODO example, got %q", got)
+	if !strings.Contains(ph, "Fix a TODO") {
+		t.Fatalf("splash placeholder should quote a TODO example, got %q", ph)
+	}
+	if m.input.Placeholder != ph {
+		t.Fatalf("Update should set m.input.Placeholder to %q, got %q", ph, m.input.Placeholder)
 	}
 
 	// Shell mode → the run-a-command placeholder.
@@ -134,10 +140,14 @@ func TestComposer_Placeholder(t *testing.T) {
 	if !m2.shellMode {
 		t.Fatal("setup: `!` on an empty composer should enter shell mode")
 	}
-	if got := m2.composerPlaceholder(); !strings.Contains(got, "Run a command") {
-		t.Fatalf("shell-mode placeholder should be \"Run a command...\", got %q", got)
+	ph2 := m2.composerPlaceholder()
+	if !strings.Contains(ph2, "Run a command") {
+		t.Fatalf("shell-mode placeholder should be \"Run a command...\", got %q", ph2)
 	}
-	if got := m2.composerPlaceholder(); !strings.Contains(got, "git status") {
-		t.Fatalf("shell-mode placeholder should quote a git status example, got %q", got)
+	if !strings.Contains(ph2, "git status") {
+		t.Fatalf("shell-mode placeholder should quote a git status example, got %q", ph2)
+	}
+	if m2.input.Placeholder != ph2 {
+		t.Fatalf("Update should set m.input.Placeholder to %q in shell mode, got %q", ph2, m2.input.Placeholder)
 	}
 }

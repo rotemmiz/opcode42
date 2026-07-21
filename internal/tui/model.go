@@ -643,11 +643,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// prompt-input.tsx:1160); a real "!" mid-text falls through to typing.
 			if !m.shellMode && strings.TrimSpace(m.input.Value()) == "" {
 				m.shellMode = true
+				m.input.Placeholder = m.composerPlaceholder()
 				return m, nil
 			}
 		case "esc":
 			if m.shellMode {
 				m.shellMode = false
+				m.input.Placeholder = m.composerPlaceholder()
 				return m, nil
 			}
 		case "backspace":
@@ -656,6 +658,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// to the textarea so the user can still edit.
 			if m.shellMode && m.input.Line() == 0 && m.input.LineInfo().CharOffset == 0 {
 				m.shellMode = false
+				m.input.Placeholder = m.composerPlaceholder()
 				return m, nil
 			}
 		case "enter":
