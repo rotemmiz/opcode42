@@ -48,8 +48,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-
-	"github.com/rotemmiz/opcode42/internal/tui/theme"
 )
 
 // renderImagePart renders an image file part, branching on terminal support.
@@ -105,17 +103,20 @@ func placeholderName(p Part) string {
 	return "image"
 }
 
-// imageDimensions decodes the part's data URL to read the pixel dimensions.
-// Returns ("?", "?") when the part has no decodable bytes. The decode is
-// best-effort: a corrupt or truncated image falls back to "?" rather than
-// erroring.
+// imageDimensions reads the pixel dimensions from the part's data URL.
+// Returns ("?", "?") when the part has no decodable bytes. Uses
+// image.DecodeConfig (header-only) so a large image doesn't fully decode
+// just to read its bounds — the sixel path decodes separately when emitting.
 func imageDimensions(p Part) (string, string) {
-	img, err := decodeDataURL(p.URL)
-	if err != nil || img == nil {
+	data, err := dataURLBytes(p.URL)
+	if err != nil || len(data) == 0 {
 		return "?", "?"
 	}
-	b := img.Bounds()
-	return fmt.Sprintf("%d", b.Dx()), fmt.Sprintf("%d", b.Dy())
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return "?", "?"
+	}
+	return fmt.Sprintf("%d", cfg.Width), fmt.Sprintf("%d", cfg.Height)
 }
 
 // renderITerm2Image emits the iTerm2 inline-image escape with the raw image
@@ -333,9 +334,3 @@ func quantize6(v uint8) int {
 	}
 	return int(v) / 43
 }
-
-// ensure theme/lipgloss imports are used (the placeholder uses lipgloss +
-// theme.Palette via m.styles; this guard keeps the imports live even if the
-// only caller is the test path).
-var _ = lipgloss.NewStyle
-var _ theme.Palette
