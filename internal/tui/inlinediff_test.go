@@ -151,6 +151,43 @@ func TestToolRow_ApplyPatchPerFileStats(t *testing.T) {
 	}
 }
 
+// TestToolRow_DiffWithDiagnosticsTail asserts that when an edit/apply_patch
+// tool has BOTH a diff AND a trailing LSP-diagnostics block in its output
+// text, the diff renders inline and the diagnostics surface below it (the
+// redundant "Edit applied successfully." success line is stripped). This
+// mirrors opencode's edit.ts:196-201 path where LSP errors are appended to
+// the output text.
+func TestToolRow_DiffWithDiagnosticsTail(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m.width = 100
+
+	patch := "@@ -1 +1 @@\n-x\n+y\n"
+	output := "Edit applied successfully.\n\nLSP errors detected in x.go, please fix:\n  unused variable 'y'"
+	state := rawState(t, map[string]any{
+		"status":   "completed",
+		"output":   output,
+		"input":    map[string]any{"filePath": "diag.go"},
+		"metadata": map[string]any{"diff": patch},
+	})
+	part := Part{ID: "p_diag", Tool: "edit", Type: "tool", State: state}
+
+	row := m.toolRow(part)
+	plain := stripANSI(row)
+
+	// The diff body must be present.
+	if !strings.Contains(plain, "+y") || !strings.Contains(plain, "-x") {
+		t.Errorf("diff body missing in diagnostics-tail case:\n%s", plain)
+	}
+	// The success-line prefix must be stripped.
+	if strings.Contains(plain, "Edit applied successfully") {
+		t.Errorf("redundant 'Edit applied successfully.' line should be stripped:\n%s", plain)
+	}
+	// The diagnostics block must be present.
+	if !strings.Contains(plain, "LSP errors detected in x.go") {
+		t.Errorf("LSP diagnostics tail should surface below the diff:\n%s", plain)
+	}
+}
+
 // TestInlineDiff_CachedAcrossFrames asserts the diff is rendered once and not
 // rebuilt on subsequent frames. After the first render, we drop a sentinel
 // value into the cache and verify the second render returns the sentinel as
@@ -417,7 +454,9 @@ func TestPatchTitle_CoversAllTypes(t *testing.T) {
 
 // TestTrimDiffSuccessOutput covers the success-line trimming for edit and
 // apply_patch output text (so the diagnostics-only tail still surfaces
-// below the diff, but the redundant "Edit applied successfully." line is gone).
+// below the diff, but the redundant "Edit applied successfully." /
+// "Success. Updated the following files:…" prefix is gone — the per-file
+// diff titles already convey the change).
 func TestTrimDiffSuccessOutput(t *testing.T) {
 	cases := []struct {
 		tool string
@@ -427,8 +466,10 @@ func TestTrimDiffSuccessOutput(t *testing.T) {
 		{"edit", "", ""},
 		{"edit", "Edit applied successfully.", ""},
 		{"edit", "Edit applied successfully.\n\nLSP errors detected in x.go, please fix:\n…", "LSP errors detected in x.go, please fix:\n…"},
-		{"apply_patch", "Success. Updated the following files:\n…", ""},
-		{"apply_patch", "Success. Updated the following files:\n…\n\nLSP errors detected in y.go, please fix:\n…", "LSP errors detected in y.go, please fix:\n…"},
+		{"edit", "anything else", "anything else"},
+		{"apply_patch", "Success. Updated the following files:\nM a.go\nM b.go", ""},
+		{"apply_patch", "Success. Updated the following files:\nM a.go\n\nLSP errors detected in y.go, please fix:\n…", "LSP errors detected in y.go, please fix:\n…"},
+		{"apply_patch", "", ""},
 		{"bash", "anything", "anything"}, // non-diff tools pass through
 	}
 	for _, tc := range cases {

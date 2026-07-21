@@ -415,14 +415,22 @@ func (m Model) toolRow(p Part) string {
 	return strings.Join(lines, "\n")
 }
 
-// trimDiffSuccessOutput strips the redundant "Edit applied successfully." /
-// "Success. Updated the following files:…" prefix that opencode's edit and
-// apply_patch tools prepend to their output text. When the only output is
-// this success line (no LSP diagnostics appended), returns "" so the output
-// panel is suppressed — the inline diff already conveys the change. When
-// diagnostics follow (the "LSP errors detected in…" block), they are returned
-// as the trimmed tail so they still surface below the diff
-// (edit.ts:196-201, apply_patch.ts:284-293).
+// trimDiffSuccessOutput strips the redundant success-line prefix that
+// opencode's edit and apply_patch tools prepend to their output text, so
+// the inline diff (which already conveys the change) isn't followed by a
+// redundant "Edit applied successfully." or "Success. Updated the following
+// files:…" line. opencode's entryLayout (scrollback.writer.tsx:52-79) hides
+// the output text entirely when a structured snapshot renders at
+// phase=final; Opcode42 keeps any LSP-diagnostics tail (the part of the output
+// the user still needs to see) and drops the rest.
+//
+// For edit: the output is "Edit applied successfully." + optional diagnostics.
+// Returns "" when only the success line is present, else the trimmed tail
+// (diagnostics). For apply_patch: the output is
+// "Success. Updated the following files:\n<file list>" + optional
+// diagnostics. The per-file diff titles already convey the file list, so we
+// drop everything except the diagnostics block (edit.ts:196-201,
+// apply_patch.ts:284-293).
 func trimDiffSuccessOutput(output, tool string) string {
 	trimmed := strings.TrimSpace(output)
 	if trimmed == "" {
@@ -432,13 +440,14 @@ func trimDiffSuccessOutput(output, tool string) string {
 	case "edit", "multiedit":
 		const marker = "Edit applied successfully."
 		if strings.HasPrefix(trimmed, marker) {
-			rest := strings.TrimSpace(strings.TrimPrefix(trimmed, marker))
-			if rest == "" {
-				return ""
-			}
-			return rest
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, marker))
 		}
+		return trimmed
 	case "apply_patch":
+		// The apply_patch output is "Success. Updated the following files:\n
+		// <file list>" optionally followed by "\n\nLSP errors detected in …".
+		// The file list is redundant (the per-file diff titles show it); keep
+		// only the LSP diagnostics block when present.
 		if i := strings.Index(trimmed, "LSP errors detected in"); i >= 0 {
 			return strings.TrimSpace(trimmed[i:])
 		}
