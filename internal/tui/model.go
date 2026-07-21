@@ -237,11 +237,13 @@ func New(cfg Config) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	ta := textarea.New()
 	ta.Placeholder = "Ask anything…"
-	ta.Prompt = ""                                           // we draw our own blue accent bar (composerView)
-	ta.ShowLineNumbers = false                               //
-	ta.CharLimit = 0                                         // no limit — prompts can be long
-	ta.SetHeight(1)                                          // grows with content up to maxComposerRows
-	ta.KeyMap.InsertNewline.SetKeys("shift+enter", "ctrl+j") // Enter submits; these add a newline
+	ta.Prompt = ""                   // we draw our own blue accent bar (composerView)
+	ta.ShowLineNumbers = false       //
+	ta.CharLimit = 0                 // no limit — prompts can be long
+	ta.SetHeight(1)                  // grows with content up to maxComposerRows
+	ta.KeyMap.InsertNewline.SetKeys( // Enter submits; these add a newline
+		"shift+enter", "ctrl+j", "ctrl+enter", "alt+enter",
+	)
 	// Drop the focused cursor-line highlight + base frame to keep the minimal look.
 	// bubbles v2 exposes styles via Styles()/SetStyles (a copy) rather than the
 	// mutable FocusedStyle/BlurredStyle fields of v1.
@@ -452,6 +454,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case tea.PasteMsg:
+		// Bracketed paste (DECSET 2004): bubbletea v2 parses \x1b[200~…\x1b[201~
+		// into PasteMsg{Content}. The bubbles v2 textarea handles it directly
+		// (textarea.go:1223-1224); we forward, re-fit the composer to the new
+		// content, and refresh the slash/mention popup — mirroring the composer
+		// fallthrough at the end of the KeyPressMsg case. Without this case the
+		// message is dropped and cmd+v (macOS bracketed paste) does nothing.
+		m.histIdx = -1
+		var cmd, acCmd tea.Cmd
+		m.input, cmd = m.input.Update(msg)
+		m = m.resizeComposer()
+		m, acCmd = m.refreshAutocomplete()
+		return m, tea.Batch(cmd, acCmd)
+
 	case tea.KeyPressMsg:
 		// A focused terminal captures every key (ctrl+c included, so the shell can
 		// interrupt) — only ctrl+] escapes, handled inside handlePTYKey. A pending
@@ -465,8 +481,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.closePTY()
 			return m, nil
 		}
-		// ctrl+c always quits.
+		// ctrl+c is context-dependent (opencode prompt-input.tsx:806 +
+		// app.tsx:963-966): with text in the composer it clears the input; with an
+		// empty composer it quits the app. A focused PTY keeps the unconditional
+		// quit above via handlePTYKey.
 		if msg.String() == "ctrl+c" {
+			if strings.TrimSpace(m.input.Value()) != "" {
+				m.input.SetValue("")
+				m = m.resizeComposer()
+				m, acCmd := m.refreshAutocomplete()
+				return m, acCmd
+			}
 			if m.stream != nil {
 				m.stream.Close()
 			}
