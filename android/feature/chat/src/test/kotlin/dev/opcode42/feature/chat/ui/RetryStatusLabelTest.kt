@@ -9,9 +9,9 @@ import org.junit.Test
  * attempt count when the wire carries it) instead of the old generic "busy" busy state.
  *
  * Wire shape: the opencode `SessionStatus` retry variant (openapi.json:17278-17324) carries
- * a required integer `attempt` but no max. The TUI renders "Retrying (attempt N)"
- * (tui/src/routes/session/index.tsx:2316); we match that wording, and never fabricate a
- * count when the event omits it.
+ * a required integer `attempt` (minimum 0) but no max. The TUI renders "Retrying (attempt N)"
+ * (tui/src/routes/session/index.tsx:2316) with no lower-bound guard; we match that wording
+ * exactly (including attempt 0), and never fabricate a count when the event omits it.
  */
 class RetryStatusLabelTest {
 
@@ -43,14 +43,9 @@ class RetryStatusLabelTest {
     }
 
     @Test
-    fun retryWithZeroAttempt_fallsBackToBareRetrying() {
-        // attempt is `minimum: 0` on the wire; a 0 is not a meaningful "attempt N", so fall
-        // back to the bare label rather than render "Retrying (attempt 0)".
-        assertEquals("Retrying", retryStatusLabel("retry", 0))
-    }
-
-    @Test
-    fun retryWithNegativeAttempt_fallsBackToBareRetrying() {
-        assertEquals("Retrying", retryStatusLabel("retry", -1))
+    fun retryWithZeroAttempt_showsAttemptZero_matchingTui() {
+        // attempt is `minimum: 0` on the wire and the TUI renders it without a lower-bound
+        // guard (formatSubagentRetry just interpolates), so we match that exactly.
+        assertEquals("Retrying (attempt 0)", retryStatusLabel("retry", 0))
     }
 }

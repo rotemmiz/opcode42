@@ -125,11 +125,12 @@ fun StatusStrip(
  * `"retry"` (openapi.json SessionStatus schema, `packages/sdk/openapi.json:17278-17324`).
  * The retry variant requires an integer `attempt` field (no max is defined on the wire, so
  * we show the attempt count alone, never a fabricated "N/M"). The opencode TUI renders this
- * as `"Retrying (attempt ${attempt})"` (`packages/tui/src/routes/session/index.tsx:2316`); we
- * match that wording. When `attempt` is absent/blank we fall back to bare "Retrying" — the
- * plan's "if the event carries an attempt count" guard against fabricating a count.
+ * as `"Retrying (attempt ${attempt})"` (`packages/tui/src/routes/session/index.tsx:2316`),
+ * with no lower-bound guard — we match that wording exactly, including attempt 0. When
+ * `attempt` is absent/blank we fall back to bare "Retrying" — the plan's "if the event
+ * carries an attempt count" guard against fabricating a count.
  */
 fun retryStatusLabel(status: String?, retryAttempt: Int?): String? {
     if (status != "retry") return null
-    return retryAttempt?.takeIf { it > 0 }?.let { "Retrying (attempt $it)" } ?: "Retrying"
+    return retryAttempt?.let { "Retrying (attempt $it)" } ?: "Retrying"
 }
