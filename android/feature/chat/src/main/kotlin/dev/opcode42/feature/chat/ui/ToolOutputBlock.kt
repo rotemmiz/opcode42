@@ -75,28 +75,11 @@ fun ToolOutputBlock(part: ToolPart, modifier: Modifier = Modifier) {
     }
     val lineCount = body?.trim()?.takeIf { it.isNotEmpty() }?.lines()?.size
 
-    Column(
-        modifier = modifier
-            .padding(horizontal = 14.dp, vertical = 4.dp)
-            .clip(Opcode42Shapes.sm)
-            .background(SurfaceContainer)
-            .border(1.dp, OutlineVariant, Opcode42Shapes.sm),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 46.dp)
-                .clickable { expanded = !expanded }
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
-            Icon(
-                if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                contentDescription = null,
-                tint = OnSurfaceVariant,
-                modifier = Modifier.size(16.dp),
-            )
-            Spacer(Modifier.width(6.dp))
+    CollapsibleToolCard(
+        expanded = expanded,
+        onToggle = { expanded = !expanded },
+        modifier = modifier,
+        title = {
             Text(
                 text = buildAnnotatedString {
                     if (isBash) {
@@ -113,6 +96,8 @@ fun ToolOutputBlock(part: ToolPart, modifier: Modifier = Modifier) {
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+        },
+        trailing = {
             if (isError) {
                 Text("error", fontFamily = Opcode42Mono, fontSize = 11.sp, color = Error)
             } else if (lineCount != null) {
@@ -123,10 +108,9 @@ fun ToolOutputBlock(part: ToolPart, modifier: Modifier = Modifier) {
                     color = OnSurfaceFaint,
                 )
             }
-        }
-
-        if (expanded && !body.isNullOrEmpty()) {
-            HorizontalDivider(color = Hairline)
+        },
+    ) {
+        if (!body.isNullOrEmpty()) {
             // Cap the opened log to a short preview; reset to capped each time the block
             // is opened (remember keyed on `expanded`) so a long log never floods the stream.
             // Trim so the cap counts the same lines as the header badge (`lineCount`),

@@ -541,6 +541,35 @@ fun ChatScreen(
                         // so the list just needs to scroll normally.
                     ) {
                         // reverseLayout: emit newest-first so the freshest content is index 0 (bottom).
+                        // D3 — Non-modal in-stream QuestionCard: a pending question renders as a
+                        // LazyColumn item (not a transient modal). Emitted FIRST so that in
+                        // reverseLayout it sits at the bottom, next to the latest message (where
+                        // the user is looking), not at the top of the transcript. Flips to a
+                        // static "Answered: …" / "Skipped" row after resolution.
+                        if (pendingQuestion != null) {
+                            item(
+                                key = "question:${pendingQuestion!!.id}",
+                                contentType = { "question" },
+                            ) {
+                                QuestionCard(
+                                    question = pendingQuestion!!,
+                                    resolvedAnswers = resolvedQuestions[pendingQuestion!!.id],
+                                    resolvedSkipped = skippedQuestions.contains(pendingQuestion!!.id),
+                                    onReply = { answers ->
+                                        resolvedQuestions[pendingQuestion!!.id] = answers
+                                        replyingQuestion = pendingQuestion!!.id
+                                        viewModel.replyQuestion(pendingQuestion!!.id, answers)
+                                    },
+                                    onReject = {
+                                        skippedQuestions[pendingQuestion!!.id] = true
+                                        replyingQuestion = pendingQuestion!!.id
+                                        viewModel.rejectQuestion(pendingQuestion!!.id)
+                                    },
+                                    isReplying = replyingQuestion == pendingQuestion!!.id,
+                                    pendingCount = uiState.pendingQuestions.size,
+                                )
+                            }
+                        }
                         // Optimistic (just-sent, unconfirmed) messages are the newest, then the server
                         // messages newest→oldest above them.
                         items(
@@ -580,33 +609,6 @@ fun ChatScreen(
                                 onLoadChildSession = viewModel::loadChildSession,
                                 onNavigateToSession = onNavigateToSession,
                             )
-                        }
-                        // D3 — Non-modal in-stream QuestionCard: a pending question renders as a
-                        // LazyColumn item (not a transient modal), positioned after the last
-                        // message. Flips to a static "Answered: …" / "Skipped" row after resolution.
-                        if (pendingQuestion != null) {
-                            item(
-                                key = "question:${pendingQuestion!!.id}",
-                                contentType = { "question" },
-                            ) {
-                                QuestionCard(
-                                    question = pendingQuestion!!,
-                                    resolvedAnswers = resolvedQuestions[pendingQuestion!!.id],
-                                    resolvedSkipped = skippedQuestions.contains(pendingQuestion!!.id),
-                                    onReply = { answers ->
-                                        resolvedQuestions[pendingQuestion!!.id] = answers
-                                        replyingQuestion = pendingQuestion!!.id
-                                        viewModel.replyQuestion(pendingQuestion!!.id, answers)
-                                    },
-                                    onReject = {
-                                        skippedQuestions[pendingQuestion!!.id] = true
-                                        replyingQuestion = pendingQuestion!!.id
-                                        viewModel.rejectQuestion(pendingQuestion!!.id)
-                                    },
-                                    isReplying = replyingQuestion == pendingQuestion!!.id,
-                                    pendingCount = uiState.pendingQuestions.size,
-                                )
-                            }
                         }
                     }
 
