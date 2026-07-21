@@ -50,6 +50,7 @@ data class ChatUiState(
      *  inline without navigating away from the parent chat. */
     val childSessionMessages: Map<String, List<Message>> = emptyMap(),
     val sessionStatus: String = "idle",
+    val retryAttempt: Int? = null,
     val todos: List<TodoItem> = emptyList(),
     /** Agent name driving the status-strip mode chip (e.g. "build", "plan"). */
     val agentMode: String? = null,
@@ -171,6 +172,7 @@ class ChatViewModel @Inject constructor(
                 pendingQuestions = snap.questions,
                 childSessionMessages = childMessages,
                 sessionStatus = snap.status,
+                retryAttempt = snap.retryAttempt,
                 todos = extractTodos(messages, snap.parts),
                 agentMode = lastModelled?.mode ?: lastModelled?.agent
                     ?: messages.lastOrNull { it.mode != null }?.mode

@@ -229,6 +229,33 @@ class SseWireParsingTest {
     }
 
     @Test
+    fun `session_status retry carries attempt count`() {
+        // Wire shape: SessionStatus retry variant (openapi.json:17278-17324) — status.type
+        // is "retry" with a required integer `attempt` (and message/next, omitted here).
+        val raw = sse(
+            "session.status",
+            """{"sessionID":"ses_1","status":{"type":"retry","attempt":2,"message":"rate limited","next":3}}""",
+        )
+        val ev = parser.parse(raw)
+        assertTrue(ev is AppEvent.SessionStatus)
+        ev as AppEvent.SessionStatus
+        assertEquals("ses_1", ev.sessionId)
+        assertEquals("retry", ev.status)
+        assertEquals(2, ev.retryAttempt)
+    }
+
+    @Test
+    fun `session_status non-retry clears retry attempt`() {
+        val raw = sse(
+            "session.status",
+            """{"sessionID":"ses_1","status":{"type":"busy"}}""",
+        )
+        val ev = parser.parse(raw) as AppEvent.SessionStatus
+        assertEquals("busy", ev.status)
+        assertNull(ev.retryAttempt)
+    }
+
+    @Test
     fun `permission_asked decodes request directly from properties`() {
         // EventPermissionAsked.properties IS the PermissionRequest — wire shape per
         // packages/schema/src/v1/permission.ts (id, sessionID, permission, patterns,

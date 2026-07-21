@@ -28,11 +28,16 @@ class SseEventParser {
                 AppEvent.SessionRemoved(
                     p["sessionID"]?.jsonPrimitive?.content
                         ?: (p["info"] as? JsonObject)?.get("id")?.jsonPrimitive?.content ?: "")
-            "session.status" ->
+            "session.status" -> {
+                val statusObj = p["status"]?.jsonObject
+                val type = statusObj?.get("type")?.jsonPrimitive?.content ?: "idle"
                 AppEvent.SessionStatus(
                     sessionId = p["sessionID"]?.jsonPrimitive?.content ?: "",
-                    status = p["status"]?.jsonObject?.get("type")?.jsonPrimitive?.content ?: "idle",
+                    status = type,
+                    retryAttempt = if (type == "retry")
+                        statusObj?.get("attempt")?.jsonPrimitive?.contentOrNull?.toIntOrNull() else null,
                 )
+            }
 
             // message.updated wraps the message info under `info`
             // (EventMessageUpdated.properties = {sessionID, info}).

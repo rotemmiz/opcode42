@@ -21,7 +21,8 @@ fun reduce(state: AppState, event: AppEvent): AppState = when (event) {
         sessions = state.sessions.filter { it.id != event.sessionId }
     )
     is AppEvent.SessionStatus -> state.copy(
-        sessionStatus = state.sessionStatus + (event.sessionId to event.status)
+        sessionStatus = state.sessionStatus + (event.sessionId to event.status),
+        retryAttempts = state.retryAttempts + (event.sessionId to event.retryAttempt),
     )
 
     is AppEvent.MessageUpdated -> {
