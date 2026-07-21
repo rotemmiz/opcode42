@@ -156,7 +156,9 @@ func helpRows() []string {
 		"  /help        this help overlay (slash)",
 		"  ctrl+c       quit",
 		"",
-		"Slash commands: /new /sessions /models /agents /themes",
-		"/timeline /diff /terminal /variant /stash /status /connect /help",
+		"Slash commands",
+		"  /new /sessions /models /agents /themes",
+		"  /timeline /diff /terminal /variant /stash",
+		"  /status /connect /help",
 	}
 }
