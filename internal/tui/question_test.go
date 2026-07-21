@@ -186,3 +186,150 @@ func TestQuestion_SSEClearResetsState(t *testing.T) {
 		t.Fatalf("a cleared question should reset step state, qIdx=%d answers=%+v", m.qIdx, m.qAnswers)
 	}
 }
+
+// TestQuestion_SSERepliedRecordsAnsweredCard asserts the SSE question.replied
+// event records an answered card in the store (plan 08e §E4) so the question
+// stays visible in the stream history. The SSE event carries only the request
+// id, so the card's Answers is empty (the local reply path fills the labels; the
+// SSE path is the fallback for replies that originated elsewhere).
+func TestQuestion_SSERepliedRecordsAnsweredCard(t *testing.T) {
+	s := newStore()
+	s = s.Reduce(questionEvent(t, "qst_1", []QuestionInfo{{Question: "pick a color", Header: "Color"}}))
+	props, _ := json.Marshal(map[string]any{"requestID": "qst_1"})
+	s = s.Reduce(opcode42client.SSEEvent{Type: "question.replied", Properties: props})
+	if len(s.questions) != 0 {
+		t.Fatalf("question.replied should clear the pending question; got %+v", s.questions)
+	}
+	got := s.answeredQuestions["ses_1"]
+	if len(got) != 1 || got[0].ID != "qst_1" {
+		t.Fatalf("answered card not recorded; got %+v", got)
+	}
+	if got[0].Skipped {
+		t.Fatal("question.replied should record Skipped=false")
+	}
+	if len(got[0].Questions) != 1 || got[0].Questions[0].Question != "pick a color" {
+		t.Fatalf("answered card should capture the question text; got %+v", got[0].Questions)
+	}
+}
+
+// TestQuestion_SSERejectedRecordsSkippedCard asserts the SSE question.rejected
+// event records an answered card with Skipped=true (plan 08e §E4).
+func TestQuestion_SSERejectedRecordsSkippedCard(t *testing.T) {
+	s := newStore()
+	s = s.Reduce(questionEvent(t, "qst_1", []QuestionInfo{{Question: "Q"}}))
+	props, _ := json.Marshal(map[string]any{"requestID": "qst_1"})
+	s = s.Reduce(opcode42client.SSEEvent{Type: "question.rejected", Properties: props})
+	got := s.answeredQuestions["ses_1"]
+	if len(got) != 1 || !got[0].Skipped {
+		t.Fatalf("question.rejected should record a skipped card; got %+v", got)
+	}
+}
+
+// TestQuestionRepliedMsg_RecordsAnsweredCardWithLabels asserts the local reply
+// path (questionRepliedMsg success) records an answered card carrying the
+// specific selected labels from the per-request answer state (plan 08e §E4).
+// The local path knows the labels; the SSE path records a label-less "Answered"
+// fallback. Deduped by id so the SSE event arriving afterwards doesn't add a
+// duplicate.
+func TestQuestionRepliedMsg_RecordsAnsweredCardWithLabels(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
+		{Header: "Color", Question: "Pick a color", Options: []QuestionOption{opt("red"), opt("green"), opt("blue")}},
+	}))
+	// Move to "green" and reply.
+	m, _ = step(t, m, key("down"))
+	m, _ = step(t, m, key("enter"))
+	// qReplying is true; the reply cmd hasn't run. Drive the success msg.
+	m, _ = step(t, m, questionRepliedMsg{id: "qst_1"})
+	if m.pendingQuestion() != nil {
+		t.Fatal("the pending question should be cleared on reply success")
+	}
+	got := m.store.answeredQuestions["ses_1"]
+	if len(got) != 1 {
+		t.Fatalf("one answered card expected; got %+v", got)
+	}
+	if got[0].Skipped {
+		t.Fatal("reply should record Skipped=false")
+	}
+	if len(got[0].Answers) != 1 || len(got[0].Answers[0]) != 1 || got[0].Answers[0][0] != "green" {
+		t.Fatalf("answer labels should be [[green]]; got %+v", got[0].Answers)
+	}
+}
+
+// TestQuestionRepliedMsg_DedupsWithSSEEvent asserts that when the local reply
+// path records an answered card and the SSE question.replied event then
+// arrives, the answered-questions slice keeps a single entry (deduped by id).
+func TestQuestionRepliedMsg_DedupsWithSSEEvent(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
+		{Question: "Q", Options: []QuestionOption{opt("a"), opt("b")}},
+	}))
+	m, _ = step(t, m, key("enter")) // reply with [[a]]
+	m, _ = step(t, m, questionRepliedMsg{id: "qst_1"})
+	// The SSE event arrives after the local reply.
+	props, _ := json.Marshal(map[string]any{"requestID": "qst_1"})
+	m, _ = step(t, m, sseEventMsg{ev: opcode42client.SSEEvent{Type: "question.replied", Properties: props}})
+	got := m.store.answeredQuestions["ses_1"]
+	if len(got) != 1 {
+		t.Fatalf("dedup should keep one answered card; got %+v", got)
+	}
+	if len(got[0].Answers) != 1 || got[0].Answers[0][0] != "a" {
+		t.Fatalf("the local labels should be retained, not overwritten by the SSE fallback; got %+v", got[0].Answers)
+	}
+}
+
+// TestRenderSession_ShowsPendingQuestionCard asserts the in-stream pending
+// question card renders in the session body (plan 08e §E4). The card is behind
+// the blocking overlay while the overlay is up; this test calls renderSession
+// directly (which doesn't draw the overlay) so the card is visible.
+func TestRenderSession_ShowsPendingQuestionCard(t *testing.T) {
+	m := seededSessionModel(t)
+	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
+		{Header: "Color", Question: "Pick a color", Options: []QuestionOption{opt("red"), opt("green")}},
+	}))
+	plain := stripANSI(m.renderSession())
+	for _, want := range []string{"Color", "Pick a color", "enter to answer"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("pending question card missing %q in stream:\n%s", want, plain)
+		}
+	}
+}
+
+// TestRenderSession_ShowsAnsweredQuestionCard asserts a finalized question
+// renders as a collapsed in-stream card with the selected labels (plan 08e §E4).
+func TestRenderSession_ShowsAnsweredQuestionCard(t *testing.T) {
+	m := seededSessionModel(t)
+	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
+		{Header: "Color", Question: "Pick a color", Options: []QuestionOption{opt("red"), opt("green"), opt("blue")}},
+	}))
+	// Reply with "green" via the local path.
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 60})
+	m, _ = step(t, m, key("down"))
+	m, _ = step(t, m, key("enter"))
+	m, _ = step(t, m, questionRepliedMsg{id: "qst_1"})
+	plain := stripANSI(m.renderSession())
+	for _, want := range []string{"Color", "Pick a color", "green"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("answered question card missing %q in stream:\n%s", want, plain)
+		}
+	}
+}
+
+// TestRenderSession_ShowsSkippedQuestionCard asserts a rejected question renders
+// as a collapsed in-stream card with "Skipped" (plan 08e §E4).
+func TestRenderSession_ShowsSkippedQuestionCard(t *testing.T) {
+	m := seededSessionModel(t)
+	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
+		{Question: "Pick a color", Options: []QuestionOption{opt("red")}},
+	}))
+	props, _ := json.Marshal(map[string]any{"requestID": "qst_1"})
+	m.store = m.store.Reduce(opcode42client.SSEEvent{Type: "question.rejected", Properties: props})
+	plain := stripANSI(m.renderSession())
+	for _, want := range []string{"Pick a color", "Skipped"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("skipped question card missing %q in stream:\n%s", want, plain)
+		}
+	}
+}
