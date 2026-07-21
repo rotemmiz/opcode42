@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -166,8 +167,16 @@ func (m Model) cycleSibling(dir int) (tea.Model, tea.Cmd) {
 
 // subagentFooterView renders the sub-agent context strip above the composer:
 // when in a child session, its label + position among siblings + nav hints;
-// when in a parent that spawned sub-agents, an invitation to descend. Empty
-// otherwise.
+// when in a parent that spawned sub-agents, an active/recent count + an
+// invitation to descend. Empty otherwise.
+//
+// The parent case mirrors opencode's two-count model
+// (run/footer.command.tsx:356,374): activeCount = children with status
+// "running"; totalCount = all children. Label: "N active" when activeCount > 0,
+// else "N recent" when totalCount > 0, else hidden. opencode's tabs Map is a
+// historical, never-pruned set (run/subagent-data.ts:333-356 syncTaskTab only
+// sets, never deletes), so completed children stay in totalCount — matching
+// opencode's "N recent" after a run completes (plan 17 §E1, §E5).
 func (m Model) subagentFooterView(width int) string {
 	cur := m.currentSession()
 	if cur == nil {
@@ -185,15 +194,25 @@ func (m Model) subagentFooterView(width int) string {
 			hint += " · ⌃x[ prev · ⌃x] next"
 		}
 		return m.subagentBar(width, info, hint)
-	case len(m.childrenOf(cur.ID)) > 0:
-		n := len(m.childrenOf(cur.ID))
-		info := fmt.Sprintf("%d sub-agent", n)
-		if n != 1 {
-			info += "s"
+	default:
+		kids := m.childrenOf(cur.ID)
+		if len(kids) == 0 {
+			return ""
+		}
+		activeCount := 0
+		for _, k := range kids {
+			if m.childStatus(k.ID) == "running" {
+				activeCount++
+			}
+		}
+		var info string
+		switch {
+		case activeCount > 0:
+			info = fmt.Sprintf("%d active", activeCount)
+		default:
+			info = fmt.Sprintf("%d recent", len(kids))
 		}
 		return m.subagentBar(width, info, "⌃x↓ enter")
-	default:
-		return ""
 	}
 }
 
@@ -213,19 +232,31 @@ func (m Model) subagentBar(width int, info, hint string) string {
 	return label + strings.Repeat(" ", gap) + keys
 }
 
-// childStatus derives a child session's run status from its mirrored message
-// stream: "running" when any tool part is in the running/pending state,
-// "completed" when the child has at least one assistant message and no
-// running tools, "error" when any tool part errored, "" when the child's
-// stream hasn't been loaded yet (unknown). Used by the sidebar TASKS section
-// (plan 08e §C3).
+// childStatus derives a child session's run status and returns one of:
+// "running", "completed", "error", "cancelled", or "" (unknown).
 //
-// This mirrors how animating() decides whether a session is active, scoped to
-// the child's parts rather than the open session's. The store mirrors child
-// sessions via loadChildrenCmd + loadChildMessagesCmd; before the first
-// loadChildMessagesCmd resolves, the child has no messages and the status
-// reads as "" (the sidebar shows a neutral •).
+// It tries two sources in order, so the count is correct even before the
+// child's message stream is lazily loaded (plan 17 §E2):
+//
+//  1. Parent-derived status (preferred): scans the parent session's task tool
+//     parts for the one whose metadata.sessionId (or <task id="…"> wrapper)
+//     matches childID, and applies opencode's taskStatus derivation
+//     (run/subagent-data.ts:295-309): completed → "completed"; error with
+//     metadata.interrupted == true OR error == "Tool execution aborted" →
+//     "cancelled"; other error → "error"; anything else (pending/running) →
+//     "running". This is in the parent's message stream, which is always
+//     loaded, so it does not suffer the lazy-load gap.
+//  2. Child-stream status (fallback): scans the child's own tool parts. Before
+//     the first loadChildMessagesCmd resolves, the child has no messages and
+//     this branch returns "".
+//
+// The parent-derived path is wire-compatible with opencode (same state fields,
+// same priority order). The cancelled/error distinction (E3) enables the
+// sidebar to distinguish ○ (cancelled) from ◍ (error) like opencode.
 func (m Model) childStatus(childID string) string {
+	if s := m.taskChildStatusFromParent(childID); s != "" {
+		return s
+	}
 	msgs := m.store.messages[childID]
 	if len(msgs) == 0 {
 		return ""
@@ -247,6 +278,9 @@ func (m Model) childStatus(childID string) string {
 			case "running", "pending":
 				return "running"
 			case "error":
+				if taskCancelled(st) {
+					return "cancelled"
+				}
 				return "error"
 			}
 		}
@@ -255,4 +289,80 @@ func (m Model) childStatus(childID string) string {
 		return "completed"
 	}
 	return ""
+}
+
+// taskChildStatusFromParent scans the parent session's task tool parts for the
+// one spawned childID and derives its status the same way opencode's taskStatus
+// does (run/subagent-data.ts:295-309). Returns "" when no matching task part
+// is found in any parent message stream (e.g. the child's parent isn't in the
+// store, or the task part predates metadata.sessionId and has no <task id>
+// wrapper). Used as the preferred source by childStatus so the count is
+// correct before the child's own messages are lazily loaded (plan 17 §E2a).
+func (m Model) taskChildStatusFromParent(childID string) string {
+	if childID == "" {
+		return ""
+	}
+	parentID := ""
+	for _, s := range m.store.sessions {
+		if s.ID == childID && s.ParentID != "" {
+			parentID = s.ParentID
+			break
+		}
+	}
+	if parentID == "" {
+		return ""
+	}
+	for _, msg := range m.store.messages[parentID] {
+		for _, p := range m.store.parts[msg.ID] {
+			if p.Type != "tool" || p.Tool != "task" {
+				continue
+			}
+			var st toolState
+			if !decode(p.State, &st) {
+				continue
+			}
+			if childSessionID(st) != childID {
+				continue
+			}
+			return taskStatusFromState(st)
+		}
+	}
+	return ""
+}
+
+// taskStatusFromState mirrors opencode's taskStatus derivation
+// (run/subagent-data.ts:295-309): completed → "completed"; error with
+// interrupted metadata OR "Tool execution aborted" error text → "cancelled";
+// other error → "error"; anything else (pending/running/empty) → "running".
+func taskStatusFromState(st toolState) string {
+	switch st.Status {
+	case "completed":
+		return "completed"
+	case "error":
+		if taskCancelled(st) {
+			return "cancelled"
+		}
+		return "error"
+	default:
+		return "running"
+	}
+}
+
+// taskCancelled reports whether an errored task tool part represents a
+// cancelled (interrupted/aborted) run vs a genuine failure. Matches opencode's
+// check (run/subagent-data.ts:301-303): metadata.interrupted === true OR
+// state.error === "Tool execution aborted".
+func taskCancelled(st toolState) bool {
+	if st.Error == "Tool execution aborted" {
+		return true
+	}
+	if len(st.Metadata) > 0 {
+		var meta struct {
+			Interrupted bool `json:"interrupted"`
+		}
+		if json.Unmarshal(st.Metadata, &meta) == nil && meta.Interrupted {
+			return true
+		}
+	}
+	return false
 }
