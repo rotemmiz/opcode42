@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/images/logo-light.png">
-    <img alt="Opcode42" src="docs/images/logo-light.png" width="120">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/logo-light.svg">
+    <img alt="Opcode42" src="docs/images/logo-light.svg" width="360">
   </picture>
 </p>
 
