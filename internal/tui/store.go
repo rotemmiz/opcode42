@@ -48,6 +48,29 @@ type Message struct {
 	SessionID string    `json:"sessionID"`
 	Role      string    `json:"role"`
 	Error     *MsgError `json:"error,omitempty"`
+	// Tokens is the assistant message's cumulative token usage (wire field
+	// `tokens`). User messages carry no tokens — the field stays zero. The
+	// sidebar's context gauge reads the last assistant message's tokens to
+	// populate on session switch before a new turn arrives (plan 08e §E5).
+	Tokens MessageTokens `json:"tokens,omitempty"`
+}
+
+// MessageTokens mirrors the assistant message's token accounting block
+// (openapi AssistantMessage.tokens). Total is the sum of all directions and
+// matches the Session.Tokens aggregate shape so the gauge can read either.
+type MessageTokens struct {
+	Input     float64 `json:"input"`
+	Output    float64 `json:"output"`
+	Reasoning float64 `json:"reasoning"`
+	Cache     struct {
+		Read  float64 `json:"read"`
+		Write float64 `json:"write"`
+	} `json:"cache"`
+}
+
+// Total is all token directions summed (matches SessionTokens.Total).
+func (t MessageTokens) Total() float64 {
+	return t.Input + t.Output + t.Reasoning + t.Cache.Read + t.Cache.Write
 }
 
 // MsgError is an assistant turn's error (NamedError shape {name, data:{message}}).

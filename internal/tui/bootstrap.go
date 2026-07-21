@@ -46,6 +46,13 @@ func loadMessagesCmd(ctx context.Context, c *opcode42client.Opcode42Client, sess
 }
 
 // ingestHistory loads a session's persisted messages+parts into the store.
+// When the session's aggregated Tokens are still zero (a freshly-switched
+// session whose session.updated SSE hasn't reported tokens yet — the
+// sidebar's context gauge would otherwise blank until a new turn arrives),
+// it backfills the session's Tokens from the last assistant message's
+// tokens. This mirrors opencode's sidebar context plugin, which reads the
+// last assistant message's tokens directly (feature-plugins/sidebar/context.tsx).
+// Plan 08e §E5.
 func (s store) ingestHistory(sessionID string, items []wireWithParts) store {
 	for _, it := range items {
 		s.messages[sessionID] = upsertByID(s.messages[sessionID], it.Info, func(m Message) string { return m.ID })
@@ -57,5 +64,50 @@ func (s store) ingestHistory(sessionID string, items []wireWithParts) store {
 			s.parts[mid] = upsertByID(s.parts[mid], p, func(pt Part) string { return pt.ID })
 		}
 	}
+	// E5: backfill the session's aggregated tokens from the last assistant
+	// message when the session row carries none yet. The session's tokens
+	// arrive via session.updated SSE; on a switch we load history before that
+	// event fires for this session, so the gauge would otherwise read zero.
+	if sess := s.sessionByID(sessionID); sess != nil && sess.Tokens.Total() == 0 {
+		if last := lastAssistantMessageTokens(s.messages[sessionID]); last != nil {
+			for i := range s.sessions {
+				if s.sessions[i].ID == sessionID {
+					s.sessions[i].Tokens.Input = int(last.Input)
+					s.sessions[i].Tokens.Output = int(last.Output)
+					s.sessions[i].Tokens.Cache.Read = int(last.Cache.Read)
+					s.sessions[i].Tokens.Cache.Write = int(last.Cache.Write)
+					break
+				}
+			}
+		}
+	}
 	return s
+}
+
+// sessionByID returns the session with the given id, or nil when absent.
+func (s store) sessionByID(id string) *Session {
+	for i := range s.sessions {
+		if s.sessions[i].ID == id {
+			return &s.sessions[i]
+		}
+	}
+	return nil
+}
+
+// lastAssistantMessageTokens returns the tokens of the last assistant message
+// in the slice that has a non-zero output count, mirroring opencode's
+// sidebar context selector (findLast(role == assistant && tokens.output > 0)).
+// Returns nil when no such message exists (draft / no completed turns).
+func lastAssistantMessageTokens(msgs []Message) *MessageTokens {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		m := &msgs[i]
+		if m.Role != "assistant" {
+			continue
+		}
+		if m.Tokens.Output <= 0 {
+			continue
+		}
+		return &m.Tokens
+	}
+	return nil
 }
