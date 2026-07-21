@@ -1,4 +1,4 @@
-                                                                                
+Permission session                                                              
                                                                                 
                                                                                 
                                                                                 
@@ -20,5 +20,5 @@
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-                                                                                
+┃ Ask anything…                                                                 
+  build                               ● connecting to http://x · ctrl+p commands

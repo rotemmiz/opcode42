@@ -581,12 +581,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+t":
 			return m.cycleVariant(), nil // cycle model variants (opencode variant_cycle)
 		case "ctrl+up", "pgup":
-			// Scroll the stream. These keys never reach the composer, so the
-			// input box behaviour (plain ↑/↓ below) is untouched.
+			// Scroll the stream one step toward older content. These keys
+			// never reach the composer, so the input box behaviour (plain
+			// ↑/↓ below) is untouched. Plan 17 §A3: kept as Opcode42's
+			// line-scroll convention (opencode uses ctrl+alt+y/e — see the
+			// known-divergence registry).
 			m.scroll.Back(scrollStep)
 			return m, nil
 		case "ctrl+down", "pgdown", "pgdn":
 			m.scroll.Forward(scrollStep)
+			return m, nil
+		case "ctrl+alt+u":
+			// Half-page up (opencode messages_half_page_up, plan 17 §A3).
+			// ±bodyH/4 matches opencode's "half page" semantic.
+			m.scroll.Back(m.scrollBodyHeight() / 4)
+			return m, nil
+		case "ctrl+alt+d":
+			// Half-page down (opencode messages_half_page_down).
+			m.scroll.Forward(m.scrollBodyHeight() / 4)
+			return m, nil
+		case "home", "ctrl+g":
+			// Home / ctrl+g jump to the first message (opencode
+			// messages_first: "ctrl+g,home"). scrollregion.Apply maps Top
+			// to a deliberately large offset that Window/Clamp bound to the
+			// oldest line at render time.
+			m.scroll.Apply(scrollregion.Top, 0, 0)
+			return m, nil
+		case "end", "ctrl+alt+g":
+			// End / ctrl+alt+g jump to the tail (opencode messages_last:
+			// "ctrl+alt+g,end").
+			m.scroll.Apply(scrollregion.Bottom, 0, 0)
 			return m, nil
 		case "up":
 			if nm, ok := m.historyRecall(-1); ok {
@@ -1612,6 +1636,21 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 
 // scrollStep is the lines moved per scrollback keypress (and per wheel notch).
 const scrollStep = 3
+
+// scrollBodyHeight returns the height of the stream viewport (screen height
+// minus the footer's height) — the dimension the half-page scroll keys (plan
+// 17 §A3) scale against. Computed from the shared buildFooter helper so it
+// agrees with the canvas path's bodyH derivation in sessionLayers.
+func (m Model) scrollBodyHeight() int {
+	if m.height <= 0 {
+		return 1
+	}
+	h := m.height - lipgloss.Height(m.buildFooter(m.leftColumnWidth()))
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
 
 // historyRecall walks the prompt history with up (dir -1, older) / down (dir +1,
 // newer). It only starts browsing from an empty composer (so a draft isn't

@@ -85,7 +85,7 @@
   {
     "scenario": "tui-inline-diff-bg-tints",
     "phase": "D",
-    "reason": "Plan 17 Workstream C: the TUI in-chat inline diff (rendered at edit/apply_patch tool completion) uses the theme's DiffPalette background tints (AddedBg/RemovedBg/ContextBg) for added/removed/context rows. opencode's run mini-TUI uses transparent diff backgrounds (run/theme.ts:572-574); opencode's full-TUI diff-viewer plugin uses real tints. Opcode42 chose the tints for the inline diff for readability and colorblind-safety (the +/- sign marker column carries the color cue the background tint alone does not). This is a visual divergence from the run mini-TUI only; the wire shape (metadata.diff for edit, metadata.files[].patch for apply_patch) and the snapshot title ('# Edited <file>' / '# Created|Deleted|Moved|Patched <file>') match opencode (scrollback.writer.tsx:188-225, tool.ts:484-498, 515-569). Not gated by a parity scenario (TUI-only, no daemon wire).",
+    "reason": "Plan 17 Workstream C: the TUI in-chat inline diff (rendered at edit/apply_patch tool completion) uses the theme's DiffPalette background tints (AddedBg/RemovedBg/ContextBg) for added/removed/context rows. opencode's run mini-TUI uses transparent diff backgrounds (run/theme.ts:572-574); opencode's full-TUI diff-viewer plugin uses real tints. Opcode42 chose the tints for the inline diff for readability and colorblind-safety (the +/- sign marker column carries the color cue the background tint alone does not). This is a visual divergence from the run mini-TUI only; the wire shapes (metadata.diff for edit, metadata.files[].patch for apply_patch) and the snapshot title ('# Edited <file>' / '# Created|Deleted|Moved|Patched <file>') match opencode (scrollback.writer.tsx:188-225, tool.ts:484-498, 515-569). Not gated by a parity scenario (TUI-only, no daemon wire).",
     "track": "intentional: tints (Opcode42) vs transparent (opencode run mini-TUI) for the inline diff bg"
   },
   {
@@ -105,5 +105,11 @@
     "phase": "D (plan 17)",
     "reason": "TUI (plan 17 §D1): Opcode42 defaults `hideThinking = true` (collapsed, 1-line header). This MATCHES opencode's full-TUI default (\"hide\", packages/tui/src/context/thinking.ts:36) — not a divergence from opencode's full TUI. Logged here as a divergence from opencode's RUN mini-TUI default (\"show\"), which is what the original plan 17 wording picked up before §D1 corrected it: the run mini-TUI (packages/opencode/src/cli/cmd/run/session-data.ts:906-908) DROPS the reasoning part entirely when !input.thinking, while Opcode42's full TUI collapses it to a header. Opcode42 follows opencode's full TUI behavior, NOT the run mini-TUI behavior.",
     "track": "intentional: matches opencode full-TUI default (\"hide\"); diverges from run mini-TUI default (\"show\" + drop)"
+  },
+  {
+    "scenario": "tui-scroll-keybinds",
+    "phase": "D",
+    "reason": "TUI scroll keybinds (plan 17 §A3). Opcode42 matches opencode's full scroll keymap for home/end (ctrl+g,home → first; ctrl+alt+g,end → last), half-page (ctrl+alt+u/d), and page (pgup/pgdown, ctrl+alt+b/f). ONE intentional divergence on LINE scroll: Opcode42 uses ctrl+up/ctrl+down for line-by-line scroll (its own pre-existing convention), while opencode uses ctrl+alt+y/ctrl+alt+e (tui/config/keybind.ts:136-137). Opcode42 keeps ctrl+up/down because they predate plan 17 and users expect them; opencode's ctrl+alt+y/e are not bound (a future workstream could add them as aliases). This is a TUI-only divergence, not a wire/daemon divergence, and is not exercised by any conformance scenario.",
+    "track": "intentional: ctrl+up/down (Opcode42) vs ctrl+alt+y/e (opencode) for line scroll"
   }
 ]

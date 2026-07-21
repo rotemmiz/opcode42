@@ -105,7 +105,7 @@ func (r *opcode42Rig) newModel() Model {
 		Provider: "openai", Model: "gpt-4o",
 		Theme: "opcode42-dark", // deterministic palette for capture
 	})
-	m.width, m.height = 120, 40 // give the View() a real layout
+	m.width, m.height = 140, 40 // give the View() a real layout (>=121 shows the sidebar)
 	return m
 }
 

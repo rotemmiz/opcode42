@@ -88,7 +88,7 @@ func TestLeader_DispatchesChords(t *testing.T) {
 func TestLeader_SidebarToggleAndUnknownKey(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.screen = ScreenSession
-	m, _ = step(t, m, tea.WindowSizeMsg{Width: 120, Height: 24})
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 24}) // sidebar shows at >=121
 	if !m.sidebarVisible() {
 		t.Fatal("sidebar should be visible at this size")
 	}

@@ -125,10 +125,12 @@ func (m Model) permissionView() string {
 		Width(width + 2). // v2: +2 for the border cols Width now includes
 		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 
-	if m.width == 0 || m.height == 0 {
-		return card
-	}
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, card)
+	// Plan 17 §A4: return the card only — the canvas layer positions it at
+	// the centered (x,y) via centeredCardPos, so the card's blank padding
+	// doesn't paint over the body layer (the stream stays visible around the
+	// panel). The pre-resize fallback (bodyContent) also gets the card, which
+	// is correct since dimensions are 0 then.
+	return card
 }
 
 // permissionTitle is a human line for the request (the action + tool).

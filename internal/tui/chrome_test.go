@@ -109,15 +109,19 @@ func TestSidebar_ShowsTokensAndCost(t *testing.T) {
 func TestSidebarVisible_Thresholds(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.screen = ScreenSession
-	m.width, m.height = 120, 24
+	m.width, m.height = 121, 24
 	if !m.sidebarVisible() {
-		t.Fatal("a wide session screen should show the sidebar")
+		t.Fatal("a wide session screen (>=121) should show the sidebar")
+	}
+	m.width = 120
+	if m.sidebarVisible() {
+		t.Fatal("a 120-col terminal is below the threshold (>=121) and should hide the sidebar")
 	}
 	m.width = 70
 	if m.sidebarVisible() {
 		t.Fatal("a narrow terminal should hide the sidebar")
 	}
-	m.width, m.sidebarHidden = 120, true
+	m.width, m.sidebarHidden = 121, true
 	if m.sidebarVisible() {
 		t.Fatal("the hidden flag should hide the sidebar")
 	}
@@ -145,26 +149,26 @@ func TestComposer_SizedToLeftColumnUnderSidebar(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
 	m.store.sessions = []Session{{ID: "ses_1", Title: "S"}}
-	m, _ = step(t, m, tea.WindowSizeMsg{Width: 120, Height: 24}) // sidebar shows
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 24}) // sidebar shows at >=121
 
-	leftW := 120 - sidebarWidth
+	leftW := 140 - sidebarWidth
 	if w := lipgloss.Width(m.composerView()); w > leftW {
 		t.Fatalf("composer renders %d cols, exceeds left column %d (overlaps sidebar)", w, leftW)
 	}
-	if w := lipgloss.Width(m.renderSession()); w != 120 {
-		t.Fatalf("session layout renders %d cols, want exactly 120", w)
+	if w := lipgloss.Width(m.renderSession()); w != 140 {
+		t.Fatalf("session layout renders %d cols, want exactly 140", w)
 	}
 }
 
 func TestRenderSession_SidebarLayoutFitsWidth(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
-	m.width, m.height = 120, 24
+	m.width, m.height = 140, 24
 	m.screen = ScreenSession
 	m.store.sessions = []Session{{ID: "ses_1", Title: "S"}}
 
 	out := m.renderSession()
-	if w := lipgloss.Width(out); w > 120 {
-		t.Fatalf("session layout renders %d cols, exceeds width 120", w)
+	if w := lipgloss.Width(out); w > 140 {
+		t.Fatalf("session layout renders %d cols, exceeds width 140", w)
 	}
 	if !strings.Contains(out, "Opcode42") {
 		t.Fatal("the sidebar (Opcode42 tag) should be present at this width")
