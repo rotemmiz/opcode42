@@ -147,7 +147,7 @@ internal fun SessionRow(
     onDelete: () -> Unit,
     onApprove: () -> Unit,
     onDeny: () -> Unit,
-    onReply: (String) -> Unit,
+    onReply: (List<List<String>>) -> Unit,
     onSkip: () -> Unit,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
@@ -349,7 +349,7 @@ private fun CompactRailRow(
     pendingQuestion: QuestionRequest?,
     onApprove: () -> Unit,
     onDeny: () -> Unit,
-    onReply: (String) -> Unit,
+    onReply: (List<List<String>>) -> Unit,
     onSkip: () -> Unit,
 ) {
     // Flip the structural bits (drop the inline actions) once, at the midpoint — not per frame.
@@ -548,7 +548,7 @@ private fun FullListRow(
     pendingQuestion: QuestionRequest?,
     onApprove: () -> Unit,
     onDeny: () -> Unit,
-    onReply: (String) -> Unit,
+    onReply: (List<List<String>>) -> Unit,
     onSkip: () -> Unit,
 ) {
     Column(
