@@ -280,6 +280,49 @@ func TestQuestionRepliedMsg_DedupsWithSSEEvent(t *testing.T) {
 	}
 }
 
+// TestQuestionRepliedMsg_SSEArrivesFirst_UpgradesWithLabels asserts the
+// out-of-order edge case: if the SSE question.replied event arrives BEFORE the
+// local questionRepliedMsg, the SSE event is deferred (not applied) so the
+// local reply path can still record the locally-selected labels. The deferred
+// SSE event is then applied by questionRepliedMsg (a no-op dedup-wise). This
+// guards the plan 08e §E4 design: the SSE-clear-during-qReplying is deferred
+// to avoid losing the labels.
+func TestQuestionRepliedMsg_SSEArrivesFirst_UpgradesWithLabels(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
+		{Question: "Q", Options: []QuestionOption{opt("a"), opt("b")}},
+	}))
+	m, _ = step(t, m, key("enter")) // reply with [[a]] (qReplying=true, cmd dispatched)
+	// The SSE event arrives before the HTTP response (out of order). It is
+	// deferred (not applied) because qReplying is true; the pending question
+	// stays in the store so recordLocalAnsweredQuestion can still find it.
+	props, _ := json.Marshal(map[string]any{"requestID": "qst_1"})
+	m, _ = step(t, m, sseEventMsg{ev: opcode42client.SSEEvent{Type: "question.replied", Properties: props}})
+	if m.qDeferredSSE.Type != "question.replied" {
+		t.Fatalf("the SSE event should be deferred; got %+v", m.qDeferredSSE)
+	}
+	if m.pendingQuestion() == nil {
+		t.Fatal("the pending question should still be in the store (SSE deferred)")
+	}
+	// The HTTP response arrives; the local path records the labels, then
+	// applies the deferred SSE event (a no-op dedup-wise) + clears the question.
+	m, _ = step(t, m, questionRepliedMsg{id: "qst_1"})
+	got := m.store.answeredQuestions["ses_1"]
+	if len(got) != 1 {
+		t.Fatalf("one answered card expected; got %+v", got)
+	}
+	if len(got[0].Answers) != 1 || got[0].Answers[0][0] != "a" {
+		t.Fatalf("the local labels should be recorded; got %+v", got[0].Answers)
+	}
+	if m.qDeferredSSE.Type != "" {
+		t.Fatalf("the deferred SSE event should be applied + cleared; got %+v", m.qDeferredSSE)
+	}
+	if m.pendingQuestion() != nil {
+		t.Fatal("the pending question should be cleared after questionRepliedMsg")
+	}
+}
+
 // TestRenderSession_ShowsPendingQuestionCard asserts the in-stream pending
 // question card renders in the session body (plan 08e §E4). The card is behind
 // the blocking overlay while the overlay is up; this test calls renderSession

@@ -149,8 +149,14 @@ func (m Model) resetQuestion() Model {
 // request state are cleared, so the question text + answers are still
 // available. The local path knows the specific labels (from qAnswers + the
 // current step); the SSE path (store.Reduce) records a label-less "Answered"
-// fallback for replies that originated elsewhere. Deduped by id inside
-// recordAnsweredQuestion.
+// fallback for replies that originated elsewhere. Deduped + upgraded by id
+// inside recordAnsweredQuestion (a later local reply with labels wins over an
+// earlier SSE label-less entry).
+//
+// Relies on the SSE-clear deferral in the sseEventMsg handler: when a local
+// reply is in flight (qReplying), the SSE question.replied/rejected event for
+// our own question is deferred until AFTER this runs, so the pending question
+// is still in the store here.
 func (m Model) recordLocalAnsweredQuestion(id string) Model {
 	var q *Question
 	for i := range m.store.questions {

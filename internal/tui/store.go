@@ -169,6 +169,14 @@ func newStore() store {
 // reply path and the SSE path can both record the same finalization without
 // double-rendering. The slice is kept in arrival order (chronological), which
 // mirrors how the pending question was positioned in the stream.
+//
+// If an entry with the same id already exists (e.g. the SSE event arrived
+// before the local HTTP response), the entry is UPGRADED in place when the new
+// record carries richer info (non-skipped + non-empty Answers). This guards the
+// edge case where the SSE label-less fallback records first and the local
+// reply path (with the specific labels) arrives second — the labels should
+// win, not the first writer. Skipped state is never downgraded by a later
+// non-skipped record (a reject can't become a reply).
 func (s store) recordAnsweredQuestion(aq AnsweredQuestion) store {
 	if aq.ID == "" {
 		return s
@@ -176,9 +184,15 @@ func (s store) recordAnsweredQuestion(aq AnsweredQuestion) store {
 	if s.answeredQuestions == nil {
 		s.answeredQuestions = map[string][]AnsweredQuestion{}
 	}
-	for _, existing := range s.answeredQuestions[aq.SessionID] {
+	for i, existing := range s.answeredQuestions[aq.SessionID] {
 		if existing.ID == aq.ID {
-			return s // already recorded (e.g. the local reply beat the SSE event)
+			// Upgrade in place: a non-skipped record with answers wins over a
+			// skipped or label-less one. Never downgrade an existing skipped
+			// entry (reject can't become a reply).
+			if !aq.Skipped && len(aq.Answers) > 0 {
+				s.answeredQuestions[aq.SessionID][i] = aq
+			}
+			return s
 		}
 	}
 	s.answeredQuestions[aq.SessionID] = append(s.answeredQuestions[aq.SessionID], aq)
