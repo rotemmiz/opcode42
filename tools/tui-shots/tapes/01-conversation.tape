@@ -16,7 +16,7 @@ Set Height 1000
 Set Padding 8
 
 Hide
-Type "source ./env.sh && ./bin/opcode-tui --url http://127.0.0.1:4199 --dir ./fixture --session ses_00000000000000000000000000 --theme $OPCODE_THEME"
+Type "source ./env.sh && ./bin/opcode-tui --no-anim --url http://127.0.0.1:4199 --dir ./fixture --session ses_00000000000000000000000000 --theme $OPCODE_THEME"
 Enter
 Sleep 7s
 Show

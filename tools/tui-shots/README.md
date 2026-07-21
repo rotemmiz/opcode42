@@ -37,6 +37,15 @@ M3), which overrides the KV-pinned or auto-detected theme for deterministic
 capture. The harness also writes a sandboxed `tui-kv.json` for belt-and-
 suspenders determinism.
 
+**v2 re-baseline (plan 08e §A4):** every tape now passes `--no-anim` so the
+splash logo shimmer and bg-pulse field freeze at their peak frame
+(`logoPeakFrame`) instead of landing on a random animation frame. This is
+the structural determinism fix the v2 canvas requires: the logo is now painted
+per-cell onto the canvas (§B1) and the bg-pulse breathes (§B2), so without
+`--no-anim` a capture would depend on which animation tick the screenshot
+caught. `capture.sh` also creates the gitignored `fixture-empty/` dir marker
+(the 00-splash tape points the TUI at it so no session auto-opens).
+
 ## Quick start
 
 ```bash

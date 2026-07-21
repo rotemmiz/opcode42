@@ -1,0 +1,60 @@
+Golden session                                                          │ Golden session            
+                                                                        │                           
+┃ Hello from the golden test.                                           │ CONTEXT                   
+                                                                        │ 0 / 128,000               
+                                                                        │                           
+Hi! This is a deterministic assistant reply.                            │ LSP                       
+                                                                        │ • 0 servers               
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+                                                                        │                           
+┃ Ask anything…                                                         │ █ █ Opcode42 dev          
+  build                       ● connecting to http://x · ctrl+p commands│                           

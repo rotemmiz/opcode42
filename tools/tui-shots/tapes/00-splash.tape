@@ -19,7 +19,7 @@ Sleep 200ms
 Type "XDG_DATA_HOME=$HARNESS_DIR/state/empty-data XDG_CONFIG_HOME=$HARNESS_DIR/state/empty-config XDG_CACHE_HOME=$HARNESS_DIR/state/empty-cache XDG_STATE_HOME=$HARNESS_DIR/state/empty-xstate opencode serve --port 4200 >/dev/null 2>&1 &"
 Enter
 Sleep 5s
-Type "./bin/opcode-tui --url http://127.0.0.1:4200 --dir ./fixture-empty --theme $OPCODE_THEME"
+Type "./bin/opcode-tui --no-anim --url http://127.0.0.1:4200 --dir ./fixture-empty --theme $OPCODE_THEME"
 Enter
 Sleep 4s
 Show
