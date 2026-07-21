@@ -147,8 +147,19 @@ type Permission struct {
 	ID         string          `json:"id"`
 	SessionID  string          `json:"sessionID"`
 	Permission string          `json:"permission"` // the action (e.g. "bash", "edit")
-	Metadata   json.RawMessage `json:"metadata"`   // tool-specific detail (command, path, …)
+	Metadata   json.RawMessage `json:"metadata"`   // tool-specific detail (command, path, diff…)
 	Tool       json.RawMessage `json:"tool"`
+	// Patterns is the set of patterns the request would touch (the
+	// permission.asked payload's `patterns` field, e.g. ["src/**.go"]).
+	// Used by permissionInfo for the title/detail lines.
+	Patterns []string `json:"patterns"`
+	// Always is the set of patterns an "always" reply would persist as
+	// session grants (the permission.asked payload's `always` field). A
+	// single "*" means "allow this permission entirely" (the one-liner
+	// confirmation, permission.shared.ts:127-129). The "always"
+	// confirmation stage (plan 17 §B3) lists these as the patterns that
+	// will be allowed until OpenCode is restarted.
+	Always []string `json:"always"`
 }
 
 // Question is a pending question request (question.asked) awaiting answers.

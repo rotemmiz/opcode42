@@ -72,13 +72,14 @@ func (m Model) buildFooter(leftW int) string {
 }
 
 // sessionStreamBlocks builds the chat-stream block list for a session: the
-// per-message blocks (user/assistant parts) followed by the in-stream question
-// cards (plan 08e §E4). The pending-question card is appended after the last
-// assistant message when the active pending question belongs to this session
-// (the blocking overlay covers it while up; it shows in the scrollback once
-// the overlay closes). Finalized questions (answered or skipped) are appended
-// as collapsed cards that stay in the history. Shared by renderSession (the
-// pre-resize fallback / test path) and sessionLayers (the v2 canvas path).
+// per-message blocks (user/assistant parts) followed by the in-stream
+// answered-question cards (plan 08e §E4, plan 17 §B6). Plan 17 §B6 drops the
+// pending-question in-stream card — opencode has no pending card
+// (run/tool.ts:827-829 scrollQuestionStart returns ""); the blocking footer
+// panel is the only pending-question affordance. Finalized questions
+// (answered or skipped) are appended as collapsed cards that stay in the
+// history. Shared by renderSession (the pre-resize fallback / test path) and
+// sessionLayers (the v2 canvas path).
 func (m Model) sessionStreamBlocks(sid string) []string {
 	var blocks []string
 	for _, msg := range m.store.messages[sid] {
@@ -86,18 +87,9 @@ func (m Model) sessionStreamBlocks(sid string) []string {
 			blocks = append(blocks, b)
 		}
 	}
-	// Pending question card (plan 08e §E4): only when the active pending
-	// question belongs to this session. The blocking overlay covers the body
-	// while up, so this card renders behind the overlay and becomes visible in
-	// the scrollback once the overlay closes.
-	if q := m.pendingQuestion(); q != nil && q.SessionID == sid {
-		if c := m.questionCardView(); c != "" {
-			blocks = append(blocks, c)
-		}
-	}
-	// Answered/skipped question cards (plan 08e §E4): collapsed cards that stay
-	// in the history so the question is visible in the conversation record, not
-	// just a transient modal.
+	// Answered/skipped question cards (plan 08e §E4): collapsed cards that
+	// stay in the history so the question is visible in the conversation
+	// record, not just a transient modal.
 	for _, aq := range m.store.answeredQuestions[sid] {
 		if c := m.answeredQuestionCardView(aq); c != "" {
 			blocks = append(blocks, c)

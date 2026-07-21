@@ -110,13 +110,20 @@ type Model struct {
 	exiting bool
 
 	// Command overlay.
-	modal        modalKind
-	modalSel     int
-	renameInput  textinput.Model // text-input overlay (rename current session)
-	mcpServers   []mcpItem       // read-only MCP list (GET /mcp)
-	skills       []skillItem     // read-only skills list (GET /skill)
-	permSel      int             // selected choice in the permission overlay
-	permReplying bool            // a permission reply is in flight (overlay stays up until it resolves)
+	modal       modalKind
+	modalSel    int
+	renameInput textinput.Model // text-input overlay (rename current session)
+	mcpServers  []mcpItem       // read-only MCP list (GET /mcp)
+	skills      []skillItem     // read-only skills list (GET /skill)
+	// permState is the 3-stage permission UI state machine (plan 17 §B3):
+	// permission → always confirm → reject message. The render path
+	// (permission.go permissionView) reads it; the key path
+	// (handlePermissionKey) drives it through the pure transition functions
+	// in permission_state.go. The per-request id tracks which pending
+	// permission the state is for; when the active pending permission
+	// changes the state is reset by handlePermissionKey.
+	permState     permissionState
+	permRequestID string // the id of the pending permission m.permState is for
 
 	// Connect overlay (plan 08e §D2): mDNS-discovered daemons + a manual URL
 	// field. discoverCtx/cancel own the D1 browser lifecycle (started on open,
@@ -133,24 +140,21 @@ type Model struct {
 	connectFieldFocus bool
 	serverProbe       map[string]serverProbeState
 
-	// Question overlay (steps through a request's questions).
-	qIdx      int        // current question index
-	qSel      int        // option cursor
-	qChecked  []bool     // multi-select toggles for the current question
-	qAnswers  [][]string // accumulated answers (one []label per answered question)
-	qReplying bool       // a question reply/reject is in flight
-	// qRejecting distinguishes the in-flight action: true when the user pressed
-	// r/esc (reject), false when the user pressed enter on the final step
-	// (reply). questionRepliedMsg is the same type for both; this flag tells
-	// recordLocalAnsweredQuestion whether to record the selected labels (reply)
-	// or Skipped=true (reject) — plan 08e §E4.
-	qRejecting bool
+	// Question footer panel (plan 17 §B5): a pure state machine
+	// (question_state.go questionBodyState) drives the multi-question tab
+	// flow, the Confirm review tab, and the custom-text answer field. The
+	// render path (question.go questionView) reads it; the key path
+	// (handleQuestionKey) drives it through the pure transition functions
+	// in question_state.go. The per-request id tracks which pending question
+	// the state is for; questionSync resets the state when the active
+	// pending question changes.
+	qBody questionBodyState
 	// qDeferredSSE holds an SSE question.replied/rejected event for OUR own
-	// pending question that arrived while qReplying was true (plan 08e §E4).
-	// The event is deferred so the local reply path (questionRepliedMsg) can
-	// record the locally-selected labels before the store clears the pending
-	// question; questionRepliedMsg applies it after recording. Zero-valued
-	// (Type == "") when no event is deferred.
+	// pending question that arrived while qBody.replying was true (plan 08e
+	// §E4). The event is deferred so the local reply path
+	// (questionRepliedMsg) can record the locally-selected labels before the
+	// store clears the pending question; questionRepliedMsg applies it after
+	// recording. Zero-valued (Type == "") when no event is deferred.
 	qDeferredSSE opcode42client.SSEEvent
 
 	// choices is the connected provider/model catalog (model switcher).
@@ -915,7 +919,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case permissionRepliedMsg:
-		m.permReplying = false
+		m.permState = permSetReplying(m.permState, false)
 		if msg.err != nil {
 			// E3 (plan 16 Bug 1): a 404 means the permission was already answered
 			// or cancelled elsewhere (the optimistic clear already removed it
@@ -923,7 +927,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// "reply failed" status. Non-404 errors still keep the request so
 			// the user can retry.
 			if isHTTPNotFound(msg.err) {
-				m.permSel = 0
+				m.permState = newPermissionState()
+				m.permRequestID = ""
 				m.store.permissions = removeByID(m.store.permissions, msg.id, func(q Permission) string { return q.ID })
 				return m, nil
 			}
@@ -931,12 +936,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "permission reply failed (try again): " + msg.err.Error()
 			return m, nil
 		}
-		m.permSel = 0
+		m.permState = newPermissionState()
+		m.permRequestID = ""
 		m.store.permissions = removeByID(m.store.permissions, msg.id, func(q Permission) string { return q.ID })
 		return m, nil
 
 	case questionRepliedMsg:
-		m.qReplying = false
+		m.qBody = questionSetReplying(m.qBody, false, m.qBody.rejecting)
 		if msg.err != nil {
 			// E3 (plan 16 Bug 1): a 404 means the question was already answered
 			// or cancelled elsewhere (the optimistic clear already removed it
@@ -964,16 +970,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Plan 08e §E4: record the finalized question for the in-stream
 		// answered card BEFORE clearing the pending slice + per-request state.
-		// The local reply path knows the specific selected labels (from qAnswers
-		// + the current step), so the card shows the labels rather than a bare
-		// "Answered" (the SSE path's fallback). Deduped + upgraded by id against
-		// the SSE path inside recordAnsweredQuestion.
+		// The local reply path knows the specific selected labels (from
+		// qBody.answers), so the card shows the labels rather than a bare
+		// "Answered" (the SSE path's fallback). Deduped + upgraded by id
+		// against the SSE path inside recordAnsweredQuestion.
 		m = m.recordLocalAnsweredQuestion(msg.id)
 		// Apply any deferred SSE question.replied/rejected event for this
-		// question (plan 08e §E4): if the SSE event arrived while qReplying was
-		// true, it was deferred so this handler could record the labels first.
-		// The SSE path's recordAnsweredQuestion is a no-op (deduped by id) or an
-		// upgrade (the local labels win), then it clears the pending question.
+		// question (plan 08e §E4): if the SSE event arrived while
+		// qBody.replying was true, it was deferred so this handler could
+		// record the labels first. The SSE path's recordAnsweredQuestion is a
+		// no-op (deduped by id) or an upgrade (the local labels win), then it
+		// clears the pending question.
 		if m.qDeferredSSE.Type != "" {
 			m.store = m.store.Reduce(m.qDeferredSSE)
 			m.qDeferredSSE = opcode42client.SSEEvent{}
@@ -1081,17 +1088,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// cadence is "as fast as the event loop + surface settle allow."
 		m.eventCount++
 		prevQ := questionID(m.pendingQuestion())
-		// Plan 08e §E4: when a local question reply is in flight (qReplying),
-		// defer applying the SSE question.replied/rejected event for OUR own
-		// pending question. The SSE event for our own reply may arrive before
-		// the HTTP response; applying it now would clear the question from the
-		// store and make pendingQuestion()/curQuestion() return nil before
+		// Plan 08e §E4: when a local question reply is in flight
+		// (qBody.replying), defer applying the SSE
+		// question.replied/rejected event for OUR own pending question. The
+		// SSE event for our own reply may arrive before the HTTP response;
+		// applying it now would clear the question from the store and make
+		// pendingQuestion() returns nil before
 		// questionRepliedMsg can record the locally-selected labels in the
 		// answered-questions store. The questionRepliedMsg handler applies the
 		// deferred event after recording the labels, so the store clears
 		// cleanly. Other SSE events (and question.replied/rejected for a
 		// different request id) are applied normally.
-		if m.qReplying && (msg.ev.Type == "question.replied" || msg.ev.Type == "question.rejected") {
+		if m.qBody.replying && (msg.ev.Type == "question.replied" || msg.ev.Type == "question.rejected") {
 			if q := m.pendingQuestion(); q != nil {
 				var p struct {
 					RequestID string `json:"requestID"`
@@ -1106,7 +1114,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.store = m.store.Reduce(msg.ev)
 		}
 		if questionID(m.pendingQuestion()) != prevQ { // active question cleared/replaced
-			if !m.qReplying {
+			if !m.qBody.replying {
 				m = m.resetQuestion()
 			}
 		}

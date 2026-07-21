@@ -123,5 +123,29 @@
     "phase": "D (plan 17)",
     "reason": "Plan 17 Workstream F2: Opcode42 shows the mode chip label Title-cased and full-TUI-style — the active agent Title-cased (falling back to \"Build\"), \"Shell\" in shell mode, \"Exit\" while the two-press ctrl+c guard is armed — following opencode's full TUI (tui/component/prompt/index.tsx:1442-1444, Locale.titlecase(agent().name)) rather than the run mini-TUI's uppercase BUILD/SHELL/EXIT (footer.view.tsx:384-390). The chip background is a neutral BgSel lift (opencode's statusAccent ≈ a near-white tint of the footer bg) with a mode-colored FOREGROUND (blue/amber/red, opencode footer.view.tsx:824-827, 391-401). The provider is dropped from the model status (opencode footer.view.tsx:430-435, \"Prefer without provider\"); the variant, when set, is a bold amber suffix (footer.view.tsx:872-878). TUI-only, no wire/daemon impact.",
     "track": "intentional: full-TUI Title-cased mode label + dropped provider (Opcode42) vs run-mini-TUI uppercase BUILD + provider"
+  },
+  {
+    "scenario": "tui-permission-shortcuts",
+    "phase": "D (plan 17)",
+    "reason": "TUI (plan 17 §B2): the permission footer panel uses opencode's keymap (tab / shift+tab / left / h / right / l to shift selection, enter to confirm, esc to escape the 3-stage flow). Opcode42's PRIOR shortcuts (a / s / r) were a divergence from opencode (which has no y/n or 1/2/3 digit shortcuts for permission). Plan 17 §B2 replaced the a/s/r shortcuts with opencode's tab/arrows + enter to match the wire-compat reference. The 3-stage flow (permission → always confirm → reject message) mirrors permission.shared.ts:22-23. No wire change (reply once/always/reject + optional message is identical); the UI flow now matches opencode.",
+    "track": "intentional: matches opencode (tab/arrows + enter); old a/s/r shortcuts removed (plan 17 §B2)"
+  },
+  {
+    "scenario": "tui-question-shortcuts",
+    "phase": "D (plan 17)",
+    "reason": "TUI (plan 17 §B2): the question footer panel uses opencode's keymap (up/k, down/j to move, 1-9 digit shortcuts to directly choose option N, enter to select/confirm/submit (verb changes per verb() at footer.question.tsx:63-77), esc to reject/dismiss, tab/shift+tab for multi-question tab navigation). Opcode42's PRIOR shortcuts (r to reject, space to toggle multi-select) were divergences from opencode (which uses esc to reject and enter to toggle — footer.question.tsx:238-242). Plan 17 §B2 replaced r with esc and space with enter to match the wire-compat reference. The multi-question tab flow + the Confirm review tab + the custom-text option (question.shared.ts:70-72) also now match opencode. No wire change (reply answers [][]string is identical); the UI flow now matches opencode.",
+    "track": "intentional: matches opencode (esc + enter toggle); old r/space shortcuts removed (plan 17 §B2)"
+  },
+  {
+    "scenario": "tui-permission-footer-panel",
+    "phase": "D (plan 17)",
+    "reason": "TUI (plan 17 §B1): the permission and question prompts render as footer-region panels (bottom of the screen, swapped by a dispatcher based on active().type — run/footer.view.tsx:778-794), NOT centered modals. The panel body carries the theme's BgElev background (Opcode42's equivalent of opencode's `surface`); the outer footer container is transparent when a panel is active (footer.view.tsx:663). The panel height is base + PERMISSION_ROWS / base + QUESTION_ROWS (footer.ts:697-722) where base is the non-textarea chrome height. The stream stays visible above the panel (the body is NOT skipped — matching opencode). This replaces Opcode42's prior centered modal render. No wire change; the UI layout now matches opencode.",
+    "track": "intentional: matches opencode (footer panel, not centered modal); plan 17 §B1"
+  },
+  {
+    "scenario": "tui-question-answered-card-store",
+    "phase": "D (plan 17)",
+    "reason": "TUI (plan 17 §B6): Opcode42 keeps a separate `answeredQuestions` store (store.go:165) for finalized question cards in the scrollback. opencode renders answered Q&A from the tool's structured snapshot (run/tool.ts:607-622 snapQuestion → run/scrollback.writer.tsx:264-287). This is a structural divergence — acceptable for B (Opcode42's tool-snapshot mechanism is not yet wired); when it lands, migrate the answered-question rendering to the tool snapshot and retire the `answeredQuestions` store. The pending-question in-stream card is dropped (plan 17 §B6 — opencode has no pending card; run/tool.ts:827-829 scrollQuestionStart returns \"\"). The wire shapes (question.asked/replied/rejected) are identical.",
+    "track": "structural: separate answeredQuestions store (Opcode42) vs tool snapshot (opencode); plan 17 §B6"
   }
 ]

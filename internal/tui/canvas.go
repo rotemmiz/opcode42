@@ -229,33 +229,33 @@ func (m Model) overlayLayers() []*lipgloss.Layer {
 	//    string directly at (0,0) — no outer Place (that would double-Place).
 	//    The body is skipped upstream (modalClassActive) so the full-screen
 	//    Place string doesn't cover a rendered body.
-	//  - Footer panels (permission, question): plan 17 §A4 — opencode keeps
-	//    the stream visible above the footer panel, so the body is NOT
-	//    skipped. To avoid the panel's own blank padding covering the body,
-	//    we render just the CARD (not a full-screen Place) and position it
-	//    at the centered (x,y) via the layer's X/Y. The blank padding of a
-	//    lipgloss.Place would paint over the body at z=20; the card-only
-	//    layer paints only its own cells, leaving the body visible around it.
-	//    (B1 will move these to the footer region instead of centering.)
+	//  - Footer panels (permission, question): plan 17 §B1 — opencode renders
+	//    these as a footer-region panel (bottom of screen), NOT a centered
+	//    modal. The body STAYS so the stream is visible above the panel. The
+	//    panel body (sized leftW × panelH, BgElev bg) is placed at
+	//    Y = m.height - panelH so it sits at the bottom; its blank padding
+	//    doesn't paint over the body layer above it.
 	//
 	// The renderView priority is preserved (permission > question > diff >
 	// modal); only one is active per the model state.
 	switch {
 	case m.pendingPermission() != nil:
 		if p := m.permissionView(); p != "" {
-			if x, y, ok := centeredCardPos(m.width, m.height, p); ok {
-				layers = append(layers, lipgloss.NewLayer(p).X(x).Y(y).Z(zModal))
-			} else {
-				layers = append(layers, lipgloss.NewLayer(p).X(0).Y(0).Z(zModal))
+			panelH := lipgloss.Height(p)
+			y := m.height - panelH
+			if y < 0 {
+				y = 0
 			}
+			layers = append(layers, lipgloss.NewLayer(p).X(0).Y(y).Z(zModal))
 		}
 	case m.pendingQuestion() != nil:
 		if q := m.questionView(); q != "" {
-			if x, y, ok := centeredCardPos(m.width, m.height, q); ok {
-				layers = append(layers, lipgloss.NewLayer(q).X(x).Y(y).Z(zModal))
-			} else {
-				layers = append(layers, lipgloss.NewLayer(q).X(0).Y(0).Z(zModal))
+			panelH := lipgloss.Height(q)
+			y := m.height - panelH
+			if y < 0 {
+				y = 0
 			}
+			layers = append(layers, lipgloss.NewLayer(q).X(0).Y(y).Z(zModal))
 		}
 	case m.diff.open:
 		// The diff reviewer is full-screen, not centered — it renders at

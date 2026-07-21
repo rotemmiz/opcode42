@@ -1,24 +1,24 @@
 Question session                                                                
                                                                                 
-╭──────────────────────────────────────────────────────────────╮                
-│ Pick a file                                                  │                
-│ Which file should the agent edit?                            │                
-│ enter to answer · r reject                                   │                
-╰──────╭────────────────────────────────────────────────────────────────╮       
-       │                                                                │       
-       │  Pick a file                                                   │       
-       │  Which file should the agent edit?                             │       
-       │                                                                │       
-       │     src/main.go                                                │       
-       │     src/util.go                                                │       
-       │     docs/README.md                                             │       
-       │                                                                │       
-       │  ↑↓ move · enter select · r reject                             │       
-       │                                                                │       
-       ╰────────────────────────────────────────────────────────────────╯       
                                                                                 
                                                                                 
                                                                                 
                                                                                 
-┃ Ask anything... "Fix a TODO in the                                            
- Build                                ● connecting to http://x · ctrl+p commands
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ Pick a file                                                                    
+                                                                                
+ Which file should the agent edit?                                              
+                                                                                
+ 1. src/main.go                                                                 
+ 2. src/util.go                                                                 
+ 3. docs/README.md                                                              
+                                                                                
+↑↓ select   enter submit   esc dismiss                                          
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                

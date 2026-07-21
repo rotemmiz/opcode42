@@ -123,7 +123,7 @@ func TestFooterPanel_StreamStaysVisible(t *testing.T) {
 		Metadata:   []byte(`{"command":"ls -la"}`),
 		Tool:       []byte(`{"name":"bash"}`),
 	}}
-	m.permSel = 0
+	m.permState = newPermissionState()
 
 	if m.modalClassActive() {
 		t.Fatal("modalClassActive should be false when only a footer panel is up (A4)")

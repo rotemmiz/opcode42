@@ -258,7 +258,7 @@ func TestSseEventMsg_SessionIdleTriggersReconcile(t *testing.T) {
 func TestPermissionReplied_404Swallowed(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.store.permissions = []Permission{{ID: "per_gone", SessionID: "ses_1"}}
-	m.permReplying = true
+	m.permState = permSetReplying(m.permState, true)
 
 	notFound := errors.New("POST /permission/per_gone/reply: status 404")
 	next, _ := step(t, m, permissionRepliedMsg{id: "per_gone", err: notFound})
@@ -266,8 +266,8 @@ func TestPermissionReplied_404Swallowed(t *testing.T) {
 	if strings.Contains(next.status, "404") || strings.Contains(next.status, "failed") {
 		t.Fatalf("404 should be swallowed silently; status=%q", next.status)
 	}
-	if next.permReplying {
-		t.Fatal("permReplying should be cleared after a 404")
+	if next.permState.replying {
+		t.Fatal("permState.replying should be cleared after a 404")
 	}
 	if len(next.store.permissions) != 0 {
 		t.Fatalf("the stale permission should be cleared on 404; got %+v", next.store.permissions)
@@ -279,7 +279,7 @@ func TestPermissionReplied_404Swallowed(t *testing.T) {
 func TestQuestionReplied_404Swallowed(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.store.questions = []Question{{ID: "qst_gone", SessionID: "ses_1", Questions: []QuestionInfo{{Question: "q"}}}}
-	m.qReplying = true
+	m.qBody = questionSetReplying(m.qBody, true, false)
 
 	notFound := errors.New("POST /question/qst_gone/reply: status 404")
 	next, _ := step(t, m, questionRepliedMsg{id: "qst_gone", err: notFound})
@@ -287,14 +287,14 @@ func TestQuestionReplied_404Swallowed(t *testing.T) {
 	if strings.Contains(next.status, "404") || strings.Contains(next.status, "failed") {
 		t.Fatalf("404 should be swallowed silently; status=%q", next.status)
 	}
-	if next.qReplying {
-		t.Fatal("qReplying should be cleared after a 404")
+	if next.qBody.replying {
+		t.Fatal("qBody.replying should be cleared after a 404")
 	}
 	if len(next.store.questions) != 0 {
 		t.Fatalf("the stale question should be cleared on 404; got %+v", next.store.questions)
 	}
-	if next.qIdx != 0 || next.qAnswers != nil {
-		t.Fatalf("question state should be reset on 404; qIdx=%d answers=%+v", next.qIdx, next.qAnswers)
+	if next.qBody.tab != 0 || next.qBody.answers != nil {
+		t.Fatalf("question state should be reset on 404; tab=%d answers=%+v", next.qBody.tab, next.qBody.answers)
 	}
 }
 
@@ -303,7 +303,7 @@ func TestQuestionReplied_404Swallowed(t *testing.T) {
 func TestPermissionReplied_Non404StillSurfaces(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.store.permissions = []Permission{{ID: "per_x", SessionID: "ses_1"}}
-	m.permReplying = true
+	m.permState = permSetReplying(m.permState, true)
 
 	serverErr := errors.New("POST /permission/per_x/reply: status 500")
 	next, _ := step(t, m, permissionRepliedMsg{id: "per_x", err: serverErr})
@@ -311,8 +311,8 @@ func TestPermissionReplied_Non404StillSurfaces(t *testing.T) {
 	if !strings.Contains(next.status, "500") || !strings.Contains(next.status, "failed") {
 		t.Fatalf("non-404 should surface in status; got %q", next.status)
 	}
-	if next.permReplying {
-		t.Fatal("permReplying should be cleared so the user can retry")
+	if next.permState.replying {
+		t.Fatal("permState.replying should be cleared so the user can retry")
 	}
 	if len(next.store.permissions) != 1 || next.store.permissions[0].ID != "per_x" {
 		t.Fatalf("non-404 should KEEP the request for retry; got %+v", next.store.permissions)
@@ -321,14 +321,12 @@ func TestPermissionReplied_Non404StillSurfaces(t *testing.T) {
 
 // TestQuestionsReconciled_ResetsActiveQuestionState asserts that when a
 // reconcile replaces the store and the active question disappears, the
-// per-request answer state (qIdx/qAnswers/qReplying) is reset so the overlay
+// per-request answer state (qBody.tab/answers/replying) is reset so the overlay
 // closes cleanly instead of pointing at a vanished request.
 func TestQuestionsReconciled_ResetsActiveQuestionState(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.store.questions = []Question{{ID: "qst_active", SessionID: "ses_1", Questions: []QuestionInfo{{Question: "q"}}}}
-	m.qIdx = 1
-	m.qAnswers = [][]string{{"a1"}}
-	m.qReplying = true
+	m.qBody = questionBodyState{tab: 1, answers: [][]string{{"a1"}}, replying: true}
 
 	// Reconcile returns an empty list — the active question is gone.
 	next, _ := step(t, m, questionsReconciledMsg{questions: nil})
@@ -336,9 +334,9 @@ func TestQuestionsReconciled_ResetsActiveQuestionState(t *testing.T) {
 	if len(next.store.questions) != 0 {
 		t.Fatalf("questions should be replaced to empty; got %+v", next.store.questions)
 	}
-	if next.qIdx != 0 || next.qAnswers != nil || next.qReplying {
-		t.Fatalf("active-question state should be reset; qIdx=%d answers=%+v replying=%v",
-			next.qIdx, next.qAnswers, next.qReplying)
+	if next.qBody.tab != 0 || next.qBody.answers != nil || next.qBody.replying {
+		t.Fatalf("active-question state should be reset; tab=%d answers=%+v replying=%v",
+			next.qBody.tab, next.qBody.answers, next.qBody.replying)
 	}
 }
 

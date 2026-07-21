@@ -200,10 +200,11 @@ func TestPTY_FocusYieldsToPermission(t *testing.T) {
 	m := withPTY()
 	m.pty.focused = true
 	m.store.permissions = []Permission{{ID: "perm_1", Permission: "bash"}}
-	// 'down' must drive the permission selection, not be forwarded to the shell.
-	m, _ = step(t, m, key("down"))
-	if m.permSel != 1 {
-		t.Fatalf("a focused terminal must yield keys to a pending permission; permSel=%d want 1", m.permSel)
+	// 'tab' must drive the permission selection, not be forwarded to the shell.
+	// Plan 17 §B2: permission uses tab/arrows + enter (not the old a/s/r).
+	m, _ = step(t, m, key("tab"))
+	if m.permState.selected != permOptAlways {
+		t.Fatalf("a focused terminal must yield keys to a pending permission; selected=%v want permOptAlways", m.permState.selected)
 	}
 }
 
