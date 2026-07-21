@@ -497,6 +497,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// fallthrough at the end of the KeyPressMsg case. Without this case the
 		// message is dropped and cmd+v (macOS bracketed paste) does nothing.
 		m.histIdx = -1
+		m.exiting = false // pasting is input activity — cancel the exit guard
 		var cmd, acCmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		m = m.resizeComposer()
