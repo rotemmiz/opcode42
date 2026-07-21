@@ -206,9 +206,14 @@ internal fun SessionRow(
     val isReplying = replyingPermissionId != null || replyingQuestionId != null
 
     val open by remember { derivedStateOf { progress() > 0.5f } }
-    val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (open) {
+    // Only create the dismiss state when the row is actually swipeable: the full list (not the
+    // rail/drawer) and only when open. SwipeToDismissBox's AnchoredDraggableState posts a frame
+    // callback every vsync for offset settling — creating one per row in a LazyColumn pins the
+    // RenderThread to 60fps even when the UI is otherwise idle. The rail/drawer offers
+    // long-press → Rename/Archive/Delete instead; the full screen list keeps swipe-to-dismiss.
+    val dismissState = if (!compact && open) {
+        androidx.compose.material3.rememberSwipeToDismissBoxState(
+            confirmValueChange = { value ->
                 when (value) {
                     androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> {
                         if (!showArchived) {
@@ -222,60 +227,22 @@ internal fun SessionRow(
                     }
                     else -> false
                 }
-            } else {
-                false
             }
-        }
-    )
+        )
+    } else {
+        null
+    }
 
     // The row is a vertical stack: the swipe-dismissable parent row, then (when expanded) the
     // subagent subtree as a sibling. Wrapping both in one Column keeps them stacked inside the
     // single LazyColumn item slot, and keeps the subtree OUTSIDE SwipeToDismissBox so a child
     // swipe never triggers the parent's archive/delete.
     Column(modifier.fillMaxWidth()) {
-        androidx.compose.material3.SwipeToDismissBox(
-            state = dismissState,
-            enableDismissFromStartToEnd = open && !showArchived,
-            enableDismissFromEndToStart = open,
-            backgroundContent = {
-                val direction = dismissState.dismissDirection
-                val color = when (direction) {
-                    androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.secondaryContainer
-                    androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
-                    else -> Color.Transparent
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(color)
-                        .padding(horizontal = 20.dp),
-                    contentAlignment = if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
-                        Alignment.CenterStart
-                    } else {
-                        Alignment.CenterEnd
-                    }
-                ) {
-                    if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
-                        Icon(
-                            Icons.Default.Archive,
-                            contentDescription = "Archive",
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    } else if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            // The swipe-dismissable content is the PARENT ROW ONLY. The subagent subtree is
-            // rendered as a sibling below the SwipeToDismissBox (see the outer Column) so swiping
-            // a child row does NOT archive/delete the parent — the dismiss gesture is scoped to
-            // the parent row.
+        // The row content is the same whether or not swipe-to-dismiss is mounted; wrap it in
+        // SwipeToDismissBox only when the dismiss state exists (open rail/list), otherwise a
+        // plain Box. This avoids SwipeToDismissBox's per-frame AnchoredDraggableState callback
+        // when the row isn't swipeable.
+        val rowContent: @Composable () -> Unit = {
             Box(Modifier.fillMaxWidth()) {
                 if (compact) {
                     CompactRailRow(
@@ -349,6 +316,51 @@ internal fun SessionRow(
                 }
             }
         }
+        val state = dismissState
+        if (state != null) {
+            androidx.compose.material3.SwipeToDismissBox(
+                state = state,
+                enableDismissFromStartToEnd = !showArchived,
+                enableDismissFromEndToStart = true,
+                backgroundContent = {
+                    val direction = state.dismissDirection
+                    val color = when (direction) {
+                        androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.secondaryContainer
+                        androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
+                        else -> Color.Transparent
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(color)
+                            .padding(horizontal = 20.dp),
+                        contentAlignment = if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
+                            Alignment.CenterStart
+                        } else {
+                            Alignment.CenterEnd
+                        }
+                    ) {
+                        if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
+                            Icon(
+                                Icons.Default.Archive,
+                                contentDescription = "Archive",
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        } else if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Delete",
+                                tint = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                content = { rowContent() },
+            )
+        } else {
+            Box(Modifier.fillMaxWidth()) { rowContent() }
+        }
         // Expandable subagent subtree — rendered as a sibling BELOW the SwipeToDismissBox so the
         // parent's swipe-to-dismiss gesture never fires from a child row. The rail fades the
         // subtree with [progress] so it retracts with the rail; once collapsed the chevron is
@@ -404,7 +416,12 @@ private fun CompactRailRow(
                 // Clip the open content (laid out at the full open width) to the live rail width, so
                 // the title resizes off the right edge as the rail narrows instead of overflowing.
                 .clipToBounds()
-                .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+                .combinedClickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClick,
+                    onLongClick = onLongPress,
+                )
                 // Active highlight (drawn as the row background) — ONE shape that resizes from a
                 // full-row amber pill (open) into the centered square (collapsed); see
                 // railActiveHighlight. No cross-fade of two boxes.
@@ -604,7 +621,12 @@ private fun FullListRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+                .combinedClickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClick,
+                    onLongClick = onLongPress,
+                )
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
             StatusLeading(busy = busy, needsInput = needsInput, isActive = isActive)
@@ -720,7 +742,11 @@ private fun SubAgentChildren(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .combinedClickable(onClick = { onOpen(child) })
+                    .combinedClickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                        onClick = { onOpen(child) },
+                    )
                     .padding(start = indent, end = if (compact) 12.dp else 16.dp, top = 6.dp, bottom = 6.dp),
             ) {
                 if (busy) {
