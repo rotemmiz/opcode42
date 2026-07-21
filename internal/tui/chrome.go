@@ -190,7 +190,16 @@ func (m Model) sidebarView() string {
 		}
 		b.WriteString(total + "\n")
 	} else {
-		b.WriteString(s.Faint.Render("—") + "\n")
+		// E5: draft (no messages) — show "0 / <limit>" instead of the bare
+		// em-dash placeholder so the gauge reads as a context bar, not a
+		// blank. The limit resolves synchronously from the cached providers
+		// catalog (m.choices); when the cache isn't populated yet or the
+		// active model isn't in it, fall back to a constant default.
+		limit := m.contextLimitForActiveModel()
+		if limit <= 0 {
+			limit = defaultContextLimit
+		}
+		b.WriteString(s.Base.Render("0") + s.Faint.Render(" / "+humanInt(limit)) + "\n")
 	}
 
 	b.WriteString("\n")
@@ -249,6 +258,30 @@ func (m Model) sidebarView() string {
 		Height(m.height).
 		Padding(0, 1).
 		Render(panel)
+}
+
+// defaultContextLimit is the fallback context-window size shown in the sidebar
+// gauge when the providers cache is empty (before the first /provider response
+// arrives) or the active model isn't found in it. opencode falls back to the
+// resolved model's limit.context; we fall back to this constant so the gauge
+// is never blank on a draft session (plan 08e §E5).
+const defaultContextLimit = 128000
+
+// contextLimitForActiveModel resolves the active model's context-window size
+// from the cached providers catalog (m.choices). Returns 0 when the cache is
+// empty or the active model isn't in it — callers fall back to
+// defaultContextLimit in that case. Synchronous so the gauge renders on
+// session switch without waiting for a re-fetch (plan 08e §E5).
+func (m Model) contextLimitForActiveModel() int {
+	if !m.model.ok() {
+		return 0
+	}
+	for _, ch := range m.choices {
+		if ch.Provider == m.model.Provider && ch.Model == m.model.Model {
+			return ch.ContextLimit
+		}
+	}
+	return 0
 }
 
 // humanInt formats n with thousands separators (1234 → "1,234").

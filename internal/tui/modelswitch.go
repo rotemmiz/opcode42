@@ -15,6 +15,11 @@ type modelChoice struct {
 	Provider string   // provider id (e.g. "anthropic")
 	Model    string   // model id (e.g. "claude-sonnet-4")
 	Variants []string // model-variant ids (e.g. "default", "thinking"); plan 08b §7
+	// ContextLimit is the model's context-window size (Model.limit.context).
+	// Cached on the choice so the sidebar's context gauge can resolve the
+	// denominator synchronously from m.choices without re-fetching /provider
+	// (plan 08e §E5). Zero when the daemon didn't report a limit.
+	ContextLimit int
 }
 
 // label is the row text: "provider / model".
@@ -43,7 +48,16 @@ type providerWire struct {
 type modelWire struct {
 	ID       string                     `json:"id"`
 	Name     string                     `json:"name"`
+	Limit    modelLimit                 `json:"limit,omitempty"`
 	Variants map[string]json.RawMessage `json:"variants,omitempty"` // variant id -> config
+}
+
+// modelLimit mirrors the nested Model.limit block (openapi Model.limit). Only
+// `context` is consumed by the sidebar's context gauge (plan 08e §E5); output
+// is kept for completeness but unused here.
+type modelLimit struct {
+	Context float64 `json:"context"`
+	Output  float64 `json:"output,omitempty"`
 }
 
 // variantIDs returns a model's variant ids, sorted (empty when it has none).
@@ -73,7 +87,12 @@ func (r providerResp) choices() []modelChoice {
 			continue
 		}
 		for id, mw := range p.Models {
-			out = append(out, modelChoice{Provider: p.ID, Model: id, Variants: variantIDs(mw.Variants)})
+			out = append(out, modelChoice{
+				Provider:     p.ID,
+				Model:        id,
+				Variants:     variantIDs(mw.Variants),
+				ContextLimit: int(mw.Limit.Context),
+			})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
