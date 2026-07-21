@@ -133,17 +133,70 @@ type QuestionOption struct {
 	Description string `json:"description"`
 }
 
+// AnsweredQuestion is a finalized question request kept in the stream scrollback
+// (plan 08e §E4). It captures the question text + the selected labels (or
+// "Skipped" when rejected) so the conversation history shows the question that
+// was asked, not just a transient modal. One entry per question request, keyed
+// by the request id (deduped across the local reply path and the SSE path).
+type AnsweredQuestion struct {
+	ID        string         // the question request id (dedup key)
+	SessionID string         // the session this question belongs to
+	Skipped   bool           // true when the request was rejected
+	Answers   [][]string     // selected labels per sub-question (empty when skipped)
+	Questions []QuestionInfo // the question texts + headers, captured at finalize time
+}
+
 // store holds the mirrored, sorted view-state.
 type store struct {
-	sessions    []Session            // sorted by id
-	messages    map[string][]Message // sessionID -> sorted by id
-	parts       map[string][]Part    // messageID -> sorted by id
-	permissions []Permission         // pending permission requests (FIFO)
-	questions   []Question           // pending question requests (FIFO)
+	sessions          []Session                     // sorted by id
+	messages          map[string][]Message          // sessionID -> sorted by id
+	parts             map[string][]Part             // messageID -> sorted by id
+	permissions       []Permission                  // pending permission requests (FIFO)
+	questions         []Question                    // pending question requests (FIFO)
+	answeredQuestions map[string][]AnsweredQuestion // sessionID -> finalized questions (plan 08e §E4)
 }
 
 func newStore() store {
-	return store{messages: map[string][]Message{}, parts: map[string][]Part{}}
+	return store{
+		messages:          map[string][]Message{},
+		parts:             map[string][]Part{},
+		answeredQuestions: map[string][]AnsweredQuestion{},
+	}
+}
+
+// recordAnsweredQuestion appends a finalized question to the session's
+// answered-questions slice (plan 08e §E4), deduped by request id so the local
+// reply path and the SSE path can both record the same finalization without
+// double-rendering. The slice is kept in arrival order (chronological), which
+// mirrors how the pending question was positioned in the stream.
+//
+// If an entry with the same id already exists (e.g. the SSE event arrived
+// before the local HTTP response), the entry is UPGRADED in place when the new
+// record carries richer info (non-skipped + non-empty Answers). This guards the
+// edge case where the SSE label-less fallback records first and the local
+// reply path (with the specific labels) arrives second — the labels should
+// win, not the first writer. Skipped state is never downgraded by a later
+// non-skipped record (a reject can't become a reply).
+func (s store) recordAnsweredQuestion(aq AnsweredQuestion) store {
+	if aq.ID == "" {
+		return s
+	}
+	if s.answeredQuestions == nil {
+		s.answeredQuestions = map[string][]AnsweredQuestion{}
+	}
+	for i, existing := range s.answeredQuestions[aq.SessionID] {
+		if existing.ID == aq.ID {
+			// Upgrade in place: a non-skipped record with answers wins over a
+			// skipped or label-less one. Never downgrade an existing skipped
+			// entry (reject can't become a reply).
+			if !aq.Skipped && len(aq.Answers) > 0 {
+				s.answeredQuestions[aq.SessionID][i] = aq
+			}
+			return s
+		}
+	}
+	s.answeredQuestions[aq.SessionID] = append(s.answeredQuestions[aq.SessionID], aq)
+	return s
 }
 
 // Reduce applies one SSE event to the store, returning the updated store. Pure
@@ -236,6 +289,25 @@ func (s store) Reduce(ev opcode42client.SSEEvent) store {
 			RequestID string `json:"requestID"`
 		}
 		if decode(ev.Properties, &p) {
+			// Plan 08e §E4: capture the finalized question for the in-stream
+			// answered card BEFORE removing it from the pending slice. The SSE
+			// event carries only the request id (not the selected labels), so
+			// the card shows "Answered" rather than the specific labels when the
+			// reply originated elsewhere; the local reply path
+			// (questionRepliedMsg in model.go) records the specific labels and
+			// dedupes against this entry by id.
+			skipped := ev.Type == "question.rejected"
+			for _, q := range s.questions {
+				if q.ID == p.RequestID {
+					s = s.recordAnsweredQuestion(AnsweredQuestion{
+						ID:        q.ID,
+						SessionID: q.SessionID,
+						Skipped:   skipped,
+						Questions: append([]QuestionInfo(nil), q.Questions...),
+					})
+					break
+				}
+			}
 			s.questions = removeByID(s.questions, p.RequestID, func(x Question) string { return x.ID })
 		}
 	}

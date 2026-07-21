@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -83,6 +84,7 @@ func (m Model) handleQuestionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "r", "esc":
 		m.qReplying = true
+		m.qRejecting = true // plan 08e §E4: record Skipped=true on success
 		return m, rejectQuestionCmd(m.ctx, m.client, q.ID)
 	case "enter":
 		if len(info.Options) == 0 {
@@ -98,7 +100,11 @@ func (m Model) handleQuestionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		// Final step: build prior steps + this one WITHOUT mutating qAnswers, so a
 		// failed reply can be retried without double-appending the last answer.
+		// Clear qRejecting so a prior failed reject attempt doesn't taint this
+		// reply's answered-card state (plan 08e §E4: reply records labels, not
+		// Skipped).
 		m.qReplying = true
+		m.qRejecting = false
 		return m, replyQuestionCmd(m.ctx, m.client, q.ID, m.finalAnswers(info))
 	}
 	return m, nil
@@ -138,8 +144,148 @@ func (m Model) stepAnswer(info *QuestionInfo) []string {
 
 // resetQuestion clears the per-request answer state (after a reply/reject lands).
 func (m Model) resetQuestion() Model {
-	m.qIdx, m.qSel, m.qChecked, m.qAnswers, m.qReplying = 0, 0, nil, nil, false
+	m.qIdx, m.qSel, m.qChecked, m.qAnswers, m.qReplying, m.qRejecting = 0, 0, nil, nil, false, false
 	return m
+}
+
+// recordLocalAnsweredQuestion captures the finalized question + the locally
+// selected labels into the store's answered-questions map (plan 08e §E4). Called
+// from the questionRepliedMsg success path BEFORE the pending slice + per-
+// request state are cleared, so the question text + answers are still
+// available. The local path knows the specific labels (from qAnswers + the
+// current step); the SSE path (store.Reduce) records a label-less "Answered"
+// fallback for replies that originated elsewhere. Deduped + upgraded by id
+// inside recordAnsweredQuestion (a later local reply with labels wins over an
+// earlier SSE label-less entry).
+//
+// Relies on the SSE-clear deferral in the sseEventMsg handler: when a local
+// reply is in flight (qReplying), the SSE question.replied/rejected event for
+// our own question is deferred until AFTER this runs, so the pending question
+// is still in the store here.
+func (m Model) recordLocalAnsweredQuestion(id string) Model {
+	var q *Question
+	for i := range m.store.questions {
+		if m.store.questions[i].ID == id {
+			q = &m.store.questions[i]
+			break
+		}
+	}
+	if q == nil {
+		return m // already gone (e.g. a concurrent reconcile cleared it); nothing to record
+	}
+	// A reject records Skipped=true (the selected labels are not submitted).
+	// A reply records the specific selected labels (durable prior steps + the
+	// current step's selection). finalAnswers leaves qAnswers untouched, so
+	// this is safe even if the caller goes on to resetQuestion(). The
+	// curQuestion() == nil branch is defensive (qIdx out of range); shouldn't
+	// happen on the reply path, but if it does we keep the durably-recorded
+	// prior steps plus an empty final step (mirrors stepAnswer's nil return
+	// when qSel is out of range).
+	var answers [][]string
+	var skipped bool
+	if m.qRejecting {
+		skipped = true
+	} else if info := m.curQuestion(); info != nil {
+		answers = m.finalAnswers(info)
+	} else {
+		answers = append(append([][]string{}, m.qAnswers...), nil)
+	}
+	m.store = m.store.recordAnsweredQuestion(AnsweredQuestion{
+		ID:        q.ID,
+		SessionID: q.SessionID,
+		Skipped:   skipped,
+		Answers:   answers,
+		Questions: append([]QuestionInfo(nil), q.Questions...),
+	})
+	return m
+}
+
+// questionCardView renders the pending question as an in-stream card (plan 08e
+// §E4). The card sits after the last assistant message; while the blocking
+// questionView overlay is up the canvas skips the body (composeCanvas), so the
+// card is rendered behind the overlay and becomes visible in the scrollback
+// once the overlay closes (after the answer lands and the question transitions
+// to the answered-state card). Blue accent matches the overlay border.
+func (m Model) questionCardView() string {
+	q := m.pendingQuestion()
+	if q == nil || len(q.Questions) == 0 {
+		return ""
+	}
+	s := m.styles
+	cw := m.contentWidth()
+	width := 64
+	if width > cw {
+		width = cw
+	}
+	// The pending card shows the first (current) sub-question only — the
+	// overlay handles stepping through the rest.
+	lines := m.questionCardLines(q.Questions[0], width)
+	lines = append(lines, s.Faint.Render("enter to answer · r reject"))
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(s.P.Blue).
+		Padding(0, 1).
+		Width(width).
+		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+	return card
+}
+
+// answeredQuestionCardView renders a finalized question as a collapsed in-stream
+// card (plan 08e §E4): the header + question text + the selected labels (or
+// "Skipped"). Stays in the scrollback so the question is visible in history,
+// not just a transient modal. Blue accent matches the pending card.
+func (m Model) answeredQuestionCardView(aq AnsweredQuestion) string {
+	s := m.styles
+	cw := m.contentWidth()
+	width := 64
+	if width > cw {
+		width = cw
+	}
+	var lines []string
+	for i, info := range aq.Questions {
+		var state string
+		if aq.Skipped {
+			state = "Skipped"
+		} else if i < len(aq.Answers) {
+			state = strings.Join(aq.Answers[i], ", ")
+		}
+		if state == "" {
+			state = "Answered"
+		}
+		header := info.Header
+		if header == "" {
+			header = "Question"
+		}
+		lines = append(lines,
+			lipgloss.NewStyle().Foreground(s.P.Blue).Bold(true).Render(truncate(header, width-2)),
+			s.Base.Render(truncate(info.Question, width-2)),
+			s.Faint.Render("↳ "+state),
+		)
+		if i < len(aq.Questions)-1 {
+			lines = append(lines, "")
+		}
+	}
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(s.P.Blue).
+		Padding(0, 1).
+		Width(width).
+		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+	return card
+}
+
+// questionCardLines builds the header + question lines for one sub-question in
+// the pending card. Shared between the pending card (first sub-question only).
+func (m Model) questionCardLines(info QuestionInfo, width int) []string {
+	s := m.styles
+	header := info.Header
+	if header == "" {
+		header = "Question"
+	}
+	return []string{
+		lipgloss.NewStyle().Foreground(s.P.Blue).Bold(true).Render(truncate(header, width-2)),
+		s.Base.Render(truncate(info.Question, width-2)),
+	}
 }
 
 // questionView renders the blocking overlay for the current step.

@@ -120,6 +120,19 @@ type Model struct {
 	qChecked  []bool     // multi-select toggles for the current question
 	qAnswers  [][]string // accumulated answers (one []label per answered question)
 	qReplying bool       // a question reply/reject is in flight
+	// qRejecting distinguishes the in-flight action: true when the user pressed
+	// r/esc (reject), false when the user pressed enter on the final step
+	// (reply). questionRepliedMsg is the same type for both; this flag tells
+	// recordLocalAnsweredQuestion whether to record the selected labels (reply)
+	// or Skipped=true (reject) — plan 08e §E4.
+	qRejecting bool
+	// qDeferredSSE holds an SSE question.replied/rejected event for OUR own
+	// pending question that arrived while qReplying was true (plan 08e §E4).
+	// The event is deferred so the local reply path (questionRepliedMsg) can
+	// record the locally-selected labels before the store clears the pending
+	// question; questionRepliedMsg applies it after recording. Zero-valued
+	// (Type == "") when no event is deferred.
+	qDeferredSSE opcode42client.SSEEvent
 
 	// choices is the connected provider/model catalog (model switcher).
 	choices []modelChoice
@@ -769,11 +782,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// "reply failed" status. Non-404 errors still keep the request so
 			// the user can retry.
 			if isHTTPNotFound(msg.err) {
+				// Plan 08e §E4: apply any deferred SSE event (the daemon already
+				// processed the reply; the 404 confirms it) before clearing.
+				if m.qDeferredSSE.Type != "" {
+					m.store = m.store.Reduce(m.qDeferredSSE)
+					m.qDeferredSSE = opcode42client.SSEEvent{}
+				}
 				m.store.questions = removeByID(m.store.questions, msg.id, func(x Question) string { return x.ID })
 				return m.resetQuestion(), nil
 			}
+			// Plan 08e §E4: a non-404 error means the daemon rejected the
+			// reply (e.g. transient 500). The deferred SSE event (if any) is
+			// for a prior successful processing — clear it so a retry doesn't
+			// apply a stale event. The user retries against the live daemon
+			// state.
+			m.qDeferredSSE = opcode42client.SSEEvent{}
 			m.status = "question reply failed (try again): " + msg.err.Error()
 			return m, nil
+		}
+		// Plan 08e §E4: record the finalized question for the in-stream
+		// answered card BEFORE clearing the pending slice + per-request state.
+		// The local reply path knows the specific selected labels (from qAnswers
+		// + the current step), so the card shows the labels rather than a bare
+		// "Answered" (the SSE path's fallback). Deduped + upgraded by id against
+		// the SSE path inside recordAnsweredQuestion.
+		m = m.recordLocalAnsweredQuestion(msg.id)
+		// Apply any deferred SSE question.replied/rejected event for this
+		// question (plan 08e §E4): if the SSE event arrived while qReplying was
+		// true, it was deferred so this handler could record the labels first.
+		// The SSE path's recordAnsweredQuestion is a no-op (deduped by id) or an
+		// upgrade (the local labels win), then it clears the pending question.
+		if m.qDeferredSSE.Type != "" {
+			m.store = m.store.Reduce(m.qDeferredSSE)
+			m.qDeferredSSE = opcode42client.SSEEvent{}
 		}
 		m.store.questions = removeByID(m.store.questions, msg.id, func(x Question) string { return x.ID })
 		return m.resetQuestion(), nil
@@ -867,9 +908,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case sseEventMsg:
 		m.eventCount++
 		prevQ := questionID(m.pendingQuestion())
-		m.store = m.store.Reduce(msg.ev)
+		// Plan 08e §E4: when a local question reply is in flight (qReplying),
+		// defer applying the SSE question.replied/rejected event for OUR own
+		// pending question. The SSE event for our own reply may arrive before
+		// the HTTP response; applying it now would clear the question from the
+		// store and make pendingQuestion()/curQuestion() return nil before
+		// questionRepliedMsg can record the locally-selected labels in the
+		// answered-questions store. The questionRepliedMsg handler applies the
+		// deferred event after recording the labels, so the store clears
+		// cleanly. Other SSE events (and question.replied/rejected for a
+		// different request id) are applied normally.
+		if m.qReplying && (msg.ev.Type == "question.replied" || msg.ev.Type == "question.rejected") {
+			if q := m.pendingQuestion(); q != nil {
+				var p struct {
+					RequestID string `json:"requestID"`
+				}
+				if decode(msg.ev.Properties, &p) && p.RequestID == q.ID {
+					m.qDeferredSSE = msg.ev
+					msg.ev = opcode42client.SSEEvent{} // neutralize; not applied below
+				}
+			}
+		}
+		if msg.ev.Type != "" {
+			m.store = m.store.Reduce(msg.ev)
+		}
 		if questionID(m.pendingQuestion()) != prevQ { // active question cleared/replaced
-			m = m.resetQuestion()
+			if !m.qReplying {
+				m = m.resetQuestion()
+			}
 		}
 		m.status = fmt.Sprintf("connected · %d events · %d sessions", m.eventCount, len(m.store.sessions))
 		cmds := []tea.Cmd{listenCmd(m.stream)}

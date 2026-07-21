@@ -247,12 +247,7 @@ func (m Model) sessionLayers() []*lipgloss.Layer {
 	// height; the existing frame() helper does the scroll windowing.
 	sid := m.cfg.SessionID
 	header := m.styles.Section.Render(truncate(m.sessionTitle(sid), leftW))
-	var blocks []string
-	for _, msg := range m.store.messages[sid] {
-		if b := m.renderMessage(msg, m.store.parts[msg.ID]); b != "" {
-			blocks = append(blocks, b)
-		}
-	}
+	blocks := m.sessionStreamBlocks(sid)
 	body := header + "\n\n" + strings.Join(blocks, "\n\n")
 	scrolled := m.frame(body, footer)
 	layers = append(layers, lipgloss.NewLayer(scrolled).X(0).Y(0).Z(zPane))
