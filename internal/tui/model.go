@@ -672,6 +672,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case permissionRepliedMsg:
 		m.permReplying = false
 		if msg.err != nil {
+			// E3 (plan 16 Bug 1): a 404 means the permission was already answered
+			// or cancelled elsewhere (the optimistic clear already removed it
+			// from the UI). Swallow it silently — don't surface a misleading
+			// "reply failed" status. Non-404 errors still keep the request so
+			// the user can retry.
+			if isHTTPNotFound(msg.err) {
+				m.permSel = 0
+				m.store.permissions = removeByID(m.store.permissions, msg.id, func(q Permission) string { return q.ID })
+				return m, nil
+			}
 			// Keep the request so the user can retry — the daemon is still blocked.
 			m.status = "permission reply failed (try again): " + msg.err.Error()
 			return m, nil
@@ -683,11 +693,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case questionRepliedMsg:
 		m.qReplying = false
 		if msg.err != nil {
+			// E3 (plan 16 Bug 1): a 404 means the question was already answered
+			// or cancelled elsewhere (the optimistic clear already removed it
+			// from the UI). Swallow it silently — don't surface a misleading
+			// "reply failed" status. Non-404 errors still keep the request so
+			// the user can retry.
+			if isHTTPNotFound(msg.err) {
+				m.store.questions = removeByID(m.store.questions, msg.id, func(x Question) string { return x.ID })
+				return m.resetQuestion(), nil
+			}
 			m.status = "question reply failed (try again): " + msg.err.Error()
 			return m, nil
 		}
 		m.store.questions = removeByID(m.store.questions, msg.id, func(x Question) string { return x.ID })
 		return m.resetQuestion(), nil
+
+	case permissionsReconciledMsg:
+		// E3: REPLACE the store's pending permissions with the freshly-fetched
+		// list (matches Android StoreReducer.kt:115). On error leave the store
+		// unchanged — a flaky GET must not wipe the UI.
+		if msg.err == nil {
+			m.store.permissions = msg.permissions
+		}
+		return m, nil
+
+	case questionsReconciledMsg:
+		// E3: REPLACE the store's pending questions with the freshly-fetched
+		// list (matches Android StoreReducer.kt:116). On error leave the store
+		// unchanged. If the active question disappeared from the store, reset
+		// the per-request answer state so the overlay closes cleanly.
+		if msg.err == nil {
+			prevQ := questionID(m.pendingQuestion())
+			m.store.questions = msg.questions
+			if questionID(m.pendingQuestion()) != prevQ {
+				m = m.resetQuestion()
+			}
+		}
+		return m, nil
 
 	case filesFoundMsg:
 		// Apply only if it still matches the active mention query (drop stale
@@ -746,7 +788,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stream = msg.stream
 		m.conn = Connected
 		m.attempt = 0 // a successful reopen resets the backoff
-		return m, listenCmd(m.stream)
+		// E3: re-fetch the pending permission/question lists on reconnect — the
+		// daemon may have cancelled one without an SSE event (agent finalizer),
+		// leaving a stale entry in the store. REPLACE the store's slices with the
+		// daemon's current view (matches Android reconcilePending on reconnect).
+		return m, tea.Batch(listenCmd(m.stream), reconcilePendingCmd(m.ctx, m.client))
 
 	case sseEventMsg:
 		m.eventCount++
@@ -764,6 +810,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A todowrite tool part changed the todos — refetch (no todo SSE event).
 		if m.tasksOpen && m.cfg.SessionID != "" && isTodoWriteEvent(msg.ev) {
 			cmds = append(cmds, loadTodosCmd(m.ctx, m.client, m.cfg.SessionID))
+		}
+		// E3: when the open session goes idle, reconcile pending permissions/
+		// questions. A cancelled-without-event request (agent finalizer) would
+		// otherwise linger in the store; the idle transition is the natural
+		// moment to re-sync (matches Android's session.status → idle watcher).
+		if msg.ev.Type == "session.status" && m.cfg.SessionID != "" && isSessionIdleFor(msg.ev, m.cfg.SessionID) {
+			cmds = append(cmds, reconcilePendingCmd(m.ctx, m.client))
 		}
 		// Kick the animation tick when a tool part arrives — the tick will self-sustain
 		// while animating() is true and stop automatically when the turn completes.
