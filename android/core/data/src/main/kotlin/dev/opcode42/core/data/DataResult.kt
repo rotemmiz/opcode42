@@ -31,3 +31,11 @@ fun Throwable.toUserMessage(): String = when (this) {
     is IOException -> "Can't reach the server"
     else -> "Something went wrong"
 }
+
+/**
+ * True when the failure is HTTP 404 — the request was already answered/cancelled elsewhere
+ * (the optimistic clear already removed it from the store, so the UI is already correct).
+ * Used by the permission/question reply `onFailure` handlers to swallow a stale-tap 404
+ * silently instead of surfacing a misleading "Not found" snackbar.
+ */
+fun Throwable.isNotFound(): Boolean = this is HttpException && code == 404
