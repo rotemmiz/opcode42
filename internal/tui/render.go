@@ -120,6 +120,12 @@ func (m Model) sessionTitle(sid string) string {
 // join/split are all skipped; the cached []string is returned directly for
 // viewport windowing. On a miss (content changed), the body is rebuilt,
 // split into lines, cached, and returned.
+//
+// When animating() is true (running tool / streaming reasoning), the cache
+// is not written: animFrame is part of the key and increments every tick,
+// so each tick would create a new entry — unbounded growth over a long
+// tool run. The cache's value is idle scroll, not animation; during
+// animation the body is rebuilt every tick anyway (the spinner changes).
 func (m Model) cachedBodyLines(sid string, innerW int) []string {
 	key := bodyLinesKey{
 		storeVersion: m.store.version,
@@ -128,7 +134,8 @@ func (m Model) cachedBodyLines(sid string, innerW int) []string {
 		themeName:    m.themeName,
 		streamWidth:  innerW,
 	}
-	if m.animating() {
+	animating := m.animating()
+	if animating {
 		key.animFrame = m.animFrame
 	}
 	if lines, ok := m.bodyLinesCache[key]; ok {
@@ -138,10 +145,12 @@ func (m Model) cachedBodyLines(sid string, innerW int) []string {
 	blocks := m.sessionStreamBlocks(sid)
 	body := header + "\n\n" + strings.Join(blocks, "\n\n")
 	lines := strings.Split(body, "\n")
-	if m.bodyLinesCache == nil {
-		m.bodyLinesCache = make(bodyLinesCacheMap)
+	// Don't cache during animation: animFrame increments every tick, so
+	// each entry would be a new key — unbounded growth over a long tool
+	// run. The cache's value is idle scroll, not animation.
+	if !animating && m.bodyLinesCache != nil {
+		m.bodyLinesCache[key] = lines
 	}
-	m.bodyLinesCache[key] = lines
 	return lines
 }
 

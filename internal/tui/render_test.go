@@ -130,6 +130,7 @@ func TestRenderSession_SurfacesAssistantError(t *testing.T) {
 // []string on a cache hit (pure scroll — only m.scroll.Offset changes).
 func TestBodyLines_CachedOnScroll(t *testing.T) {
 	m := seededSessionModel(t)
+	finalizeReasoning(&m) // stop animating() so the cache is written
 	m.ensureMDCache()
 	innerW := m.width - 2*streamGutter
 
@@ -155,6 +156,7 @@ func TestBodyLines_CachedOnScroll(t *testing.T) {
 // (via Reduce) invalidates the cache.
 func TestBodyLines_InvalidatedOnStoreChange(t *testing.T) {
 	m := seededSessionModel(t)
+	finalizeReasoning(&m)
 	m.ensureMDCache()
 	innerW := m.width - 2*streamGutter
 
@@ -186,6 +188,7 @@ func TestBodyLines_InvalidatedOnStoreChange(t *testing.T) {
 // (viewVersion++) invalidates the cache.
 func TestBodyLines_InvalidatedOnViewToggle(t *testing.T) {
 	m := seededSessionModel(t)
+	finalizeReasoning(&m)
 	m.ensureMDCache()
 	innerW := m.width - 2*streamGutter
 
@@ -214,6 +217,7 @@ func TestBodyLines_InvalidatedOnViewToggle(t *testing.T) {
 // invalidates the cache.
 func TestBodyLines_InvalidatedOnWidthChange(t *testing.T) {
 	m := seededSessionModel(t)
+	finalizeReasoning(&m)
 	m.ensureMDCache()
 	innerW := m.width - 2*streamGutter
 
@@ -225,5 +229,19 @@ func TestBodyLines_InvalidatedOnWidthChange(t *testing.T) {
 
 	if len(m.bodyLinesCache) < 2 {
 		t.Fatal("width change did not create a new cache entry")
+	}
+}
+
+// finalizeReasoning sets Time.End on the seeded reasoning part so
+// animating() returns false. Without this, the streaming reasoning part
+// keeps animating() true, which prevents the cache from being written
+// (plan 19 §2: the cache is not written during animation to avoid
+// unbounded growth from the incrementing animFrame key).
+func finalizeReasoning(m *Model) {
+	for i, p := range m.store.parts["msg_2"] {
+		if p.Type == "reasoning" {
+			p.Time = PartTime{Start: 1000, End: 2500}
+			m.store.parts["msg_2"][i] = p
+		}
 	}
 }

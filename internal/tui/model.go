@@ -266,8 +266,8 @@ type Model struct {
 	// themeName, streamWidth, animFrame-when-animating). On a cache hit
 	// (pure scroll), sessionStreamBlocks + the join/split are skipped
 	// entirely — the cached []string is re-windowed directly. The map is a
-	// reference type; ensureBodyLinesCache initialises it on the root Model
-	// so all copies share one map.
+	// reference type; ensureMDCache initialises it on the root Model so all
+	// copies share one map.
 	bodyLinesCache bodyLinesCacheMap
 }
 
