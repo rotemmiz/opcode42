@@ -491,6 +491,7 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 		if m.modalSel < len(m.choices) {
 			ch := m.choices[m.modalSel]
 			m.model = promptModel{Provider: ch.Provider, Model: ch.Model} // switching model resets the variant
+			m.viewVersion++                                               // sidebar reads contextLimitForActiveModel (m.model)
 			m.status = "model · " + m.model.label()
 			m.persist() // remember the model across runs
 		}

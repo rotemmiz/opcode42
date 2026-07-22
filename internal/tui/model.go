@@ -263,11 +263,10 @@ type Model struct {
 
 	// bodyLinesCache memoizes the pre-split body lines for the conversation
 	// stream (plan 19 §2). Keyed on (storeVersion, sessionID, viewVersion,
-	// themeName, streamWidth, animFrame-when-animating). On a cache hit
-	// (pure scroll), sessionStreamBlocks + the join/split are skipped
-	// entirely — the cached []string is re-windowed directly. The map is
-	// a reference type; ensureMDCache initialises it on the root Model so all
-	// copies share one map.
+	// themeName, streamWidth). On a cache hit (same content version), the
+	// cached []string is re-windowed directly. The map is a reference type;
+	// ensureMDCache initialises it on the root Model so all copies share
+	// one map.
 	bodyLinesCache bodyLinesCacheMap
 
 	// sidebarCache memoizes the rendered sidebar string by content version
@@ -286,7 +285,6 @@ type bodyLinesKey struct {
 	viewVersion  int
 	themeName    string
 	streamWidth  int
-	animFrame    int // only included when animating()
 }
 
 // bodyLinesCacheMap maps cache keys to pre-split body line slices.
@@ -299,7 +297,12 @@ type sidebarCacheKey struct {
 	viewVersion  int
 	themeName    string
 	width        int
-	animFrame    int // only when animating()
+	// timeBucket expires the cache entry at the same cadence as the
+	// gitBranch TTL (5s). The sidebar renders gitBranch(dir), which is
+	// TTL-cached separately; without this bucket, a branch switch after
+	// the TTL expires would leave the cached sidebar showing the old
+	// branch indefinitely (no other key field changes on an idle session).
+	timeBucket int64
 }
 
 // sidebarCacheMap maps cache keys to sidebar strings.
@@ -804,6 +807,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case configLoadedMsg:
 		if !m.model.ok() {
 			m.model = promptModel{Provider: msg.provider, Model: msg.model}
+			m.viewVersion++ // sidebar reads contextLimitForActiveModel (m.model)
 		}
 		return m, nil
 
@@ -1363,7 +1367,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toastTick()
 		if m.animating() {
 			m.animFrame++
-			m.viewVersion++
+			// Note: viewVersion is NOT bumped here. The animTick only changes
+			// the spinner glyph (a single character in tool headers + the
+			// status bar). The body content (messages, parts, text) is
+			// unchanged between ticks. Not bumping viewVersion lets the
+			// bodyLines/sidebar caches hit between ticks — the spinner in the
+			// cached body is frozen, but the footer's status bar spinner
+			// (which is NOT cached) still advances. This is a deliberate
+			// trade-off: frozen tool-header spinner vs 10×/s full body rebuild.
 			return m, animTickCmd()
 		}
 		// Not animating — stop; the next animating state will re-kick via maybeKickAnim.

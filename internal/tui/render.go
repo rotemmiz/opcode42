@@ -3,6 +3,7 @@ package tui
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -79,9 +80,18 @@ func (m Model) buildFooter(leftW int) string {
 
 // cachedSidebar returns the rendered sidebar string, cached by content
 // version (plan 19 §3). The sidebar reads session state (child statuses,
-// tokens) but not scroll offset, so during pure scroll the cache hits and
-// the full sidebarView rebuild (gitBranch + childStatus JSON decode loops
-// + ~300 lipgloss.Render calls) is skipped.
+// tokens, MCP count, context limit) but not scroll offset, so during pure
+// scroll the cache hits and the full sidebarView rebuild (gitBranch +
+// childStatus JSON decode loops + many lipgloss.Render calls) is skipped.
+//
+// A time bucket (aligned to the gitBranch TTL) is part of the key so the
+// cache expires when the gitBranch cache expires — otherwise a branch
+// switch after the TTL would leave the cached sidebar showing the old
+// branch indefinitely on an idle session.
+//
+// viewVersion is NOT bumped on animTickMsg, so during animation the sidebar
+// cache hits every frame (the subagent spinner is frozen in the cached
+// output). The status bar spinner (not cached) still advances.
 func (m Model) cachedSidebar() string {
 	key := sidebarCacheKey{
 		storeVersion: m.store.version,
@@ -89,16 +99,13 @@ func (m Model) cachedSidebar() string {
 		viewVersion:  m.viewVersion,
 		themeName:    m.themeName,
 		width:        m.width,
-	}
-	animating := m.animating()
-	if animating {
-		key.animFrame = m.animFrame
+		timeBucket:   time.Now().Unix() / int64(gitBranchTTL.Seconds()),
 	}
 	if s, ok := m.sidebarCache[key]; ok {
 		return s
 	}
 	s := m.sidebarView()
-	if !animating && m.sidebarCache != nil {
+	if m.sidebarCache != nil {
 		m.sidebarCache[key] = s
 	}
 	return s
@@ -142,17 +149,18 @@ func (m Model) sessionTitle(sid string) string {
 
 // cachedBodyLines returns the conversation stream body pre-split into
 // individual lines, cached by content version (plan 19 §2). On a cache hit
-// (pure scroll — store/view/theme/width unchanged), the expensive
+// (same store/view/theme/width as the last frame), the expensive
 // sessionStreamBlocks iteration + JSON decodes + lipgloss renders + the
 // join/split are all skipped; the cached []string is returned directly for
 // viewport windowing. On a miss (content changed), the body is rebuilt,
 // split into lines, cached, and returned.
 //
-// When animating() is true (running tool / streaming reasoning), the cache
-// is not written: animFrame is part of the key and increments every tick,
-// so each tick would create a new entry — unbounded growth over a long
-// tool run. The cache's value is idle scroll, not animation; during
-// animation the body is rebuilt every tick anyway (the spinner changes).
+// viewVersion is NOT bumped on animTickMsg — the animation tick only changes
+// the spinner glyph (a single character in tool headers), not the body
+// content. So the cache hits between ticks even during animation. The
+// spinner in the cached body is frozen, but the footer's status bar spinner
+// (which is NOT cached) still advances. This is a deliberate trade-off:
+// frozen tool-header spinner vs 10×/s full body rebuild.
 func (m Model) cachedBodyLines(sid string, innerW int) []string {
 	key := bodyLinesKey{
 		storeVersion: m.store.version,
@@ -161,10 +169,6 @@ func (m Model) cachedBodyLines(sid string, innerW int) []string {
 		themeName:    m.themeName,
 		streamWidth:  innerW,
 	}
-	animating := m.animating()
-	if animating {
-		key.animFrame = m.animFrame
-	}
 	if lines, ok := m.bodyLinesCache[key]; ok {
 		return lines
 	}
@@ -172,10 +176,7 @@ func (m Model) cachedBodyLines(sid string, innerW int) []string {
 	blocks := m.sessionStreamBlocks(sid)
 	body := header + "\n\n" + strings.Join(blocks, "\n\n")
 	lines := strings.Split(body, "\n")
-	// Don't cache during animation: animFrame increments every tick, so
-	// each entry would be a new key — unbounded growth over a long tool
-	// run. The cache's value is idle scroll, not animation.
-	if !animating && m.bodyLinesCache != nil {
+	if m.bodyLinesCache != nil {
 		m.bodyLinesCache[key] = lines
 	}
 	return lines

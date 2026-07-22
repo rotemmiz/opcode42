@@ -233,10 +233,8 @@ func TestBodyLines_InvalidatedOnWidthChange(t *testing.T) {
 }
 
 // finalizeReasoning sets Time.End on the seeded reasoning part so
-// animating() returns false. Without this, the streaming reasoning part
-// keeps animating() true, which prevents the cache from being written
-// (plan 19 §2: the cache is not written during animation to avoid
-// unbounded growth from the incrementing animFrame key).
+// animating() returns false, putting the model in a deterministic idle
+// state for cache comparison.
 func finalizeReasoning(m *Model) {
 	for i, p := range m.store.parts["msg_2"] {
 		if p.Type == "reasoning" {
