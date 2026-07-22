@@ -270,19 +270,12 @@ type Model struct {
 	// copies share one map.
 	bodyLinesCache bodyLinesCacheMap
 
-	// footerCache memoizes the rendered footer string + height by content
-	// version (plan 19 §3). The footer doesn't read m.scroll.Offset, so it's
-	// byte-identical during pure scroll. Keyed on the same content version as
-	// bodyLinesCache (minus sessionID — the footer doesn't depend on session
-	// content, only on composer/tasks/pty/subagent state). The map is a
-	// reference type; ensureMDCache initialises it.
-	footerCache footerCacheMap
-
 	// sidebarCache memoizes the rendered sidebar string by content version
-	// (plan 19 §3). The sidebar reads session state (child statuses, tokens)
-	// but not scroll offset, so it's byte-identical during pure scroll. Keyed
-	// on the same content version as bodyLinesCache. The map is a reference
-	// type; ensureMDCache initialises it.
+	// (plan 19 §3). The sidebar reads session state (child statuses, tokens,
+	// MCP server count, context limit) but not scroll offset, so during pure
+	// scroll the cache hits and the full sidebarView rebuild (gitBranch +
+	// childStatus JSON decode loops + ~300 lipgloss.Render calls) is skipped.
+	// The map is a reference type; ensureMDCache initialises it.
 	sidebarCache sidebarCacheMap
 }
 
@@ -298,24 +291,6 @@ type bodyLinesKey struct {
 
 // bodyLinesCacheMap maps cache keys to pre-split body line slices.
 type bodyLinesCacheMap map[bodyLinesKey][]string
-
-// footerCacheKey is the cache key for footerCache (plan 19 §3).
-type footerCacheKey struct {
-	storeVersion int
-	viewVersion  int
-	themeName    string
-	width        int
-	animFrame    int // only when animating()
-}
-
-// footerCacheEntry holds the cached footer string + its height.
-type footerCacheEntry struct {
-	str    string
-	height int
-}
-
-// footerCacheMap maps cache keys to footer cache entries.
-type footerCacheMap map[footerCacheKey]footerCacheEntry
 
 // sidebarCacheKey is the cache key for sidebarCache (plan 19 §3).
 type sidebarCacheKey struct {
@@ -840,6 +815,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.choices = msg.choices
+		m.viewVersion++             // sidebar reads contextLimitForActiveModel (m.choices)
 		if m.modal == modalModels { // re-highlight the active model now the list is in
 			m.modalSel = m.modelSelIndex()
 		}
@@ -984,6 +960,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.mcpServers = msg.items
+		m.viewVersion++ // sidebar reads mcpServers for LSP count
 		return m, nil
 
 	case skillsLoadedMsg:
@@ -1840,7 +1817,7 @@ func (m Model) scrollBodyHeight() int {
 	if m.height <= 0 {
 		return 1
 	}
-	h := m.height - m.cachedFooter(m.leftColumnWidth()).height
+	h := m.height - lipgloss.Height(m.buildFooter(m.leftColumnWidth()))
 	if h < 1 {
 		h = 1
 	}

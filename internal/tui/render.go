@@ -77,34 +77,6 @@ func (m Model) buildFooter(leftW int) string {
 	return strings.Join(footerParts, "\n")
 }
 
-// cachedFooter returns the rendered footer string + height, cached by
-// content version (plan 19 §3). The footer doesn't read m.scroll.Offset,
-// so during pure scroll the cache hits and the full buildFooter rebuild
-// (composer + status bar + tasks dock + subagent strip + PTY pane) is
-// skipped. On a miss (content changed), the footer is rebuilt, cached,
-// and returned.
-func (m Model) cachedFooter(innerW int) footerCacheEntry {
-	key := footerCacheKey{
-		storeVersion: m.store.version,
-		viewVersion:  m.viewVersion,
-		themeName:    m.themeName,
-		width:        innerW,
-	}
-	animating := m.animating()
-	if animating {
-		key.animFrame = m.animFrame
-	}
-	if e, ok := m.footerCache[key]; ok {
-		return e
-	}
-	str := m.buildFooter(innerW)
-	e := footerCacheEntry{str: str, height: lipgloss.Height(str)}
-	if !animating && m.footerCache != nil {
-		m.footerCache[key] = e
-	}
-	return e
-}
-
 // cachedSidebar returns the rendered sidebar string, cached by content
 // version (plan 19 §3). The sidebar reads session state (child statuses,
 // tokens) but not scroll offset, so during pure scroll the cache hits and

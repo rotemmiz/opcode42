@@ -341,9 +341,8 @@ func (m Model) sessionLayers() []*lipgloss.Layer {
 	// helper (plan 17 §A1) so the fallback path (renderSession) and this path
 	// agree on the stacking order. The autocomplete popup is NOT part of the
 	// footer — it composes as its own overlay layer at zPopup.
-	fe := m.cachedFooter(innerW)
-	footer := m.frameFooter(fe.str)
-	footerH := fe.height
+	footer := m.frameFooter(m.buildFooter(innerW))
+	footerH := lipgloss.Height(footer)
 	bodyH := m.height - footerH
 	if bodyH < 1 {
 		bodyH = 1
