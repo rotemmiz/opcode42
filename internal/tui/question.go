@@ -275,6 +275,7 @@ func (m Model) recordLocalAnsweredQuestion(id string) Model {
 		Answers:   answers,
 		Questions: append([]QuestionInfo(nil), q.Questions...),
 	})
+	m.store.version++
 	return m
 }
 

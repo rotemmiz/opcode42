@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 	"unicode"
 
 	"charm.land/lipgloss/v2"
@@ -106,23 +108,49 @@ func (m Model) leftColumnWidth() int {
 	return m.width
 }
 
+// gitBranchCache memoizes gitBranch results per directory with a TTL (plan 19
+// §4). Without this, sidebarView calls gitBranch on every frame — including
+// pure scroll — spawning an exec.Command subprocess 20-200×/s. The cache is a
+// sync.Map so it survives across Model value-copies (the Model is a value type
+// in Bubble Tea's Update loop). Entries expire after gitBranchTTL so a branch
+// switch is picked up without a TUI restart.
+var gitBranchCache sync.Map // map[string]gitBranchEntry
+
+type gitBranchEntry struct {
+	branch  string
+	fetched time.Time
+}
+
+const gitBranchTTL = 5 * time.Second
+
 // gitBranch returns the current git branch name for the given directory, or ""
 // when the directory is not a git repo or git is unavailable. Best-effort — any
 // error (no git, no repo, detached HEAD) produces an empty string so callers
 // can skip the branch display rather than show a confusing error.
+//
+// Results are cached per directory for gitBranchTTL (plan 19 §4) so the
+// sidebar's per-frame call doesn't spawn a subprocess on every render.
 func gitBranch(dir string) string {
 	if dir == "" {
 		return ""
 	}
+	if v, ok := gitBranchCache.Load(dir); ok {
+		e := v.(gitBranchEntry)
+		if time.Since(e.fetched) < gitBranchTTL {
+			return e.branch
+		}
+	}
 	out, err := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	if err != nil {
+		gitBranchCache.Store(dir, gitBranchEntry{branch: "", fetched: time.Now()})
 		return ""
 	}
 	branch := strings.TrimSpace(string(out))
 	if branch == "HEAD" {
 		// Detached HEAD — not meaningful to display.
-		return ""
+		branch = ""
 	}
+	gitBranchCache.Store(dir, gitBranchEntry{branch: branch, fetched: time.Now()})
 	return branch
 }
 
