@@ -1,16 +1,10 @@
 package dev.opcode42.core.design.brand
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -64,38 +58,15 @@ fun AsteriskMark(
     val ringR = if (heavy) 15f else 12f
     val punchR = if (heavy) 18f else 15f
     val arcStrokeWidth = strokeWidth * 2f / 3f
-    // The spinning ring's angle is held as State and read *inside* the draw lambda
-    // (as late as possible), so an animation frame invalidates only the draw phase —
-    // not composition. Several Spinners on screen at 60fps then cost only redraws.
-    val angleState: State<Float>? = if (spin || chase) {
-        val transition = rememberInfiniteTransition(label = "asterisk")
-        transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1400, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-            label = "ringAngle",
-        )
-    } else {
-        null
-    }
-    // The chase highlight sweeps the arms a touch faster than the arc rotates.
-    val chaseHead: State<Float>? = if (chase) {
-        val transition = rememberInfiniteTransition(label = "asterisk-chase")
-        transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1100, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-            label = "chaseHead",
-        )
-    } else {
-        null
-    }
+
+    // Throttled angle: advance the rotation at ~20fps instead of every vsync (60fps).
+    // The ring rotates at 360°/1400ms and the chase at 360°/1100ms — both slow enough
+    // that 50ms steps (20fps) are visually indistinguishable from 60fps, but cut draw
+    // invalidations by 3x per spinner. produceState with withFrameNanos drives the
+    // value; the frame callback only calls .value = when the accumulated time crosses
+    // the threshold, so the Compose runtime skips redraws between steps.
+    val angleState = produceThrottledAngle(enabled = spin || chase, degreesPerMs = 360f / 1400f)
+    val chaseHead = produceThrottledAngle(enabled = chase, degreesPerMs = 360f / 1100f)
 
     Canvas(modifier.size(size)) {
         val s = this.size.minDimension / 160f
@@ -108,7 +79,7 @@ fun AsteriskMark(
         if (chase) {
             // Six half-arms (the canonical arms split at the hollow) so each can light in
             // turn; the inner ends fall inside the punch, so this renders as the same mark.
-            val head = chaseHead?.value ?: 0f
+            val head = chaseHead.value
             for (i in 0 until 6) {
                 val ang = i * 60f
                 clipPath(hole, clipOp = ClipOp.Difference) {
@@ -142,7 +113,7 @@ fun AsteriskMark(
         // Dual-arc ring in the hollow; only this rotates for the loader.
         val ringTopLeft = Offset((80f - ringR) * s, (80f - ringR) * s)
         val ringSize = Size(2f * ringR * s, 2f * ringR * s)
-        rotate(angleState?.value ?: 0f, pivot = center) {
+        rotate(angleState.value, pivot = center) {
             drawArc(
                 color = color,
                 startAngle = -90f,
@@ -161,6 +132,35 @@ fun AsteriskMark(
                 size = ringSize,
                 style = arcStroke,
             )
+        }
+    }
+}
+
+/**
+ * Throttled angle producer: advances [degreesPerMs] at ~20fps (every 50ms) instead of
+ * every vsync. Uses delay(50) + System.nanoTime() rather than withFrameNanos so the
+ * Compose runtime only sees a state change (and thus only redraws) when a new step is
+ * due — 3x fewer draw invalidations than rememberInfiniteTransition while keeping
+ * visually smooth motion for the slow ring/chase rotations.
+ *
+ * When [enabled] is false, the state stays at 0 and no coroutine is launched —
+ * the composable renders statically with zero per-frame cost.
+ */
+@Composable
+private fun produceThrottledAngle(
+    enabled: Boolean,
+    degreesPerMs: Float,
+): androidx.compose.runtime.State<Float> {
+    val stepMs = 50L // 20fps — visually indistinguishable for slow rotations
+    return produceState(initialValue = 0f, enabled) {
+        if (!enabled) return@produceState
+        var lastNanos = System.nanoTime()
+        while (true) {
+            kotlinx.coroutines.delay(stepMs)
+            val now = System.nanoTime()
+            val elapsedMs = (now - lastNanos) / 1_000_000f
+            lastNanos = now
+            value = (value + elapsedMs * degreesPerMs) % 360f
         }
     }
 }

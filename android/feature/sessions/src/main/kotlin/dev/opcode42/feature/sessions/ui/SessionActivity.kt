@@ -45,11 +45,20 @@ fun isSessionBusy(status: String?): Boolean = status != null && status != "idle"
  * per-session activity indicator surfaced in the sessions menu. Renders nothing
  * when the session is idle; shown for any non-idle status (the daemon emits
  * `type: "busy"` today).
+ *
+ * [spin] controls whether the chase animation actually runs. When false the mark
+ * renders statically — use it for sessions in a closed drawer or collapsed rail
+ * so off-screen spinners don't drive 60fps redraws. The fade in/out (driven by
+ * the status) still works; only the animation is suppressed.
  */
 @Composable
-fun SessionStatusSpinner(status: String?, modifier: Modifier = Modifier) {
+fun SessionStatusSpinner(
+    status: String?,
+    modifier: Modifier = Modifier,
+    spin: Boolean = true,
+) {
     // Always composed so it fades out (1→0) when the session goes idle, not just in.
-    Spinner(visible = isSessionBusy(status), modifier = modifier, color = Secondary)
+    Spinner(visible = isSessionBusy(status), modifier = modifier, color = Secondary, spin = spin)
 }
 
 /**

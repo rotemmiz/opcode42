@@ -23,6 +23,11 @@ import dev.opcode42.core.design.theme.OnSurfaceFaint
  * It fades itself in (alpha 0→1) when it first appears and out (1→0) when [visible] flips
  * false, so it never pops. Pass `visible` from the show/hide condition and always compose
  * the Spinner (rather than guarding it with `if`) to get the fade-out too.
+ *
+ * [spin] controls whether the underlying infinite transitions actually run. When false the
+ * mark renders statically (no per-frame draw invalidation). Use it to stop off-screen
+ * spinners from driving 60fps redraws — e.g. a busy session in a closed navigation drawer.
+ * The fade in/out still works (driven by [visible]); only the animation is suppressed.
  */
 @Composable
 fun Spinner(
@@ -31,6 +36,7 @@ fun Spinner(
     color: Color = LocalContentColor.current,
     arcColor: Color = OnSurfaceFaint,
     visible: Boolean = true,
+    spin: Boolean = true,
 ) {
     // Seed the transition at "hidden" then flip to [visible]: even an initially-visible
     // spinner animates in from 0, and a later visible=false animates out before it leaves.
@@ -47,7 +53,8 @@ fun Spinner(
             color = color,
             arcColor = arcColor,
             strokeWidth = 6f,
-            chase = true,
+            chase = spin,
+            spin = spin,
         )
     }
 }

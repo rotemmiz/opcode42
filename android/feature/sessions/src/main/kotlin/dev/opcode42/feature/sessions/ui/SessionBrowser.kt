@@ -97,6 +97,10 @@ fun SessionBrowser(
     // per-frame float never recomposes. [onExpand] re-opens the rail when the collapsed search is tapped.
     progress: () -> Float = { 1f },
     onExpand: () -> Unit = {},
+    // When false the rail is not visible (e.g. the phone's ModalNavigationDrawer is closed).
+    // Suppresses the chase animation on busy-session spinners so off-screen rows don't drive
+    // 60fps redraws. Does not affect the static mark or the fade in/out — only the animation.
+    railVisible: Boolean = true,
 ) {
     var renameTarget by remember { mutableStateOf<Session?>(null) }
     val hPad = if (compact) 8.dp else 12.dp
@@ -123,6 +127,7 @@ fun SessionBrowser(
             onSkip = { question?.let { onSkipQuestion(it.id) } },
             compact = compact,
             progress = progress,
+            railVisible = railVisible,
             children = uiState.childrenByParent[session.id].orEmpty(),
             onOpenChild = onOpen,
             activeChildId = activeSessionId,
