@@ -263,11 +263,10 @@ type Model struct {
 
 	// bodyLinesCache memoizes the pre-split body lines for the conversation
 	// stream (plan 19 §2). Keyed on (storeVersion, sessionID, viewVersion,
-	// themeName, streamWidth, animFrame-when-animating). On a cache hit
-	// (pure scroll), sessionStreamBlocks + the join/split are skipped
-	// entirely — the cached []string is re-windowed directly. The map is
-	// a reference type; ensureMDCache initialises it on the root Model so all
-	// copies share one map.
+	// themeName, streamWidth). On a cache hit (same content version), the
+	// cached []string is re-windowed directly. The map is a reference type;
+	// ensureMDCache initialises it on the root Model so all copies share
+	// one map.
 	bodyLinesCache bodyLinesCacheMap
 
 	// sidebarCache memoizes the rendered sidebar string by content version

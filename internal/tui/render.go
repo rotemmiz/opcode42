@@ -89,10 +89,9 @@ func (m Model) buildFooter(leftW int) string {
 // switch after the TTL would leave the cached sidebar showing the old
 // branch indefinitely on an idle session.
 //
-// The cache key includes viewVersion, which is bumped on every animTickMsg
-// (10fps). So during animation the cache misses once per tick (the sidebar's
-// task spinner advances) and hits between ticks. During idle, the cache
-// hits on every frame.
+// viewVersion is NOT bumped on animTickMsg, so during animation the sidebar
+// cache hits every frame (the subagent spinner is frozen in the cached
+// output). The status bar spinner (not cached) still advances.
 func (m Model) cachedSidebar() string {
 	key := sidebarCacheKey{
 		storeVersion: m.store.version,
@@ -111,8 +110,6 @@ func (m Model) cachedSidebar() string {
 	}
 	return s
 }
-
-// sessionStreamBlocks builds the chat-stream block list for a session: the
 
 // sessionStreamBlocks builds the chat-stream block list for a session: the
 // per-message blocks (user/assistant parts) followed by the in-stream

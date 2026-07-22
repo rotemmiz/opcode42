@@ -100,9 +100,14 @@ func exitTickCmd() tea.Cmd {
 // Idle-safety: on ScreenSession with no running tools, no streaming reasoning
 // parts, and no live toasts this returns false, stopping the tick.
 func (m Model) animating() bool {
-	// --no-anim: freeze all animation. The tick self-stops and no further
-	// frames are scheduled. The logo paints at the static peak frame
-	// (logoStatic) and the spinner is frozen at its current frame.
+	// Live toasts need the tick to count down their TTL (plan 08c M11),
+	// even with --no-anim. Without this, toasts would never expire.
+	if m.toastsLive() {
+		return true
+	}
+	// --no-anim: freeze all other animation. The tick self-stops (once
+	// toasts drain) and no further frames are scheduled. The logo paints
+	// at the static peak frame (logoStatic) and the spinner is frozen.
 	if m.noAnim {
 		return false
 	}
@@ -110,10 +115,6 @@ func (m Model) animating() bool {
 	// shimmer sweep advances each frame.  ScreenSplash is the initial state and
 	// re-entered when the user closes all sessions (modal.go, model.go).
 	if m.screen == ScreenSplash {
-		return true
-	}
-	// Live toasts need the tick to count down their TTL (plan 08c M11).
-	if m.toastsLive() {
 		return true
 	}
 	sid := m.cfg.SessionID
