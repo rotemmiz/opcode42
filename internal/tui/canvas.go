@@ -341,8 +341,9 @@ func (m Model) sessionLayers() []*lipgloss.Layer {
 	// helper (plan 17 §A1) so the fallback path (renderSession) and this path
 	// agree on the stacking order. The autocomplete popup is NOT part of the
 	// footer — it composes as its own overlay layer at zPopup.
-	footer := m.frameFooter(m.buildFooter(innerW))
-	footerH := lipgloss.Height(footer)
+	fe := m.cachedFooter(innerW)
+	footer := m.frameFooter(fe.str)
+	footerH := fe.height
 	bodyH := m.height - footerH
 	if bodyH < 1 {
 		bodyH = 1
@@ -371,7 +372,7 @@ func (m Model) sessionLayers() []*lipgloss.Layer {
 	// innerW starting at X(streamGutter), so the 2-col right gutter between
 	// the stream and the sidebar at X(leftW) is blank base Bg).
 	if m.sidebarVisible() {
-		sidebar := m.sidebarView()
+		sidebar := m.cachedSidebar()
 		layers = append(layers, lipgloss.NewLayer(sidebar).X(leftW).Y(0).Z(zPane))
 	}
 

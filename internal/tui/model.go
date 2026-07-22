@@ -265,10 +265,25 @@ type Model struct {
 	// stream (plan 19 §2). Keyed on (storeVersion, sessionID, viewVersion,
 	// themeName, streamWidth, animFrame-when-animating). On a cache hit
 	// (pure scroll), sessionStreamBlocks + the join/split are skipped
-	// entirely — the cached []string is re-windowed directly. The map is a
-	// reference type; ensureMDCache initialises it on the root Model so all
+	// entirely — the cached []string is re-windowed directly. The map is
+	// a reference type; ensureMDCache initialises it on the root Model so all
 	// copies share one map.
 	bodyLinesCache bodyLinesCacheMap
+
+	// footerCache memoizes the rendered footer string + height by content
+	// version (plan 19 §3). The footer doesn't read m.scroll.Offset, so it's
+	// byte-identical during pure scroll. Keyed on the same content version as
+	// bodyLinesCache (minus sessionID — the footer doesn't depend on session
+	// content, only on composer/tasks/pty/subagent state). The map is a
+	// reference type; ensureMDCache initialises it.
+	footerCache footerCacheMap
+
+	// sidebarCache memoizes the rendered sidebar string by content version
+	// (plan 19 §3). The sidebar reads session state (child statuses, tokens)
+	// but not scroll offset, so it's byte-identical during pure scroll. Keyed
+	// on the same content version as bodyLinesCache. The map is a reference
+	// type; ensureMDCache initialises it.
+	sidebarCache sidebarCacheMap
 }
 
 // bodyLinesKey is the cache key for bodyLinesCache (plan 19 §2).
@@ -283,6 +298,37 @@ type bodyLinesKey struct {
 
 // bodyLinesCacheMap maps cache keys to pre-split body line slices.
 type bodyLinesCacheMap map[bodyLinesKey][]string
+
+// footerCacheKey is the cache key for footerCache (plan 19 §3).
+type footerCacheKey struct {
+	storeVersion int
+	viewVersion  int
+	themeName    string
+	width        int
+	animFrame    int // only when animating()
+}
+
+// footerCacheEntry holds the cached footer string + its height.
+type footerCacheEntry struct {
+	str    string
+	height int
+}
+
+// footerCacheMap maps cache keys to footer cache entries.
+type footerCacheMap map[footerCacheKey]footerCacheEntry
+
+// sidebarCacheKey is the cache key for sidebarCache (plan 19 §3).
+type sidebarCacheKey struct {
+	storeVersion int
+	sessionID    string
+	viewVersion  int
+	themeName    string
+	width        int
+	animFrame    int // only when animating()
+}
+
+// sidebarCacheMap maps cache keys to sidebar strings.
+type sidebarCacheMap map[sidebarCacheKey]string
 
 // pickDefaultTheme returns the appropriate default theme name based on whether
 // the terminal has a dark background. This mirrors opencode's theme_mode_lock
@@ -1794,7 +1840,7 @@ func (m Model) scrollBodyHeight() int {
 	if m.height <= 0 {
 		return 1
 	}
-	h := m.height - lipgloss.Height(m.buildFooter(m.leftColumnWidth()))
+	h := m.height - m.cachedFooter(m.leftColumnWidth()).height
 	if h < 1 {
 		h = 1
 	}

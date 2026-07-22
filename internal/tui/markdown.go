@@ -656,4 +656,10 @@ func (m *Model) ensureMDCache() {
 	if m.bodyLinesCache == nil {
 		m.bodyLinesCache = make(bodyLinesCacheMap)
 	}
+	if m.footerCache == nil {
+		m.footerCache = make(footerCacheMap)
+	}
+	if m.sidebarCache == nil {
+		m.sidebarCache = make(sidebarCacheMap)
+	}
 }
