@@ -653,4 +653,7 @@ func (m *Model) ensureMDCache() {
 	if m.mdBlockCache == nil {
 		m.mdBlockCache = make(mdBlockCache)
 	}
+	if m.bodyLinesCache == nil {
+		m.bodyLinesCache = make(bodyLinesCacheMap)
+	}
 }

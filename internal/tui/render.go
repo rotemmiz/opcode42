@@ -113,6 +113,47 @@ func (m Model) sessionTitle(sid string) string {
 	return "session " + sid
 }
 
+// cachedBodyLines returns the conversation stream body pre-split into
+// individual lines, cached by content version (plan 19 §2). On a cache hit
+// (pure scroll — store/view/theme/width unchanged), the expensive
+// sessionStreamBlocks iteration + JSON decodes + lipgloss renders + the
+// join/split are all skipped; the cached []string is returned directly for
+// viewport windowing. On a miss (content changed), the body is rebuilt,
+// split into lines, cached, and returned.
+//
+// When animating() is true (running tool / streaming reasoning), the cache
+// is not written: animFrame is part of the key and increments every tick,
+// so each tick would create a new entry — unbounded growth over a long
+// tool run. The cache's value is idle scroll, not animation; during
+// animation the body is rebuilt every tick anyway (the spinner changes).
+func (m Model) cachedBodyLines(sid string, innerW int) []string {
+	key := bodyLinesKey{
+		storeVersion: m.store.version,
+		sessionID:    sid,
+		viewVersion:  m.viewVersion,
+		themeName:    m.themeName,
+		streamWidth:  innerW,
+	}
+	animating := m.animating()
+	if animating {
+		key.animFrame = m.animFrame
+	}
+	if lines, ok := m.bodyLinesCache[key]; ok {
+		return lines
+	}
+	header := m.styles.Section.Render(truncate(m.sessionTitle(sid), innerW))
+	blocks := m.sessionStreamBlocks(sid)
+	body := header + "\n\n" + strings.Join(blocks, "\n\n")
+	lines := strings.Split(body, "\n")
+	// Don't cache during animation: animFrame increments every tick, so
+	// each entry would be a new key — unbounded growth over a long tool
+	// run. The cache's value is idle scroll, not animation.
+	if !animating && m.bodyLinesCache != nil {
+		m.bodyLinesCache[key] = lines
+	}
+	return lines
+}
+
 // renderMessage renders one message's parts into stacked blocks.
 func (m Model) renderMessage(msg Message, parts []Part) string {
 	var out []string
@@ -461,20 +502,16 @@ func (m Model) frame(body, footer string) string {
 	return strings.Join(lines, "\n") + "\n" + footer
 }
 
-// frameStream returns the body windowed to the available stream height — the
-// scrollable layer of the canvas split (plan 17 §A1). Unlike frame, this does
-// NOT join the footer: the footer composes as its own pinned layer at
-// Y=bodyH, so the scroll math operates on the body alone and the footer is
-// immune to scroll position. bodyH is the height reserved for the stream
-// (screen height minus the footer's height); the scrollregion.Window call
-// both clamps the offset and pads a short body so the stream region is always
-// exactly bodyH rows.
-func (m Model) frameStream(body string, bodyH int) string {
+// frameStreamLines windows the pre-split body lines to the stream height
+// (plan 19 §2). It takes the cached []string from cachedBodyLines and windows
+// it via scrollregion.Window, which both clamps the offset and pads a short
+// body so the stream region is always exactly bodyH rows.
+func (m Model) frameStreamLines(lines []string, bodyH int) string {
 	if bodyH <= 0 {
-		return body
+		return strings.Join(lines, "\n")
 	}
-	lines := m.scroll.Window(strings.Split(body, "\n"), bodyH)
-	return strings.Join(lines, "\n")
+	windowed := m.scroll.Window(lines, bodyH)
+	return strings.Join(windowed, "\n")
 }
 
 // frameFooter returns the footer unchanged. The split exists to name the
