@@ -260,8 +260,8 @@ fun AdaptiveChatScreen(
     // onSelect runs when a session/new-session is chosen (it may keep a persistent rail
     // open); onCollapse runs only for the explicit collapse chevron (it always closes);
     // onExpand re-opens from the collapsed band; progress drives the open⇄collapsed morph.
-    val railPane: @Composable (Modifier, () -> Unit, () -> Unit, () -> Unit, () -> Float) -> Unit =
-        { mod, onSelect, onCollapse, onExpand, progress ->
+    val railPane: @Composable (Modifier, () -> Unit, () -> Unit, () -> Unit, () -> Float, Boolean) -> Unit =
+        { mod, onSelect, onCollapse, onExpand, progress, railVisible ->
             NavRailPane(
                 uiState = sessionListState,
                 activeSessionId = sessionId,
@@ -290,6 +290,7 @@ fun AdaptiveChatScreen(
                 onCycleTheme = onCycleTheme,
                 showChevron = layout.leftRailMode == LeftRailMode.InlinePush,
                 progress = progress,
+                railVisible = railVisible,
                 modifier = mod,
             )
         }
@@ -372,12 +373,15 @@ fun AdaptiveChatScreen(
     // session keeps a persistent (Expanded) rail open; only a manually-opened Medium rail
     // collapses. The collapse chevron closes; the expand chevron / collapsed search re-opens.
     val railSlot: @Composable () -> Unit = {
+        // InlinePush rail is always on-screen (composed beside the chat), so spinners animate.
+        // The collapsed band still shows a busy spinner — it's visible.
         railPane(
             Modifier.railWidth(railProgressProvider).fillMaxHeight(),
             { if (!layout.railPersistent) railOpen = false },
             { railOpen = false },
             { railOpen = true },
             railProgressProvider,
+            true,
         )
     }
 
@@ -417,7 +421,10 @@ fun AdaptiveChatScreen(
                     ) {
                         val closeDrawer = { scope.launch { drawerState.close() }; Unit }
                         // The overlay drawer always shows the full rail (no morph): progress = 1f.
-                        railPane(Modifier.fillMaxSize(), closeDrawer, closeDrawer, {}, { 1f })
+                        // Suppress spinner animations when the drawer is closed — the drawer's
+                        // content is composed even when hidden, so without this the busy-session
+                        // spinners would drive 60fps redraws off-screen (the phone idle case).
+                        railPane(Modifier.fillMaxSize(), closeDrawer, closeDrawer, {}, { 1f }, drawerState.isOpen)
                     }
                 },
             ) {
@@ -515,6 +522,9 @@ internal fun NavRailPane(
     onCycleTheme: () -> Unit = {},
     showChevron: Boolean = true,
     progress: () -> Float,
+    // When false the rail is not visible (closed drawer). Suppresses busy-spinner animations
+    // so off-screen sessions don't drive 60fps redraws.
+    railVisible: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     // Flip the header's interactivity once at the midpoint (alpha=0 still hit-tests).
@@ -617,6 +627,7 @@ internal fun NavRailPane(
             containerColor = SurfaceContainerLow,
             progress = progress,
             onExpand = onExpand,
+            railVisible = railVisible,
             modifier = Modifier.weight(1f),
         )
 

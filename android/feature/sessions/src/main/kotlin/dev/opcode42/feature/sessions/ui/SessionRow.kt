@@ -154,6 +154,9 @@ internal fun SessionRow(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     progress: () -> Float = { 1f },
+    // When false the rail is not visible (closed drawer). Suppresses the chase animation on
+    // the busy spinner so off-screen rows don't drive 60fps redraws.
+    railVisible: Boolean = true,
     /** Sub-agent children of this session (parentID == session.id); empty means no subtree. */
     children: List<Session> = emptyList(),
     /** Open a child session — tapped on an indented child row in the expanded subtree. */
@@ -253,6 +256,7 @@ internal fun SessionRow(
                         needsInput = needsInput,
                         accent = accent,
                         progress = progress,
+                        railVisible = railVisible,
                         onClick = onClick,
                         onLongPress = { showMenu = true },
                         hasChildren = hasChildren,
@@ -375,6 +379,7 @@ internal fun SessionRow(
                 activeChildId = activeChildId,
                 compact = compact,
                 progress = progress,
+                railVisible = railVisible,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -392,6 +397,7 @@ private fun CompactRailRow(
     needsInput: Boolean,
     accent: Color,
     progress: () -> Float,
+    railVisible: Boolean,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     hasChildren: Boolean,
@@ -534,7 +540,7 @@ private fun CompactRailRow(
                             scaleY = sc
                         },
                 ) {
-                    Spinner(size = SpinnerBaseDp, color = accent)
+                    Spinner(size = SpinnerBaseDp, color = accent, spin = railVisible)
                 }
             }
             // (4) Subagent expand chevron — trailing-right of the open row, held at the open
@@ -728,6 +734,7 @@ private fun SubAgentChildren(
     activeChildId: String?,
     compact: Boolean,
     progress: () -> Float = { 1f },
+    railVisible: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val indent = if (compact) 20.dp else 32.dp
@@ -751,7 +758,7 @@ private fun SubAgentChildren(
                     .padding(start = indent, end = if (compact) 12.dp else 16.dp, top = 6.dp, bottom = 6.dp),
             ) {
                 if (busy) {
-                    SessionStatusSpinner("busy", Modifier.size(12.dp))
+                    SessionStatusSpinner("busy", Modifier.size(12.dp), spin = railVisible)
                 } else {
                     Box(Modifier.size(12.dp), contentAlignment = Alignment.Center) {
                         Box(
