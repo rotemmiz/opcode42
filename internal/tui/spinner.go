@@ -100,6 +100,12 @@ func exitTickCmd() tea.Cmd {
 // Idle-safety: on ScreenSession with no running tools, no streaming reasoning
 // parts, and no live toasts this returns false, stopping the tick.
 func (m Model) animating() bool {
+	// --no-anim: freeze all animation. The tick self-stops and no further
+	// frames are scheduled. The logo paints at the static peak frame
+	// (logoStatic) and the spinner is frozen at its current frame.
+	if m.noAnim {
+		return false
+	}
 	// Logo shimmer: keep ticking while the splash/home screen is visible so the
 	// shimmer sweep advances each frame.  ScreenSplash is the initial state and
 	// re-entered when the user closes all sessions (modal.go, model.go).
