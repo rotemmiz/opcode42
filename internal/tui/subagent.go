@@ -115,7 +115,6 @@ func (m Model) openSession(id string) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.cfg.SessionID = id
-	m.viewVersion++
 	m.screen = ScreenSession
 	m.scroll.ToTail() // snap to the live tail of the new stream
 	// loadMessagesCmd's completion also fetches this session's children, so the
@@ -236,25 +235,16 @@ func (m Model) subagentBar(width int, info, hint string) string {
 // childStatus derives a child session's run status and returns one of:
 // "running", "completed", "error", "cancelled", or "" (unknown).
 //
-// It tries two sources in order, so the count is correct even before the
-// child's message stream is lazily loaded (plan 17 §E2):
-//
-//  1. Parent-derived status (preferred): scans the parent session's task tool
-//     parts for the one whose metadata.sessionId (or <task id="…"> wrapper)
-//     matches childID, and applies opencode's taskStatus derivation
-//     (run/subagent-data.ts:295-309): completed → "completed"; error with
-//     metadata.interrupted == true OR error == "Tool execution aborted" →
-//     "cancelled"; other error → "error"; anything else (pending/running) →
-//     "running". This is in the parent's message stream, which is always
-//     loaded, so it does not suffer the lazy-load gap.
-//  2. Child-stream status (fallback): scans the child's own tool parts. Before
-//     the first loadChildMessagesCmd resolves, the child has no messages and
-//     this branch returns "".
-//
-// The parent-derived path is wire-compatible with opencode (same state fields,
-// same priority order). The cancelled/error distinction (E3) enables the
-// sidebar to distinguish ○ (cancelled) from ◍ (error) like opencode.
+// Plan 20 §1a: reads from m.childStatusMap first (computed once per store
+// change by recomputeChildStatuses). Falls back to the per-child
+// taskChildStatusFromParent + child-stream scan when the child is not in
+// the map (e.g. before the first recompute during bootstrap). The fallback
+// preserves correctness during the gap between store mutation and the
+// recompute call.
 func (m Model) childStatus(childID string) string {
+	if s, ok := m.childStatusMap[childID]; ok {
+		return s
+	}
 	if s := m.taskChildStatusFromParent(childID); s != "" {
 		return s
 	}
@@ -290,6 +280,91 @@ func (m Model) childStatus(childID string) string {
 		return "completed"
 	}
 	return ""
+}
+
+// recomputeChildStatuses builds m.childStatusMap in ONE pass over all
+// sessions (plan 20 §1a). For each session with a ParentID, the parent's
+// task tool parts are scanned once to derive the status via the existing
+// taskStatusFromState logic. The result is stored in m.childStatusMap and
+// read by childStatus on subsequent frames — zero JSON decodes per frame.
+//
+// The scan groups child→parent once (via the sessions slice) then iterates
+// each parent's task parts once, matching the per-child taskChildStatusFromParent
+// derivation but with the outer loop amortised: O(sessions + parent-msgs ×
+// parent-parts) total, vs O(children × parent-msgs × parent-parts) for the
+// per-child call.
+func (m Model) recomputeChildStatuses() Model {
+	// Skip the O(sessions × msgs × parts) scan when the store hasn't
+	// changed since the last recompute. anim ticks, PTY output, composer
+	// keypresses etc. don't change child statuses — only store mutations
+	// (SSE events, direct mutations) do, and those bump store.version.
+	if m.childStatusMap != nil && m.childStatusVersion == m.store.version {
+		return m
+	}
+	if m.childStatusMap == nil {
+		m.childStatusMap = make(map[string]string)
+	}
+	// Clear the map: a recompute reflects the current store state, so any
+	// child not matched below stays absent (and falls back to the per-child
+	// scan in childStatus). This is cheaper than allocating a new map each
+	// call — the map's capacity stays stable across recomputes.
+	for k := range m.childStatusMap {
+		delete(m.childStatusMap, k)
+	}
+	// First pass: collect parents that have children, so we can iterate
+	// each parent's task parts once.
+	parents := map[string]bool{}
+	for _, s := range m.store.sessions {
+		if s.ParentID != "" {
+			parents[s.ParentID] = true
+		}
+	}
+	// For each parent, scan its task tool parts and derive the child's
+	// status. A task part whose childSessionID matches a known child sets
+	// that child's status via taskStatusFromState.
+	for parentID := range parents {
+		for _, msg := range m.store.messages[parentID] {
+			for _, p := range m.store.parts[msg.ID] {
+				if p.Type != "tool" || p.Tool != "task" {
+					continue
+				}
+				var st toolState
+				if !decode(p.State, &st) {
+					continue
+				}
+				cid := childSessionID(st)
+				if cid == "" {
+					continue
+				}
+				// Only record children that exist in the store (the
+				// session slice is the source of truth for "is this id a
+				// child of this parent"). This keeps the map keyed by
+				// known sessions; an unknown childSessionID (e.g. a stale
+				// task part) is ignored.
+				if !m.sessionIsChildOf(cid, parentID) {
+					continue
+				}
+				if _, exists := m.childStatusMap[cid]; !exists {
+					m.childStatusMap[cid] = taskStatusFromState(st)
+				}
+			}
+		}
+	}
+	m.childStatusVersion = m.store.version
+	return m
+}
+
+// sessionIsChildOf reports whether cid is a session in the store with
+// ParentID == parentID. Used by recomputeChildStatuses to confirm a task
+// part's childSessionID refers to a known child before recording its
+// status.
+func (m Model) sessionIsChildOf(cid, parentID string) bool {
+	for _, s := range m.store.sessions {
+		if s.ID == cid {
+			return s.ParentID == parentID
+		}
+	}
+	return false
 }
 
 // taskChildStatusFromParent scans the parent session's task tool parts for the

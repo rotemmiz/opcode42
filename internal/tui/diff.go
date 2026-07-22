@@ -151,6 +151,11 @@ func (m Model) handleDiffKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "esc", "q":
 		m.diff = diffState{} // close + clear
+		// Plan 20: diff closed → re-render chrome so the body layers show
+		// again (modalClassActive flipped to false). The pre-rendered body
+		// is still valid (the diff is read-only); rerenderChrome recomputes
+		// the footer/sidebar + animatingCache for the post-diff state.
+		m = m.rerenderChrome()
 		return m, nil
 	case "down", "j", "n", "]":
 		return m.diffMove(+1), nil
@@ -183,6 +188,10 @@ func (m Model) handleDiffKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.diff.showTree = !m.diff.showTree
 		m.diffTreeHidden = !m.diff.showTree
 		m.persist()
+		// Plan 20: diff tree toggle — the diff overlay is rendered live, so
+		// no pre-render invalidation needed. But rerenderChrome keeps the
+		// animatingCache fresh.
+		m = m.rerenderChrome()
 		return m, nil
 	}
 	return m, nil

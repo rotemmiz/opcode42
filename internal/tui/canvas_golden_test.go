@@ -129,6 +129,11 @@ func TestCanvas_Golden_Session(t *testing.T) {
 		ID: "pa1", MessageID: "msg_a1", Type: "text",
 		Text: "Hi! This is a deterministic assistant reply.",
 	}}
+	// Plan 20: pre-render the body/footer/sidebar after the store is set up.
+	// applyThemeByName above called rerenderFull() with an empty store; this
+	// call re-renders with the seeded store so composeView() serves the
+	// correct content.
+	m = m.rerenderFull()
 	out := m.composeView()
 	assertGolden(t, "canvas-session-100x60-dark.txt", stripANSI(out))
 }
@@ -284,6 +289,9 @@ func TestCanvas_Golden_Permission(t *testing.T) {
 		Tool:       []byte(`{"name":"bash"}`),
 	}}
 	m.permState = newPermissionState()
+	// Plan 20: pre-render after the store is set up (permission is a footer
+	// panel, not a modal — the body stays visible underneath).
+	m = m.rerenderFull()
 	out := m.composeView()
 	assertGolden(t, "canvas-permission-80x24-dark.txt", stripANSI(out))
 }
@@ -315,6 +323,9 @@ func TestCanvas_Golden_Question(t *testing.T) {
 		}},
 	}}
 	m.qBody = questionBodyState{}
+	// Plan 20: pre-render after the store is set up (question is a footer
+	// panel, not a modal — the body stays visible underneath).
+	m = m.rerenderFull()
 	out := m.composeView()
 	assertGolden(t, "canvas-question-80x24-dark.txt", stripANSI(out))
 }

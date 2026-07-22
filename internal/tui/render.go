@@ -3,7 +3,6 @@ package tui
 import (
 	"strconv"
 	"strings"
-	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -20,6 +19,12 @@ import (
 // scroll math never engages. The production canvas path splits the stream and
 // footer into separate layers (plan 17 §A1) so the footer stays pinned across
 // scroll.
+//
+// Plan 20 §6: the footer is pre-rendered in Update (m.footerRendered). The
+// fallback path runs only pre-first-resize (m.width <= 0 || m.height <= 0),
+// before any Update has called renderFooter — so m.footerRendered is empty
+// here and we fall back to a live buildFooter call. This is the rare first-
+// frame path; don't over-engineer it.
 func (m Model) renderSession() string {
 	s := m.styles
 
@@ -35,7 +40,10 @@ func (m Model) renderSession() string {
 	}
 	m.streamWidth = innerW // narrows the stream/composer wrap to the gutter-reduced left column
 
-	footer := m.buildFooter(innerW)
+	footer := m.footerRendered
+	if footer == "" {
+		footer = m.buildFooter(innerW)
+	}
 	if ac := m.autocompleteView(); ac != "" {
 		footer = ac + "\n" + footer // popup sits just above the composer
 	}
@@ -78,38 +86,10 @@ func (m Model) buildFooter(leftW int) string {
 	return strings.Join(footerParts, "\n")
 }
 
-// cachedSidebar returns the rendered sidebar string, cached by content
-// version (plan 19 §3). The sidebar reads session state (child statuses,
-// tokens, MCP count, context limit) but not scroll offset, so during pure
-// scroll the cache hits and the full sidebarView rebuild (gitBranch +
-// childStatus JSON decode loops + many lipgloss.Render calls) is skipped.
-//
-// A time bucket (aligned to the gitBranch TTL) is part of the key so the
-// cache expires when the gitBranch cache expires — otherwise a branch
-// switch after the TTL would leave the cached sidebar showing the old
-// branch indefinitely on an idle session.
-//
-// viewVersion is NOT bumped on animTickMsg, so during animation the sidebar
-// cache hits every frame (the subagent spinner is frozen in the cached
-// output). The status bar spinner (not cached) still advances.
-func (m Model) cachedSidebar() string {
-	key := sidebarCacheKey{
-		storeVersion: m.store.version,
-		sessionID:    m.cfg.SessionID,
-		viewVersion:  m.viewVersion,
-		themeName:    m.themeName,
-		width:        m.width,
-		timeBucket:   time.Now().Unix() / int64(gitBranchTTL.Seconds()),
-	}
-	if s, ok := m.sidebarCache[key]; ok {
-		return s
-	}
-	s := m.sidebarView()
-	if m.sidebarCache != nil {
-		m.sidebarCache[key] = s
-	}
-	return s
-}
+// cachedSidebar was the plan-19 sidebar string cache. Removed in plan 20:
+// the sidebar is now pre-rendered in Update (m.sidebarRendered) and
+// sessionLayers reads the pre-rendered string directly — no View-time
+// rendering.
 
 // sessionStreamBlocks builds the chat-stream block list for a session: the
 // per-message blocks (user/assistant parts) followed by the in-stream
@@ -147,40 +127,10 @@ func (m Model) sessionTitle(sid string) string {
 	return "session " + sid
 }
 
-// cachedBodyLines returns the conversation stream body pre-split into
-// individual lines, cached by content version (plan 19 §2). On a cache hit
-// (same store/view/theme/width as the last frame), the expensive
-// sessionStreamBlocks iteration + JSON decodes + lipgloss renders + the
-// join/split are all skipped; the cached []string is returned directly for
-// viewport windowing. On a miss (content changed), the body is rebuilt,
-// split into lines, cached, and returned.
-//
-// viewVersion is NOT bumped on animTickMsg — the animation tick only changes
-// the spinner glyph (a single character in tool headers), not the body
-// content. So the cache hits between ticks even during animation. The
-// spinner in the cached body is frozen, but the footer's status bar spinner
-// (which is NOT cached) still advances. This is a deliberate trade-off:
-// frozen tool-header spinner vs 10×/s full body rebuild.
-func (m Model) cachedBodyLines(sid string, innerW int) []string {
-	key := bodyLinesKey{
-		storeVersion: m.store.version,
-		sessionID:    sid,
-		viewVersion:  m.viewVersion,
-		themeName:    m.themeName,
-		streamWidth:  innerW,
-	}
-	if lines, ok := m.bodyLinesCache[key]; ok {
-		return lines
-	}
-	header := m.styles.Section.Render(truncate(m.sessionTitle(sid), innerW))
-	blocks := m.sessionStreamBlocks(sid)
-	body := header + "\n\n" + strings.Join(blocks, "\n\n")
-	lines := strings.Split(body, "\n")
-	if m.bodyLinesCache != nil {
-		m.bodyLinesCache[key] = lines
-	}
-	return lines
-}
+// cachedBodyLines was the plan-19 pre-split body line cache. Removed in
+// plan 20: the body is now pre-rendered in Update (m.bodyLines) and
+// sessionLayers windows the pre-rendered lines directly via
+// frameStreamLines — no View-time rendering.
 
 // renderMessage renders one message's parts into stacked blocks.
 func (m Model) renderMessage(msg Message, parts []Part) string {
@@ -531,9 +481,10 @@ func (m Model) frame(body, footer string) string {
 }
 
 // frameStreamLines windows the pre-split body lines to the stream height
-// (plan 19 §2). It takes the cached []string from cachedBodyLines and windows
-// it via scrollregion.Window, which both clamps the offset and pads a short
-// body so the stream region is always exactly bodyH rows.
+// (plan 20 §4). It takes the pre-rendered []string from m.bodyLines
+// (computed in Update) and windows it via scrollregion.Window, which both
+// clamps the offset and pads a short body so the stream region is always
+// exactly bodyH rows.
 func (m Model) frameStreamLines(lines []string, bodyH int) string {
 	if bodyH <= 0 {
 		return strings.Join(lines, "\n")
@@ -619,4 +570,79 @@ func windowFrom(off, count, height int) (int, int) {
 		end = count
 	}
 	return off, end
+}
+
+// renderFooter pre-renders the footer string and computes its height,
+// storing both on the Model (plan 20 §2). Called from rerender() after any
+// footer-affecting mutation. sessionLayers reads m.footerRendered and
+// m.footerHeight directly — zero lipgloss renders in View.
+func (m Model) renderFooter() Model {
+	innerW := m.leftColumnWidth() - 2*streamGutter
+	if innerW < 1 {
+		innerW = 1
+	}
+	m.streamWidth = innerW
+	m.footerRendered = m.buildFooter(innerW)
+	m.footerHeight = lipgloss.Height(m.footerRendered)
+	return m
+}
+
+// renderBodyLines pre-renders the conversation stream body as individual
+// lines (plan 20 §4), storing the result on m.bodyLines. sessionLayers
+// windows this via frameStreamLines — zero rendering in View. The
+// streamWidth is set so contentWidth() returns innerW for this render pass.
+func (m Model) renderBodyLines() Model {
+	sid := m.cfg.SessionID
+	innerW := m.leftColumnWidth() - 2*streamGutter
+	if innerW < 1 {
+		innerW = 1
+	}
+	m.streamWidth = innerW
+	header := m.styles.Section.Render(truncate(m.sessionTitle(sid), innerW))
+	blocks := m.sessionStreamBlocks(sid)
+	body := header + "\n\n" + strings.Join(blocks, "\n\n")
+	m.bodyLines = strings.Split(body, "\n")
+	return m
+}
+
+// rerenderFull recomputes all pre-rendered strings after a state change
+// (plan 20 §7). Called from Update after any mutation that affects the
+// rendered output: store change, theme switch, width change, view toggle,
+// session switch, history ingest. This is the single re-render point —
+// much easier to maintain than 30+ version-counter bump sites.
+//
+// The footer/sidebar/body pre-render is scoped to the session screen; the
+// splash screen renders live via splashLayers (no pre-rendered strings).
+// The streamWidth is set by renderFooter/renderBodyLines to the gutter-
+// reduced inner width; the splash needs the full width, so we skip the
+// pre-render on ScreenSplash to avoid clobbering resizeComposer's width.
+func (m Model) rerenderFull() Model {
+	m = m.recomputeChildStatuses()
+	m.animatingCache = m.computeAnimating()
+	if m.width > 0 && m.height > 0 && m.screen == ScreenSession {
+		m = m.renderFooter()
+		m.sidebarRendered = m.sidebarView()
+		m = m.renderBodyLines()
+	}
+	return m
+}
+
+// rerenderChrome recomputes the chrome (footer + sidebar) + derived state
+// (childStatus + animating) WITHOUT re-rendering the body (plan 20 §7).
+// Used by the animTickMsg handler: the spinner advances (footer + sidebar)
+// but the body content is unchanged between ticks, so the body rebuild is
+// skipped. If the body render is still needed (e.g. a reasoning header
+// spinner is in the body), a subsequent store change will trigger a full
+// rerender.
+//
+// Like rerenderFull, the footer/sidebar pre-render is scoped to the session
+// screen; the splash renders live.
+func (m Model) rerenderChrome() Model {
+	m = m.recomputeChildStatuses()
+	m.animatingCache = m.computeAnimating()
+	if m.width > 0 && m.height > 0 && m.screen == ScreenSession {
+		m = m.renderFooter()
+		m.sidebarRendered = m.sidebarView()
+	}
+	return m
 }

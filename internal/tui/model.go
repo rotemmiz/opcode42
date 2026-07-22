@@ -251,62 +251,41 @@ type Model struct {
 	// toast layer at zToast bottom-right over the base Bg fill (canvas.go).
 	toasts []toast
 
-	// viewVersion is a monotonic counter incremented on every content-
-	// affecting state change OUTSIDE the store (plan 19 §2): view toggles
-	// (hideThinking, expandedThinking, hideTools, images, tool collapse),
-	// sidebar/tasks/shell toggles, theme switch, width/height change,
-	// session switch, and animation frame. Together with store.version,
-	// this forms the cache key for bodyLinesCache — during pure scroll
-	// neither increments, so the cache hits and the full body rebuild is
-	// skipped.
-	viewVersion int
+	// childStatusMap caches child session statuses (childID →
+	// "running"/"completed"/etc) computed once per store change (plan 20
+	// §1a). Without this, childStatus() does O(parent-msgs × parent-parts)
+	// JSON decodes per child per frame — 75% of CPU with 52 subagents. The
+	// map is a reference type; ensureMDCache initialises it on the root
+	// Model so all copies share one map.
+	childStatusMap map[string]string
+	// childStatusVersion tracks the store.version when childStatusMap was
+	// last recomputed. recomputeChildStatuses skips the O(sessions × msgs
+	// × parts) scan when the version is unchanged (e.g. anim ticks, PTY
+	// output, composer keypresses don't change child statuses).
+	childStatusVersion int
 
-	// bodyLinesCache memoizes the pre-split body lines for the conversation
-	// stream (plan 19 §2). Keyed on (storeVersion, sessionID, viewVersion,
-	// themeName, streamWidth). On a cache hit (same content version), the
-	// cached []string is re-windowed directly. The map is a reference type;
-	// ensureMDCache initialises it on the root Model so all copies share
-	// one map.
-	bodyLinesCache bodyLinesCacheMap
+	// animatingCache is the cached result of animating(), computed once per
+	// Update cycle (plan 20 §1b). Without this, animating() iterates all
+	// session messages × parts with JSON decodes every frame (called from
+	// statusBarView).
+	animatingCache bool
 
-	// sidebarCache memoizes the rendered sidebar string by content version
-	// (plan 19 §3). The sidebar reads session state (child statuses, tokens,
-	// MCP server count, context limit) but not scroll offset, so during pure
-	// scroll the cache hits and the full sidebarView rebuild (gitBranch +
-	// childStatus JSON decode loops + ~300 lipgloss.Render calls) is skipped.
-	// The map is a reference type; ensureMDCache initialises it.
-	sidebarCache sidebarCacheMap
+	// footerRendered is the pre-rendered footer string, computed in Update
+	// (plan 20 §2). sessionLayers reads this directly — zero lipgloss
+	// renders in View.
+	footerRendered string
+	// footerHeight is the pre-computed height of footerRendered.
+	footerHeight int
+
+	// sidebarRendered is the pre-rendered sidebar string, computed in
+	// Update (plan 20 §3). sessionLayers reads this directly.
+	sidebarRendered string
+
+	// bodyLines is the pre-rendered body as individual lines, computed in
+	// Update (plan 20 §4). View() just windows this via frameStreamLines —
+	// zero rendering in View.
+	bodyLines []string
 }
-
-// bodyLinesKey is the cache key for bodyLinesCache (plan 19 §2).
-type bodyLinesKey struct {
-	storeVersion int
-	sessionID    string
-	viewVersion  int
-	themeName    string
-	streamWidth  int
-}
-
-// bodyLinesCacheMap maps cache keys to pre-split body line slices.
-type bodyLinesCacheMap map[bodyLinesKey][]string
-
-// sidebarCacheKey is the cache key for sidebarCache (plan 19 §3).
-type sidebarCacheKey struct {
-	storeVersion int
-	sessionID    string
-	viewVersion  int
-	themeName    string
-	width        int
-	// timeBucket expires the cache entry at the same cadence as the
-	// gitBranch TTL (5s). The sidebar renders gitBranch(dir), which is
-	// TTL-cached separately; without this bucket, a branch switch after
-	// the TTL expires would leave the cached sidebar showing the old
-	// branch indefinitely (no other key field changes on an idle session).
-	timeBucket int64
-}
-
-// sidebarCacheMap maps cache keys to sidebar strings.
-type sidebarCacheMap map[sidebarCacheKey]string
 
 // pickDefaultTheme returns the appropriate default theme name based on whether
 // the terminal has a dark background. This mirrors opencode's theme_mode_lock
@@ -422,6 +401,11 @@ func New(cfg Config) Model {
 	// derived from this root share a non-nil map (maps are reference types).
 	m.ensureMDCache()
 	m.ensureDiffCache()
+	// Plan 20 §1b: initialise the animatingCache from the current state so
+	// Init()'s maybeKickAnim() works on the first frame (splash screen →
+	// animatingCache is true). Subsequent updates recompute this in the
+	// rerender() path.
+	m.animatingCache = m.computeAnimating()
 	return m
 }
 
@@ -431,7 +415,6 @@ func New(cfg Config) Model {
 // behind everything so foreground-only renderers stay legible on any terminal.
 func (m Model) applyTheme(name string, p theme.Palette) Model {
 	m.themeName = name
-	m.viewVersion++
 	m.styles = theme.New(p)
 	txt := lipgloss.NewStyle().Foreground(p.Fg).Background(p.Bg)
 	ph := lipgloss.NewStyle().Foreground(p.FgGhost).Background(p.Bg)
@@ -456,6 +439,9 @@ func (m Model) applyTheme(name string, p theme.Palette) Model {
 	} else {
 		m.input.Blur()
 	}
+	// Plan 20: a theme switch re-styles every pre-rendered string. Recompute
+	// all of them so View() serves the new palette immediately.
+	m = m.rerenderFull()
 	return m
 }
 
@@ -544,11 +530,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.viewVersion++
 		m = m.resizeComposer()
 		if cmd := m.resizePTY(); cmd != nil {
 			return m, cmd
 		}
+		// Plan 20: width/height change re-wraps the body, footer, and
+		// sidebar. Recompute all pre-rendered strings.
+		m = m.rerenderFull()
 		return m, nil
 
 	case tea.PasteMsg:
@@ -564,6 +552,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input, cmd = m.input.Update(msg)
 		m = m.resizeComposer()
 		m, acCmd = m.refreshAutocomplete()
+		// Plan 20: composer text changed → re-render the footer (and sidebar,
+		// in case the composer grew and shifted the body/sidebar boundary).
+		m = m.rerenderFull()
 		return m, tea.Batch(cmd, acCmd)
 
 	case tea.MouseWheelMsg:
@@ -593,6 +584,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// An open-but-unfocused terminal: ctrl+] closes it.
 		if m.pty.open && msg.String() == "ctrl+]" {
 			m.closePTY()
+			// Plan 20: PTY closed → re-render footer (PTY pane removed).
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		// Any non-ctrl+c keypress cancels the armed two-press exit guard
@@ -613,6 +606,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.SetValue("")
 				m = m.resizeComposer()
 				m, acCmd := m.refreshAutocomplete()
+				// Plan 20: composer cleared → re-render footer.
+				m = m.rerenderFull()
 				return m, acCmd
 			}
 			if m.exiting {
@@ -625,6 +620,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			m.exiting = true
+			// Plan 20: exit guard armed → status bar shows the EXIT chip.
+			m = m.rerenderChrome()
 			return m, exitTickCmd()
 		}
 		// A pending permission blocks everything until answered.
@@ -676,7 +673,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.modal, m.modalSel = modalPalette, 0
 			return m, nil
 		case "ctrl+t":
-			return m.cycleVariant(), nil // cycle model variants (opencode variant_cycle)
+			m = m.cycleVariant() // cycle model variants (opencode variant_cycle)
+			// Plan 20: variant changed → re-render footer (status bar variant
+			// chip).
+			m = m.rerenderChrome()
+			return m, nil
 		case "ctrl+up", "pgup":
 			// Scroll the stream one step toward older content. These keys
 			// never reach the composer, so the input box behaviour (plain
@@ -723,12 +724,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.shellMode && strings.TrimSpace(m.input.Value()) == "" {
 				m.shellMode = true
 				m.input.Placeholder = m.composerPlaceholder()
+				// Plan 20: shell mode changes the composer accent + placeholder.
+				m = m.rerenderChrome()
 				return m, nil
 			}
 		case "esc":
 			if m.shellMode {
 				m.shellMode = false
 				m.input.Placeholder = m.composerPlaceholder()
+				// Plan 20: shell mode exited → re-render footer.
+				m = m.rerenderChrome()
 				return m, nil
 			}
 		case "backspace":
@@ -738,6 +743,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.shellMode && m.input.Line() == 0 && m.input.LineInfo().CharOffset == 0 {
 				m.shellMode = false
 				m.input.Placeholder = m.composerPlaceholder()
+				// Plan 20: shell mode exited → re-render footer.
+				m = m.rerenderChrome()
 				return m, nil
 			}
 		case "enter":
@@ -749,30 +756,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input, cmd = m.input.Update(msg)
 		m = m.resizeComposer()             // auto-grow to fit the new content
 		m, acCmd = m.refreshAutocomplete() // open/refresh the "/" or "@" popup
+		// Plan 20: composer text changed → re-render footer.
+		m = m.rerenderFull()
 		return m, tea.Batch(cmd, acCmd)
 
 	case sessionOpenedMsg:
 		if msg.err != nil {
 			m.status = "create session failed: " + msg.err.Error()
+			// Plan 20: status changed → re-render footer (status bar).
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		if msg.session.ID == "" { // daemon returned 200 + {} or similar
 			m.status, m.modal = "create session: empty response", modalNone
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		m.store.sessions = upsertSession(m.store.sessions, msg.session)
 		m.store.version++
 		m.cfg.SessionID, m.screen, m.modal = msg.session.ID, ScreenSession, modalNone
-		m.viewVersion++
 		// Reset animation frame so the sweep starts from the left in the new session.
 		m.animFrame = 0
 		// Entering the session screen — the bg-pulse is splash-only (plan 08e §B2).
 		m.view.bgPulse = false
+		// Plan 20: session switch → re-render body + footer + sidebar.
+		m = m.rerenderFull()
 		return m, nil
 
 	case sessionDeletedMsg:
 		if msg.err != nil {
 			m.status = "delete failed: " + msg.err.Error()
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		for _, dm := range m.store.messages[msg.id] { // drop the session's parts too
@@ -787,18 +803,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cfg.SessionID == msg.id { // the open session was deleted
 			if ss := m.orderedSessions(); len(ss) > 0 {
 				m.cfg.SessionID = ss[0].ID
+				// Plan 20: session switched → re-render body + footer + sidebar.
+				m = m.rerenderFull()
 				return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
 			}
 			m.cfg.SessionID, m.screen = "", ScreenSplash
 			// Re-entering the splash — kick the logo shimmer tick (plan 08c M10)
 			// and re-enable the bg-pulse (plan 08e §B2).
 			m.view.bgPulse = true
+			// Plan 20: screen changed → re-render chrome (no body on splash).
+			m = m.rerenderChrome()
 			return m, m.maybeKickAnim()
 		}
+		// Plan 20: store changed → re-render all.
+		m = m.rerenderFull()
 		return m, nil
 
 	case connectedMsg:
 		m.conn, m.status, m.attempt = Connected, "connected", 0
+		// Plan 20: status changed → re-render footer (status bar).
+		m = m.rerenderChrome()
 		// Subscribe to events, bootstrap the session list, resolve the model, and
 		// preload the provider + command catalogs so the switcher/slash popup open
 		// populated.
@@ -807,7 +831,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case configLoadedMsg:
 		if !m.model.ok() {
 			m.model = promptModel{Provider: msg.provider, Model: msg.model}
-			m.viewVersion++ // sidebar reads contextLimitForActiveModel (m.model)
+			// Plan 20: model changed → re-render footer (status bar shows the
+			// model) + sidebar (context limit reads m.model).
+			m = m.rerenderFull()
 		}
 		return m, nil
 
@@ -815,14 +841,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			if m.modal == modalModels {
 				m.status = "providers: " + msg.err.Error()
+				// Plan 20: status changed → re-render footer.
+				m = m.rerenderChrome()
 			}
 			return m, nil
 		}
 		m.choices = msg.choices
-		m.viewVersion++             // sidebar reads contextLimitForActiveModel (m.choices)
 		if m.modal == modalModels { // re-highlight the active model now the list is in
 			m.modalSel = m.modelSelIndex()
 		}
+		// Plan 20: provider catalog changed → re-render sidebar (context limit
+		// reads m.choices) + footer (status bar model label).
+		m = m.rerenderFull()
 		return m, nil
 
 	case commandsLoadedMsg:
@@ -835,10 +865,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			if m.modal == modalAgents {
 				m.status = "agents: " + msg.err.Error()
+				// Plan 20: status changed → re-render footer.
+				m = m.rerenderChrome()
 			}
 			return m, nil
 		}
 		m.agents = msg.items
+		agentDropped := false
 		if m.agent != "" { // drop a selection the (re)connected daemon no longer offers
 			found := false
 			for _, a := range m.agents {
@@ -849,24 +882,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if !found {
 				m.agent = ""
+				agentDropped = true
 			}
 		}
 		if m.modal == modalAgents { // re-highlight the active agent now the list is in
 			m.modalSel = m.agentSelIndex()
+		}
+		// Plan 20: if the active agent was dropped, the status bar mode chip
+		// changed — re-render the footer.
+		if agentDropped {
+			m = m.rerenderChrome()
 		}
 		return m, nil
 
 	case sessionCreatedMsg:
 		if msg.err != nil {
 			m.status = "create session failed: " + msg.err.Error()
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		m.store.sessions = upsertSession(m.store.sessions, msg.session)
 		m.store.version++
 		m.cfg.SessionID = msg.session.ID
-		m.viewVersion++
 		m.screen = ScreenSession
 		m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
+		// Plan 20: session switch → re-render body + footer + sidebar.
+		m = m.rerenderFull()
 		if msg.command != "" { // a "/command" created this session — run it
 			return m, runCommandCmd(m.ctx, m.client, msg.session.ID, msg.command, msg.arguments)
 		}
@@ -875,6 +917,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case promptSentMsg:
 		if msg.err != nil {
 			m.status = "prompt failed: " + msg.err.Error()
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 		}
 		return m, nil
 
@@ -884,11 +928,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.status = "reverted"
 		}
+		// Plan 20: status changed → re-render footer.
+		m = m.rerenderChrome()
 		return m, nil
 
 	case renamedMsg:
 		if msg.err != nil {
 			m.status = "rename failed: " + msg.err.Error()
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		if msg.session.ID != "" {
@@ -896,11 +944,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.store.version++
 		}
 		m.status = "renamed"
+		// Plan 20: store + status changed → re-render all (sidebar shows title).
+		m = m.rerenderFull()
 		return m, nil
 
 	case sharedMsg:
 		if msg.err != nil {
 			m.status = "share failed: " + msg.err.Error()
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		if msg.session.ID != "" {
@@ -910,12 +962,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.shared {
 			if sh := msg.session.Share; sh != nil && sh.URL != "" {
 				m.status = "shared · " + sh.URL + " (copied)"
+				// Plan 20: store + status changed → re-render all.
+				m = m.rerenderFull()
 				return m, copyClipboardCmd(sh.URL)
 			}
 			m.status = "shared"
 		} else {
 			m.status = "unshared"
 		}
+		// Plan 20: store + status changed → re-render all.
+		m = m.rerenderFull()
 		return m, nil
 
 	case summarizedMsg:
@@ -924,6 +980,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.status = "summarizing context…"
 		}
+		// Plan 20: status changed → re-render footer.
+		m = m.rerenderChrome()
 		return m, nil
 
 	case abortedMsg:
@@ -933,44 +991,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.status = "interrupt failed: " + msg.err.Error()
 			cmd := m.pushToast(toastError, "interrupt failed")
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, cmd
 		}
 		m.status = "interrupted"
 		cmd := m.pushToast(toastInfo, "interrupted")
+		// Plan 20: status changed → re-render footer.
+		m = m.rerenderChrome()
 		return m, cmd
 
 	case forkedMsg:
 		if msg.err != nil {
 			m.status = "fork failed: " + msg.err.Error()
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		if msg.session.ID == "" {
 			m.status = "fork: empty response"
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		m.store.sessions = upsertSession(m.store.sessions, msg.session)
 		m.store.version++
 		m.cfg.SessionID, m.screen = msg.session.ID, ScreenSession
-		m.viewVersion++
 		m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
 		m.status = "forked"
+		// Plan 20: session switch → re-render body + footer + sidebar.
+		m = m.rerenderFull()
 		return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
 
 	case mcpLoadedMsg:
 		if msg.err != nil {
 			if m.modal == modalMCP {
 				m.status = "mcp: " + msg.err.Error()
+				// Plan 20: status changed → re-render footer.
+				m = m.rerenderChrome()
 			}
 			return m, nil
 		}
 		m.mcpServers = msg.items
-		m.viewVersion++ // sidebar reads mcpServers for LSP count
+		// Plan 20: MCP count changed → re-render sidebar (LSP count) + footer.
+		m = m.rerenderFull()
 		return m, nil
 
 	case skillsLoadedMsg:
 		if msg.err != nil {
 			if m.modal == modalSkills {
 				m.status = "skills: " + msg.err.Error()
+				// Plan 20: status changed → re-render footer.
+				m = m.rerenderChrome()
 			}
 			return m, nil
 		}
@@ -982,6 +1054,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The inline m.status text is already set by the caller (e.g. "copied turn"
 		// or "copied last response") — the toast augments rather than replaces it.
 		cmd := m.pushToast(toastSuccess, "copied to clipboard")
+		// Plan 20: a toast was pushed → re-render chrome (toast layer).
+		m = m.rerenderChrome()
 		return m, cmd
 
 	case editorDoneMsg:
@@ -996,11 +1070,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.status = "editor: " + msg.err.Error()
 		}
+		// Plan 20: composer text or status changed → re-render footer.
+		m = m.rerenderChrome()
 		return m, nil
 
 	case shellSentMsg:
 		if msg.err != nil {
 			m.status = "shell failed: " + msg.err.Error()
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 		}
 		return m, nil
 
@@ -1017,16 +1095,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.permRequestID = ""
 				m.store.permissions = removeByID(m.store.permissions, msg.id, func(q Permission) string { return q.ID })
 				m.store.version++
+				// Plan 20: store changed → re-render all.
+				m = m.rerenderFull()
 				return m, nil
 			}
 			// Keep the request so the user can retry — the daemon is still blocked.
 			m.status = "permission reply failed (try again): " + msg.err.Error()
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		m.permState = newPermissionState()
 		m.permRequestID = ""
 		m.store.permissions = removeByID(m.store.permissions, msg.id, func(q Permission) string { return q.ID })
 		m.store.version++
+		// Plan 20: store changed → re-render all.
+		m = m.rerenderFull()
 		return m, nil
 
 	case questionRepliedMsg:
@@ -1046,7 +1130,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.store.questions = removeByID(m.store.questions, msg.id, func(x Question) string { return x.ID })
 				m.store.version++
-				return m.resetQuestion(), nil
+				m = m.resetQuestion()
+				// Plan 20: store changed → re-render all.
+				m = m.rerenderFull()
+				return m, nil
 			}
 			// Plan 08e §E4: a non-404 error means the daemon rejected the
 			// reply (e.g. transient 500). The deferred SSE event (if any) is
@@ -1055,6 +1142,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// state.
 			m.qDeferredSSE = opcode42client.SSEEvent{}
 			m.status = "question reply failed (try again): " + msg.err.Error()
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		// Plan 08e §E4: record the finalized question for the in-stream
@@ -1076,7 +1165,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.store.questions = removeByID(m.store.questions, msg.id, func(x Question) string { return x.ID })
 		m.store.version++
-		return m.resetQuestion(), nil
+		m = m.resetQuestion()
+		// Plan 20: store changed → re-render all.
+		m = m.rerenderFull()
+		return m, nil
 
 	case permissionsReconciledMsg:
 		// E3: REPLACE the store's pending permissions with the freshly-fetched
@@ -1085,6 +1177,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil {
 			m.store.permissions = msg.permissions
 			m.store.version++
+			// Plan 20: store changed → re-render all.
+			m = m.rerenderFull()
 		}
 		return m, nil
 
@@ -1100,6 +1194,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if questionID(m.pendingQuestion()) != prevQ {
 				m = m.resetQuestion()
 			}
+			// Plan 20: store changed → re-render all.
+			m = m.rerenderFull()
 		}
 		return m, nil
 
@@ -1122,13 +1218,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Open the requested session, else the newest.
 		if m.cfg.SessionID == "" && len(msg.sessions) > 0 {
 			m.cfg.SessionID = msg.sessions[0].ID
-			m.viewVersion++
 		}
 		if m.cfg.SessionID != "" {
 			m.screen = ScreenSession
 			m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
+			// Plan 20: session switch + store changed → re-render all (the
+			// subsequent messagesLoadedMsg will trigger another re-render once
+			// the stream is loaded).
+			m = m.rerenderFull()
 			return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
 		}
+		// Plan 20: store changed → re-render all.
+		m = m.rerenderFull()
 		return m, nil
 
 	case messagesLoadedMsg:
@@ -1144,10 +1245,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tasksOpen && m.cfg.SessionID != "" {
 			cmds = append(cmds, loadTodosCmd(m.ctx, m.client, m.cfg.SessionID))
 		}
+		// Plan 20: history ingest → re-render body + footer + sidebar
+		// (recompute childStatuses covers the new messages).
+		m = m.rerenderFull()
 		return m, tea.Batch(cmds...)
 
 	case connErrMsg:
 		m.conn, m.err = ConnError, msg.err
+		// Plan 20: status changed → re-render footer.
+		m = m.rerenderChrome()
 		return m, nil
 
 	case streamOpenedMsg:
@@ -1156,6 +1262,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "reconnecting…"
 			cmd := backoffCmd(m.attempt)
 			m.attempt++
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, cmd
 		}
 		if m.stream != nil {
@@ -1164,6 +1272,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stream = msg.stream
 		m.conn = Connected
 		m.attempt = 0 // a successful reopen resets the backoff
+		// Plan 20: status changed → re-render footer.
+		m = m.rerenderChrome()
 		// E3: re-fetch the pending permission/question lists on reconnect — the
 		// daemon may have cancelled one without an SSE event (agent finalizer),
 		// leaving a stale entry in the store. REPLACE the store's slices with the
@@ -1222,6 +1332,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.status = fmt.Sprintf("connected · %d events · %d sessions", m.eventCount, len(m.store.sessions))
+		// Plan 20: store changed → re-render body + footer + sidebar
+		// (recompute childStatuses covers the new/updated task parts).
+		m = m.rerenderFull()
 		cmds := []tea.Cmd{listenCmd(m.stream)}
 		// Ring the bell when the agent blocks on input — the terminal may be unfocused.
 		if msg.ev.Type == "permission.asked" || msg.ev.Type == "question.asked" {
@@ -1250,6 +1363,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case todosLoadedMsg:
 		if msg.err == nil && msg.sessionID == m.cfg.SessionID {
 			m.todos = msg.todos
+			// Plan 20: todos changed → re-render footer (tasks dock).
+			m = m.rerenderChrome()
 		}
 		return m, nil
 
@@ -1259,6 +1374,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.store.sessions = upsertSession(m.store.sessions, ss)
 			}
 			m.store.version++
+			// Plan 20: store changed → re-render all (recompute childStatuses
+			// covers the new children).
+			m = m.rerenderFull()
 		}
 		return m, nil
 
@@ -1272,6 +1390,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil {
 			m.store = m.store.ingestHistory(msg.childID, msg.items)
 			m.store.version++
+			// Plan 20: store changed → re-render body (task card transcript)
+			// + footer + sidebar.
+			m = m.rerenderFull()
 		}
 		return m, nil
 
@@ -1303,9 +1424,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pty.connecting = false
 		if msg.err != nil {
 			m.pty.err = msg.err
+			// Plan 20: PTY state changed → re-render footer (PTY pane shows
+			// the error).
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		m.pty.id, m.pty.conn = msg.id, msg.conn
+		// Plan 20: PTY connected → re-render footer (PTY pane now visible).
+		m = m.rerenderChrome()
 		// Reconcile the size: the layout may have changed while dialing (when
 		// id was empty, resizePTY couldn't push it to the daemon yet).
 		return m, tea.Batch(
@@ -1320,6 +1446,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.pty.term != nil {
 			_, _ = m.pty.term.Write(msg.data)
 		}
+		// Plan 20: PTY output arrived → re-render footer (PTY pane content).
+		// The PTY terminal is drawn from m.pty.term's screen; the footer layer
+		// must be rebuilt so the new cells show.
+		m = m.rerenderChrome()
 		if m.pty.conn != nil { // keep pumping while connected
 			return m, ptyReadCmd(m.pty.conn, m.pty.gen)
 		}
@@ -1334,6 +1464,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.pty.err = msg.err
 		}
+		// Plan 20: PTY closed → re-render footer (PTY pane removed/errored).
+		m = m.rerenderChrome()
 		return m, nil
 
 	case sseClosedMsg:
@@ -1345,6 +1477,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = "reconnecting…"
 		cmd := backoffCmd(m.attempt)
 		m.attempt++
+		// Plan 20: status changed → re-render footer.
+		m = m.rerenderChrome()
 		return m, cmd
 
 	case reconnectMsg:
@@ -1365,25 +1499,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the queue in-place; once empty toastsLive() returns false, animating()
 		// may return false (if no tools are running), and the tick self-stops.
 		m.toastTick()
+		// Plan 20: recompute animatingCache BEFORE checking it. The tick fires
+		// asynchronously; a tool may have completed (via sseEventMsg) since the
+		// last Update, so the cached value may be stale. This is the one place
+		// the cache is recomputed in the check path rather than after a
+		// mutation — the tick is the only async event that needs a fresh
+		// animating() read without a prior mutation.
+		m.animatingCache = m.computeAnimating()
 		if m.animating() {
 			m.animFrame++
-			// Note: viewVersion is NOT bumped here. The animTick only changes
-			// the spinner glyph (a single character in tool headers + the
-			// status bar). The body content (messages, parts, text) is
-			// unchanged between ticks. Not bumping viewVersion lets the
-			// bodyLines/sidebar caches hit between ticks — the spinner in the
-			// cached body is frozen, but the footer's status bar spinner
-			// (which is NOT cached) still advances. This is a deliberate
-			// trade-off: frozen tool-header spinner vs 10×/s full body rebuild.
+			// Plan 20: the animTick advances the spinner glyph in the footer
+			// (status bar) and the sidebar (task list). The body content is
+			// unchanged between ticks, so rerenderChrome() (footer + sidebar +
+			// childStatus + animating) is enough — the body rebuild is
+			// skipped. If a reasoning header spinner is in the body, a
+			// subsequent sseEventMsg (the next delta) will trigger a full
+			// rerender.
+			m = m.rerenderChrome()
 			return m, animTickCmd()
 		}
 		// Not animating — stop; the next animating state will re-kick via maybeKickAnim.
+		// Plan 20: still re-render chrome once so the final frame reflects the
+		// stopped state (e.g. the spinner is gone).
+		m = m.rerenderChrome()
 		return m, nil
 
 	case exitTickMsg:
 		// The two-press exit guard timed out (opencode footer.ts:954-961):
 		// cancel the armed exit so the status bar drops the EXIT chip.
 		m.exiting = false
+		// Plan 20: exit guard cleared → re-render footer (EXIT chip gone).
+		m = m.rerenderChrome()
 		return m, nil
 
 	// discoverStartedMsg (plan 08e §D2): the mDNS browser has opened. Stash
@@ -1529,6 +1675,8 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			} else {
 				m.status = "sessions: flat"
 			}
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 		}
 		return m, nil
 	case "ctrl+d":
@@ -1550,6 +1698,8 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if txt := m.messageText(items[m.modalSel].messageID); txt != "" {
 					m.modal, m.modalSel = modalNone, 0
 					m.status = "copied turn"
+					// Plan 20: status changed → re-render footer.
+					m = m.rerenderChrome()
 					return m, copyClipboardCmd(txt)
 				}
 			}
@@ -1662,21 +1812,30 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "b":
 		m.sidebarHidden = !m.sidebarHidden
-		m.viewVersion++
-		return m.resizeComposer(), nil // width changed → re-fit the composer
+		m = m.resizeComposer() // width changed → re-fit the composer
+		// Plan 20: sidebar visibility toggled → re-render all (width changed).
+		m = m.rerenderFull()
+		return m, nil
 	case "t":
 		m.tasksOpen = !m.tasksOpen
-		m.viewVersion++
 		if m.tasksOpen {
+			// Plan 20: tasks dock opened → re-render footer (dock shows).
+			m = m.rerenderChrome()
 			return m, loadTodosCmd(m.ctx, m.client, m.cfg.SessionID)
 		}
+		// Plan 20: tasks dock closed → re-render footer (dock hidden).
+		m = m.rerenderChrome()
 		return m, nil
 	case "y":
 		if txt := m.lastAssistantText(); txt != "" {
 			m.status = "copied last response"
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, copyClipboardCmd(txt)
 		}
 		m.status = "nothing to copy"
+		// Plan 20: status changed → re-render footer.
+		m = m.rerenderChrome()
 		return m, nil
 	case "r":
 		// ctrl+x r toggles the ThinkingMode collapse/expand (plan 17 §D1):
@@ -1688,12 +1847,14 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// opencode ThinkingMode vocabulary ("show" / "hide") rather than the
 		// on/off toggle style other display toggles use.
 		m.view.hideThinking = !m.view.hideThinking
-		m.viewVersion++
 		if m.view.hideThinking {
 			m.status = "thinking: hide"
 		} else {
 			m.status = "thinking: show"
 		}
+		// Plan 20: view toggle affects body (reasoning rendering) + footer
+		// (status hint).
+		m = m.rerenderFull()
 		return m, nil
 	case "f":
 		// ctrl+x f toggles the per-reasoning expanded signal (plan 17 §D1):
@@ -1703,17 +1864,19 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// (opencode's ReasoningHeader ignores `open` when toggleable is
 		// false — index.tsx:1594-1597, 1657-1659).
 		m.view.expandedThinking = !m.view.expandedThinking
-		m.viewVersion++
 		if m.view.expandedThinking {
 			m.status = "thought: expanded"
 		} else {
 			m.status = "thought: collapsed"
 		}
+		// Plan 20: view toggle affects body (reasoning rendering) + footer.
+		m = m.rerenderFull()
 		return m, nil
 	case "o":
 		m.view.hideTools = !m.view.hideTools
-		m.viewVersion++
 		m.status = toggleHint("tool output", !m.view.hideTools)
+		// Plan 20: view toggle affects body (tool rows) + footer (status).
+		m = m.rerenderFull()
 		return m, nil
 	case "v":
 		// Toggle collapse on the last tool part (plan 08c M7 per-tool collapse).
@@ -1722,18 +1885,24 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// the inline transcript populates on first expand (plan 08e §C1).
 		if id := m.lastToolPartID(); id != "" {
 			m.view = m.view.toggleToolCollapse(id)
-			m.viewVersion++
 			if m.view.isToolCollapsed(id) {
 				m.status = "tool output: collapsed"
 			} else {
 				m.status = "tool output: expanded"
+			}
+			// Plan 20: tool collapse toggle affects body (tool output panel)
+			// + footer (status).
+			m = m.rerenderFull()
+			if !m.view.isToolCollapsed(id) {
 				if cmd := m.maybeLoadTaskChildMessages(id); cmd != nil {
 					return m, cmd
 				}
 			}
-		} else {
-			m.status = "no tool to fold"
+			return m, nil
 		}
+		m.status = "no tool to fold"
+		// Plan 20: status changed → re-render footer.
+		m = m.rerenderChrome()
 		return m, nil
 	case ">":
 		// Descend into the last task tool's child session (plan 08e §C1).
@@ -1746,18 +1915,38 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if task := m.lastTaskPart(); task != nil {
 			st, _ := parseToolState(task.State)
 			if cid := childSessionID(st); cid != "" {
-				return m.openSession(cid)
+				var cmd tea.Cmd
+				m, cmd = m.openSession(cid)
+				// Plan 20: session switch → re-render all.
+				m = m.rerenderFull()
+				return m, cmd
 			}
 		}
-		return m.enterFirstChild()
+		nm, cmd := m.enterFirstChild()
+		m = nm.(Model)
+		// Plan 20: session switch → re-render all.
+		m = m.rerenderFull()
+		return m, cmd
 	case "e":
 		return m, openEditorCmd(m.input.Value())
 	case "d":
-		return m.openDiff() // full-screen diff reviewer
+		var cmd tea.Cmd
+		m, cmd = m.openDiff() // full-screen diff reviewer
+		// Plan 20: diff reviewer open → re-render chrome (modal layer reads
+		// the diff state; body is skipped by modalClassActive).
+		m = m.rerenderChrome()
+		return m, cmd
 	case "`":
-		return m.focusOrOpenPTY() // embedded terminal (ctrl+] to exit)
+		nm, cmd := m.focusOrOpenPTY() // embedded terminal (ctrl+] to exit)
+		m = nm.(Model)
+		// Plan 20: PTY pane opened → re-render footer (PTY pane shows).
+		m = m.rerenderChrome()
+		return m, cmd
 	case "w":
-		return m.stashDraft(), nil // park the current composer draft
+		m = m.stashDraft() // park the current composer draft
+		// Plan 20: composer cleared → re-render footer.
+		m = m.rerenderChrome()
+		return m, nil
 	case "i":
 		// Toggle inline image rendering for image file parts (plan 08e §E2).
 		// Default off: most terminals can't decode Sixel/iTerm2 escapes and
@@ -1766,17 +1955,34 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// escape (Sixel or iTerm2 inline) or falls back to a placeholder
 		// glyph when no support is advertised.
 		m.view.images = !m.view.images
-		m.viewVersion++
 		m.status = toggleHint("images", m.view.images)
+		// Plan 20: view toggle affects body (image rendering) + footer.
+		m = m.rerenderFull()
 		return m, nil
 	case "down":
-		return m.enterFirstChild() // descend into the first sub-agent child
+		nm, cmd := m.enterFirstChild() // descend into the first sub-agent child
+		m = nm.(Model)
+		// Plan 20: session switch → re-render all.
+		m = m.rerenderFull()
+		return m, cmd
 	case "up":
-		return m.gotoParent() // return to the parent session
+		nm, cmd := m.gotoParent() // return to the parent session
+		m = nm.(Model)
+		// Plan 20: session switch → re-render all.
+		m = m.rerenderFull()
+		return m, cmd
 	case "]":
-		return m.cycleSibling(+1) // next sibling sub-agent
+		nm, cmd := m.cycleSibling(+1) // next sibling sub-agent
+		m = nm.(Model)
+		// Plan 20: session switch → re-render all.
+		m = m.rerenderFull()
+		return m, cmd
 	case "[":
-		return m.cycleSibling(-1) // previous sibling sub-agent
+		nm, cmd := m.cycleSibling(-1) // previous sibling sub-agent
+		m = nm.(Model)
+		// Plan 20: session switch → re-render all.
+		m = m.rerenderFull()
+		return m, cmd
 	}
 	return m, nil
 }
@@ -1792,6 +1998,8 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	m.exiting = false // sending a prompt cancels the armed exit guard
 	if !m.model.ok() {
 		m.status = "no model configured (pass --provider/--model)"
+		// Plan 20: status changed → re-render footer.
+		m = m.rerenderChrome()
 		return m, nil
 	}
 	m = m.pushHistory(text) // remember the submission for up/down recall
@@ -1802,15 +2010,21 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 		m.shellMode = false
 		if m.cfg.SessionID == "" {
 			m.status = "open a session before running a shell command"
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, nil
 		}
 		m.input.SetValue("")
 		m = m.resizeComposer()
+		// Plan 20: composer cleared + shell mode exited → re-render footer.
+		m = m.rerenderChrome()
 		return m, shellCmd(m.ctx, m.client, m.cfg.SessionID, text, m.effectiveAgent(), m.model)
 	}
 	m.input.SetValue("")
 	m = m.resizeComposer() // collapse back to one row
 	m.scroll.ToTail()      // a new prompt snaps the stream back to the live tail
+	// Plan 20: composer cleared → re-render footer.
+	m = m.rerenderChrome()
 	if m.cfg.SessionID == "" {
 		return m, createSessionCmd(m.ctx, m.client, text)
 	}
@@ -1822,13 +2036,15 @@ const scrollStep = 3
 
 // scrollBodyHeight returns the height of the stream viewport (screen height
 // minus the footer's height) — the dimension the half-page scroll keys (plan
-// 17 §A3) scale against. Computed from the shared buildFooter helper so it
-// agrees with the canvas path's bodyH derivation in sessionLayers.
+// 17 §A3) scale against. Plan 20: reads the pre-computed m.footerHeight
+// (set by renderFooter in Update) so no lipgloss.Height call here. Falls
+// back to a live buildFooter measurement when the pre-rendered height
+// isn't available yet (e.g. pre-first-resize).
 func (m Model) scrollBodyHeight() int {
 	if m.height <= 0 {
 		return 1
 	}
-	h := m.height - lipgloss.Height(m.buildFooter(m.leftColumnWidth()))
+	h := m.height - m.footerHeight
 	if h < 1 {
 		h = 1
 	}

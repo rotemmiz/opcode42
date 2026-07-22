@@ -157,7 +157,7 @@ func newTestModel(sessionID string) Model {
 // TestAnimatingFalseAtIdle asserts animating() is false with no parts.
 func TestAnimatingFalseAtIdle(t *testing.T) {
 	m := newTestModel("s1")
-	if m.animating() {
+	if m.computeAnimating() {
 		t.Error("animating() should be false with no messages")
 	}
 }
@@ -165,7 +165,7 @@ func TestAnimatingFalseAtIdle(t *testing.T) {
 // TestAnimatingFalseNoSession asserts animating() is false with no session ID.
 func TestAnimatingFalseNoSession(t *testing.T) {
 	m := newTestModel("")
-	if m.animating() {
+	if m.computeAnimating() {
 		t.Error("animating() should be false with no session ID")
 	}
 }
@@ -181,7 +181,7 @@ func TestAnimatingTrueRunningTool(t *testing.T) {
 		{ID: "p1", MessageID: "msg1", SessionID: "s1", Type: "tool",
 			State: makeToolPartState("running")},
 	}
-	if !m.animating() {
+	if !m.computeAnimating() {
 		t.Error("animating() should be true when a tool part is running")
 	}
 }
@@ -196,7 +196,7 @@ func TestAnimatingTruePendingTool(t *testing.T) {
 		{ID: "p1", MessageID: "msg1", SessionID: "s1", Type: "tool",
 			State: makeToolPartState("pending")},
 	}
-	if !m.animating() {
+	if !m.computeAnimating() {
 		t.Error("animating() should be true when a tool part is pending")
 	}
 }
@@ -214,7 +214,7 @@ func TestAnimatingFalseCompletedTools(t *testing.T) {
 		{ID: "p2", MessageID: "msg1", SessionID: "s1", Type: "tool",
 			State: makeToolPartState("error")},
 	}
-	if m.animating() {
+	if m.computeAnimating() {
 		t.Error("animating() should be false when all tools are completed/error")
 	}
 }

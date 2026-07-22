@@ -41,6 +41,7 @@ package tui
 
 import (
 	"math"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -322,6 +323,15 @@ func (m Model) footerPanelActive() bool {
 // ran the window over the joined string, which made the footer a suffix of
 // the scrollable content — the root cause of bug #1 (composer/status bar
 // rode the scroll).
+//
+// Plan 20: the footer, sidebar, and body are pre-rendered in Update
+// (m.footerRendered, m.sidebarRendered, m.bodyLines). sessionLayers just
+// windows the body and composites the pre-rendered strings — zero
+// lipgloss rendering in View. When the pre-rendered buffers are empty
+// (e.g. a test that calls renderView() without going through Update), the
+// path falls back to a live render so the output is still correct. The
+// fallback is NOT on the hot path — the production Update loop always
+// populates the buffers before View is called.
 func (m Model) sessionLayers() []*lipgloss.Layer {
 	var layers []*lipgloss.Layer
 
@@ -331,47 +341,57 @@ func (m Model) sessionLayers() []*lipgloss.Layer {
 		innerW = 1
 	}
 	// Set the stream column's inner width so contentWidth() returns innerW
-	// and the body / footer wrap at the gutter-reduced width. The receiver
-	// is a value copy; this write does NOT mutate the caller's model — it
-	// only affects this render pass (contentWidth is read below).
+	// for any View-time reads (e.g. overlay layers that still render). The
+	// pre-rendered body/footer were rendered with the same innerW in Update.
 	m.streamWidth = innerW
 
-	// Footer: composer + status bar (and the tasks/pty/subagent strips above
-	// the composer when present). Stacked bottom-up via the shared buildFooter
-	// helper (plan 17 §A1) so the fallback path (renderSession) and this path
-	// agree on the stacking order. The autocomplete popup is NOT part of the
-	// footer — it composes as its own overlay layer at zPopup.
-	footer := m.frameFooter(m.buildFooter(innerW))
-	footerH := lipgloss.Height(footer)
+	// Footer: pre-rendered in Update (m.footerRendered). The height is
+	// pre-computed (m.footerHeight) so no lipgloss.Height call in View. When
+	// the pre-rendered footer is empty (pre-Update fallback), render it live.
+	footer := m.footerRendered
+	footerH := m.footerHeight
+	if footer == "" {
+		footer = m.buildFooter(innerW)
+		footerH = lipgloss.Height(footer)
+	}
+	footer = m.frameFooter(footer)
 	bodyH := m.height - footerH
 	if bodyH < 1 {
 		bodyH = 1
 	}
 
-	// Body: the conversation stream, windowed to the stream height. The body
-	// is positioned at the top of the left column (offset by streamGutter so
-	// the 2-col left gutter is blank base Bg); only this layer scrolls, and
-	// the window is computed over the body alone (the footer is not a
-	// suffix), so the scroll math never touches the footer.
-	sid := m.cfg.SessionID
-	bodyLines := m.cachedBodyLines(sid, innerW)
+	// Body: the pre-rendered m.bodyLines (computed in Update) are windowed
+	// via frameStreamLines. When the pre-rendered buffer is empty (pre-Update
+	// fallback), render it live so the output is still correct.
+	bodyLines := m.bodyLines
+	if len(bodyLines) == 0 {
+		header := m.styles.Section.Render(truncate(m.sessionTitle(m.cfg.SessionID), innerW))
+		blocks := m.sessionStreamBlocks(m.cfg.SessionID)
+		body := header + "\n\n" + strings.Join(blocks, "\n\n")
+		bodyLines = strings.Split(body, "\n")
+	}
 	stream := m.frameStreamLines(bodyLines, bodyH)
 	layers = append(layers, lipgloss.NewLayer(stream).X(streamGutter).Y(0).Z(zPane))
 
 	// Footer layer: pinned at Y=bodyH so it never moves with the scroll. The
 	// footer string is unchanged across scroll offsets — the only way the
 	// composer/status bar can move is if the footer's own height changes
-	// (e.g. the composer grows to a second row), which re-derives bodyH.
-	// Positioned at X(streamGutter) so the composer + status bar are inset
-	// by the same gutter as the stream (plan 18 §B2).
+	// (e.g. the composer grows to a second row), which re-derives bodyH in
+	// Update. Positioned at X(streamGutter) so the composer + status bar are
+	// inset by the same gutter as the stream (plan 18 §B2).
 	layers = append(layers, lipgloss.NewLayer(footer).X(streamGutter).Y(bodyH).Z(zPane))
 
-	// Sidebar: right column, full height. Its own layer so it z-orders
-	// above the body's trailing cells (the body is width-restricted to
-	// innerW starting at X(streamGutter), so the 2-col right gutter between
-	// the stream and the sidebar at X(leftW) is blank base Bg).
+	// Sidebar: pre-rendered in Update (m.sidebarRendered). Right column,
+	// full height. When the pre-rendered sidebar is empty (pre-Update
+	// fallback), render it live. Its own layer z-orders above the body's
+	// trailing cells (the body is width-restricted to innerW starting at
+	// X(streamGutter), so the 2-col right gutter between the stream and the
+	// sidebar at X(leftW) is blank base Bg).
 	if m.sidebarVisible() {
-		sidebar := m.cachedSidebar()
+		sidebar := m.sidebarRendered
+		if sidebar == "" {
+			sidebar = m.sidebarView()
+		}
 		layers = append(layers, lipgloss.NewLayer(sidebar).X(leftW).Y(0).Z(zPane))
 	}
 

@@ -134,7 +134,7 @@ func TestToastTickDrainsAll(t *testing.T) {
 func TestAnimatingTrueWhileToastLive(t *testing.T) {
 	m := newToastModel()
 	m.toasts = []toast{liveToast(toastSuccess, "copied")}
-	if !m.animating() {
+	if !m.computeAnimating() {
 		t.Error("animating() should be true while a live toast is queued")
 	}
 }
@@ -144,7 +144,7 @@ func TestAnimatingTrueWhileToastLive(t *testing.T) {
 func TestAnimatingFalseAfterToastExpires(t *testing.T) {
 	m := newToastModel()
 	m.toasts = []toast{expiredToast(toastInfo, "old")}
-	if m.animating() {
+	if m.computeAnimating() {
 		t.Error("animating() should be false when all toasts are expired")
 	}
 }

@@ -126,109 +126,123 @@ func TestRenderSession_SurfacesAssistantError(t *testing.T) {
 	}
 }
 
-// TestBodyLines_CachedOnScroll verifies that cachedBodyLines returns the same
-// []string on a cache hit (pure scroll — only m.scroll.Offset changes).
-func TestBodyLines_CachedOnScroll(t *testing.T) {
+// TestBodyLines_StableOnScroll verifies that the pre-rendered body lines
+// (m.bodyLines) are unchanged across pure scroll (plan 20 §4). renderBodyLines
+// is called once in Update; View just windows the pre-rendered slice via
+// frameStreamLines — zero rendering on scroll. The test re-renders once,
+// scrolls, and asserts the lines are byte-identical (no re-render happened).
+func TestBodyLines_StableOnScroll(t *testing.T) {
 	m := seededSessionModel(t)
-	finalizeReasoning(&m) // stop animating() so the cache is written
+	finalizeReasoning(&m)
 	m.ensureMDCache()
-	innerW := m.width - 2*streamGutter
+	m = m.rerenderFull()
 
-	lines1 := m.cachedBodyLines(m.cfg.SessionID, innerW)
+	lines1 := append([]string(nil), m.bodyLines...)
 	if len(lines1) == 0 {
-		t.Fatal("first call returned no lines")
+		t.Fatal("renderBodyLines produced no lines")
 	}
 
+	// Pure scroll: only m.scroll.Offset changes. The pre-rendered body is NOT
+	// recomputed (Update isn't called), so m.bodyLines is unchanged.
 	m.scroll.Back(3)
 
-	lines2 := m.cachedBodyLines(m.cfg.SessionID, innerW)
-	if len(lines1) != len(lines2) {
-		t.Fatalf("cache miss on scroll: lines1=%d lines2=%d", len(lines1), len(lines2))
+	if len(m.bodyLines) != len(lines1) {
+		t.Fatalf("body lines changed on scroll: was=%d got=%d", len(lines1), len(m.bodyLines))
 	}
 	for i := range lines1 {
-		if lines1[i] != lines2[i] {
-			t.Fatalf("line %d differs on scroll:\n  was: %q\n  got: %q", i, lines1[i], lines2[i])
+		if m.bodyLines[i] != lines1[i] {
+			t.Fatalf("line %d differs on scroll:\n  was: %q\n  got: %q", i, lines1[i], m.bodyLines[i])
 		}
 	}
 }
 
-// TestBodyLines_InvalidatedOnStoreChange verifies that a store mutation
-// (via Reduce) invalidates the cache.
-func TestBodyLines_InvalidatedOnStoreChange(t *testing.T) {
+// TestBodyLines_UpdatedOnStoreChange verifies that a store mutation followed
+// by rerenderFull() rebuilds the pre-rendered body (plan 20 §4). The
+// rendered body reflects the new content.
+func TestBodyLines_UpdatedOnStoreChange(t *testing.T) {
 	m := seededSessionModel(t)
 	finalizeReasoning(&m)
 	m.ensureMDCache()
-	innerW := m.width - 2*streamGutter
+	m = m.rerenderFull()
 
-	lines1 := m.cachedBodyLines(m.cfg.SessionID, innerW)
 	v1 := m.store.version
-
 	m.store = m.store.Reduce(ev("message.part.delta", map[string]any{
 		"messageID": "msg_2", "partID": "prt_4", "field": "text", "delta": " Updated!",
 	}))
 	if m.store.version <= v1 {
 		t.Fatal("store.version did not increment after Reduce")
 	}
+	m = m.rerenderFull()
 
-	lines2 := m.cachedBodyLines(m.cfg.SessionID, innerW)
 	found := false
-	for _, line := range lines2 {
+	for _, line := range m.bodyLines {
 		if strings.Contains(stripANSI(line), "Updated!") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatal("cache miss did not rebuild: appended text not found")
+		t.Fatal("rerenderFull did not rebuild: appended text not found in m.bodyLines")
 	}
-	_ = lines1
 }
 
-// TestBodyLines_InvalidatedOnViewToggle verifies that a view-state toggle
-// (viewVersion++) invalidates the cache.
-func TestBodyLines_InvalidatedOnViewToggle(t *testing.T) {
+// TestBodyLines_UpdatedOnViewToggle verifies that a view-state toggle
+// followed by rerenderFull() rebuilds the pre-rendered body (plan 20 §4).
+// The rendered body reflects the new view state (e.g. thinking shown).
+func TestBodyLines_UpdatedOnViewToggle(t *testing.T) {
 	m := seededSessionModel(t)
 	finalizeReasoning(&m)
 	m.ensureMDCache()
-	innerW := m.width - 2*streamGutter
+	m = m.rerenderFull()
+	lines1 := append([]string(nil), m.bodyLines...)
 
-	lines1 := m.cachedBodyLines(m.cfg.SessionID, innerW)
 	m.view.hideThinking = false
-	m.viewVersion++
-	lines2 := m.cachedBodyLines(m.cfg.SessionID, innerW)
+	m = m.rerenderFull()
 
 	same := true
-	if len(lines1) != len(lines2) {
+	if len(lines1) != len(m.bodyLines) {
 		same = false
 	} else {
 		for i := range lines1 {
-			if lines1[i] != lines2[i] {
+			if m.bodyLines[i] != lines1[i] {
 				same = false
 				break
 			}
 		}
 	}
 	if same {
-		t.Fatal("view toggle did not invalidate cache — body is identical")
+		t.Fatal("view toggle + rerenderFull did not rebuild — body is identical")
 	}
 }
 
-// TestBodyLines_InvalidatedOnWidthChange verifies that a width change
-// invalidates the cache.
-func TestBodyLines_InvalidatedOnWidthChange(t *testing.T) {
+// TestBodyLines_UpdatedOnWidthChange verifies that a width change followed
+// by rerenderFull() rebuilds the pre-rendered body at the new width.
+func TestBodyLines_UpdatedOnWidthChange(t *testing.T) {
 	m := seededSessionModel(t)
 	finalizeReasoning(&m)
 	m.ensureMDCache()
-	innerW := m.width - 2*streamGutter
+	m = m.rerenderFull()
+	lines1 := append([]string(nil), m.bodyLines...)
 
-	m.cachedBodyLines(m.cfg.SessionID, innerW)
 	m.width = 120
-	m.viewVersion++
-	newInnerW := m.width - 2*streamGutter
-	m.cachedBodyLines(m.cfg.SessionID, newInnerW)
+	m = m.rerenderFull()
 
-	if len(m.bodyLinesCache) < 2 {
-		t.Fatal("width change did not create a new cache entry")
+	// The body should have been re-rendered at the new width. A different
+	// width produces different wrapping → at least one line differs (or the
+	// line count differs).
+	same := true
+	if len(lines1) != len(m.bodyLines) {
+		same = false
+	} else {
+		for i := range lines1 {
+			if m.bodyLines[i] != lines1[i] {
+				same = false
+				break
+			}
+		}
+	}
+	if same {
+		t.Fatal("width change + rerenderFull did not rebuild — body is identical")
 	}
 }
 
@@ -244,38 +258,42 @@ func finalizeReasoning(m *Model) {
 	}
 }
 
-// TestSidebarCache_HitOnScroll verifies that cachedSidebar returns the same
-// string on a cache hit (pure scroll — only m.scroll.Offset changes).
-func TestSidebarCache_HitOnScroll(t *testing.T) {
+// TestSidebar_StableOnScroll verifies that the pre-rendered sidebar string
+// (m.sidebarRendered) is unchanged across pure scroll (plan 20 §3). The
+// sidebar is rendered once in Update; View composites the pre-rendered
+// string directly — zero rendering on scroll.
+func TestSidebar_StableOnScroll(t *testing.T) {
 	m := seededSessionModel(t)
 	finalizeReasoning(&m)
 	m.ensureMDCache()
 	m.sidebarHidden = false // sidebar visible
+	m = m.rerenderFull()
 
-	s1 := m.cachedSidebar()
+	s1 := m.sidebarRendered
 	if s1 == "" {
-		t.Fatal("first call returned empty sidebar")
+		t.Fatal("renderSidebar produced an empty string")
 	}
 
+	// Pure scroll: only m.scroll.Offset changes. The pre-rendered sidebar is
+	// NOT recomputed, so m.sidebarRendered is unchanged.
 	m.scroll.Back(3)
 
-	s2 := m.cachedSidebar()
-	if s1 != s2 {
-		t.Fatal("cache miss on scroll — sidebar should be byte-identical")
+	if m.sidebarRendered != s1 {
+		t.Fatal("sidebar changed on scroll — should be byte-identical (pre-rendered)")
 	}
 }
 
-// TestSidebarCache_InvalidatedOnStoreChange verifies that a store mutation
-// invalidates the sidebar cache.
-func TestSidebarCache_InvalidatedOnStoreChange(t *testing.T) {
+// TestSidebar_UpdatedOnStoreChange verifies that a store mutation followed
+// by rerenderFull() rebuilds the pre-rendered sidebar (plan 20 §3).
+func TestSidebar_UpdatedOnStoreChange(t *testing.T) {
 	m := seededSessionModel(t)
 	finalizeReasoning(&m)
 	m.ensureMDCache()
 	m.sidebarHidden = false
+	m = m.rerenderFull()
+	s1 := m.sidebarRendered
 
-	s1 := m.cachedSidebar()
 	v1 := m.store.version
-
 	// Apply a store change (new session.updated event — changes the sidebar's
 	// session title + token display).
 	m.store = m.store.Reduce(ev("session.updated", map[string]any{"info": map[string]any{
@@ -284,12 +302,119 @@ func TestSidebarCache_InvalidatedOnStoreChange(t *testing.T) {
 	if m.store.version <= v1 {
 		t.Fatal("store.version did not increment")
 	}
+	m = m.rerenderFull()
 
-	s2 := m.cachedSidebar()
-	// The sidebar should have been rebuilt (cache miss → new entry).
-	if len(m.sidebarCache) < 2 {
-		t.Fatal("store change did not create a new cache entry")
+	// The sidebar should have been rebuilt (the title changed → the sidebar
+	// content differs).
+	if m.sidebarRendered == s1 {
+		t.Fatal("store change + rerenderFull did not rebuild the sidebar")
 	}
-	_ = s1
-	_ = s2
+}
+
+// TestChildStatusMap_RecomputedOnStoreChange verifies that
+// recomputeChildStatuses builds the childStatusMap from the store's task
+// tool parts, and that childStatus reads from the map (plan 20 §1a).
+// With 52 subagents this is the difference between 75% of CPU (per-child
+// per-frame JSON decode) and O(1) map lookup.
+func TestChildStatusMap_RecomputedOnStoreChange(t *testing.T) {
+	m := seedParentWithTaskChildren(t, 3, "running")
+	// Before recompute, the map is empty (childStatus falls back to the
+	// per-child scan).
+	m.childStatusMap = nil
+	if m.childStatus("ses_child_a") == "" {
+		t.Fatal("childStatus fallback should still work with a nil map")
+	}
+
+	// After recompute, the map is populated and childStatus reads from it.
+	m = m.recomputeChildStatuses()
+	if len(m.childStatusMap) != 3 {
+		t.Fatalf("recomputeChildStatuses should populate 3 children, got %d", len(m.childStatusMap))
+	}
+	for _, cid := range []string{"ses_child_a", "ses_child_b", "ses_child_c"} {
+		if got := m.childStatus(cid); got != "running" {
+			t.Fatalf("childStatus(%q) = %q, want %q (from map)", cid, got, "running")
+		}
+	}
+
+	// A store change (one child completes) → recompute → map reflects the
+	// new status.
+	m.store = m.store.Reduce(ev("message.part.updated", map[string]any{
+		"part": map[string]any{
+			"id": "p_task_a", "messageID": "msg_parent",
+			"type": "tool", "tool": "task",
+			"state": map[string]any{
+				"status": "completed",
+				"input":  map[string]any{"description": "do work", "subagent_type": "general", "prompt": "x"},
+				"metadata": map[string]any{
+					"sessionId":       "ses_child_a",
+					"parentSessionId": "ses_parent",
+				},
+			},
+		},
+	}))
+	m = m.recomputeChildStatuses()
+	if got := m.childStatus("ses_child_a"); got != "completed" {
+		t.Fatalf("after store change + recompute, childStatus(ses_child_a) = %q, want %q", got, "completed")
+	}
+	if got := m.childStatus("ses_child_b"); got != "running" {
+		t.Fatalf("unchanged child: childStatus(ses_child_b) = %q, want %q", got, "running")
+	}
+}
+
+// TestView_NoRenderingOnScroll verifies that View() performs no rendering
+// when only the scroll offset changes (plan 20 acceptance test). The
+// pre-rendered buffers (m.bodyLines, m.footerRendered, m.sidebarRendered)
+// are unchanged across pure scroll; View just windows the pre-rendered
+// slice via frameStreamLines and composites the pre-rendered strings.
+//
+// This test asserts the invariant by snapshotting the pre-rendered buffers,
+// scrolling, and verifying the buffers are byte-identical. The View output
+// changes (the windowed slice differs) but the pre-rendered source does not.
+func TestView_NoRenderingOnScroll(t *testing.T) {
+	m := longSessionModel(t)
+	// Disable the sidebar so the test focuses on the body + footer (the
+	// sidebar adds width-dependent content that shifts on resize).
+	m.sidebarHidden = true
+	m.ensureMDCache()
+	m = m.rerenderFull()
+
+	// Snapshot the pre-rendered buffers.
+	bodyLines := append([]string(nil), m.bodyLines...)
+	footer := m.footerRendered
+	footerH := m.footerHeight
+
+	if len(bodyLines) == 0 {
+		t.Fatal("renderBodyLines produced no lines")
+	}
+
+	// Pure scroll: only m.scroll.Offset changes. No Update is called, so no
+	// re-render happens. The pre-rendered buffers must be unchanged.
+	m.scroll.Back(5)
+
+	if len(m.bodyLines) != len(bodyLines) {
+		t.Fatalf("bodyLines changed on scroll: was=%d got=%d", len(bodyLines), len(m.bodyLines))
+	}
+	for i := range bodyLines {
+		if m.bodyLines[i] != bodyLines[i] {
+			t.Fatalf("bodyLines[%d] changed on scroll — View should not re-render", i)
+		}
+	}
+	if m.footerRendered != footer {
+		t.Fatal("footerRendered changed on scroll — View should not re-render")
+	}
+	if m.footerHeight != footerH {
+		t.Fatal("footerHeight changed on scroll — View should not re-render")
+	}
+
+	// The View output should still be correct (the windowed slice reflects
+	// the new scroll offset). The scrolled view should differ from the tail
+	// view — if it doesn't, scroll isn't working.
+	m0 := m
+	m0.scroll.Offset = 0
+	tail := stripANSI(m0.composeView())
+	m.scroll.Offset = 1000 // clamped to the top
+	back := stripANSI(m.composeView())
+	if tail == back {
+		t.Fatal("scrolling changed nothing — View output is identical at tail and top")
+	}
 }

@@ -484,6 +484,10 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 		if id := m.sessionIDAtModalSel(); id != "" {
 			m.cfg.SessionID = id
 			m.screen = ScreenSession
+			// Plan 20: session switch → re-render all (the subsequent
+			// messagesLoadedMsg will trigger another re-render once the
+			// stream is loaded).
+			m = m.rerenderFull()
 			return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
 		}
 	case modalModels:
@@ -491,15 +495,19 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 		if m.modalSel < len(m.choices) {
 			ch := m.choices[m.modalSel]
 			m.model = promptModel{Provider: ch.Provider, Model: ch.Model} // switching model resets the variant
-			m.viewVersion++                                               // sidebar reads contextLimitForActiveModel (m.model)
 			m.status = "model · " + m.model.label()
 			m.persist() // remember the model across runs
+			// Plan 20: model changed → re-render footer (status bar shows the
+			// model) + sidebar (context limit reads m.model).
+			m = m.rerenderFull()
 		}
 	case modalAgents:
 		m.modal = modalNone
 		if m.modalSel < len(m.agents) {
 			m.agent = m.agents[m.modalSel].name
 			m.status = "agent · " + m.agent
+			// Plan 20: agent changed → re-render footer (status bar mode chip).
+			m = m.rerenderChrome()
 		}
 	case modalThemes:
 		m.modal = modalNone
@@ -513,6 +521,8 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 		m.modal = modalNone
 		if m.modalSel < len(items) {
 			m.status = "reverting…"
+			// Plan 20: status changed → re-render footer.
+			m = m.rerenderChrome()
 			return m, revertCmd(m.ctx, m.client, m.cfg.SessionID, items[m.modalSel].messageID)
 		}
 	case modalVariant:
@@ -522,11 +532,17 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 			m.model.Variant = vs[m.modalSel]
 			m.status = "variant · " + m.model.Variant
 			m.persist()
+			// Plan 20: variant changed → re-render footer (status bar variant
+			// chip).
+			m = m.rerenderChrome()
 		}
 	case modalStash:
 		i := m.modalSel
 		m.modal, m.modalSel = modalNone, 0
-		return m.popStash(i), nil
+		m = m.popStash(i)
+		// Plan 20: composer text + status changed → re-render footer.
+		m = m.rerenderChrome()
+		return m, nil
 	case modalStatus, modalMCP, modalSkills, modalHelp:
 		m.modal = modalNone // read-only — enter just closes
 	case modalConnect:
