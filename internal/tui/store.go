@@ -206,11 +206,17 @@ type store struct {
 	questions         []Question                    // pending question requests (FIFO)
 	answeredQuestions map[string][]AnsweredQuestion // sessionID -> finalized questions (plan 08e §E4)
 
-	// version is a monotonic counter incremented on every Reduce call
-	// (plan 19 §1). It is the single reliable "content changed" signal:
-	// the reducer is the only mutation point for store state, so any SSE
-	// event that changes the store bumps this. Render caches key on it to
-	// skip rebuilding byte-identical output during pure scroll.
+	// version is a monotonic counter incremented on every Reduce call and
+	// on every direct store mutation in model.go (plan 19 §1). It is the
+	// single reliable "content changed" signal: render caches key on it to
+	// skip rebuilding byte-identical output during pure scroll. Every code
+	// path that mutates store fields OUTSIDE Reduce must also bump this —
+	// see the direct-mutation sites in model.go (sessionOpenedMsg,
+	// sessionDeletedMsg, sessionCreatedMsg, renamedMsg, sharedMsg,
+	// forkedMsg, permissionRepliedMsg, questionRepliedMsg,
+	// permissionsReconciledMsg, questionsReconciledMsg, sessionsLoadedMsg,
+	// messagesLoadedMsg, childrenLoadedMsg, childMessagesLoadedMsg) and
+	// question.go (recordAnsweredQuestion).
 	version int
 }
 

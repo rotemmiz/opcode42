@@ -703,6 +703,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.store.sessions = upsertSession(m.store.sessions, msg.session)
+		m.store.version++
 		m.cfg.SessionID, m.screen, m.modal = msg.session.ID, ScreenSession, modalNone
 		// Reset animation frame so the sweep starts from the left in the new session.
 		m.animFrame = 0
@@ -720,6 +721,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.store.sessions = removeSession(m.store.sessions, msg.id)
 		delete(m.store.messages, msg.id)
+		m.store.version++
 		if m.modalSel > 0 && m.modalSel >= m.modalCount() {
 			m.modalSel = m.modalCount() - 1
 		}
@@ -799,6 +801,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.store.sessions = upsertSession(m.store.sessions, msg.session)
+		m.store.version++
 		m.cfg.SessionID = msg.session.ID
 		m.screen = ScreenSession
 		m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
@@ -828,6 +831,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.session.ID != "" {
 			m.store.sessions = upsertSession(m.store.sessions, msg.session)
+			m.store.version++
 		}
 		m.status = "renamed"
 		return m, nil
@@ -839,6 +843,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.session.ID != "" {
 			m.store.sessions = upsertSession(m.store.sessions, msg.session)
+			m.store.version++
 		}
 		if msg.shared {
 			if sh := msg.session.Share; sh != nil && sh.URL != "" {
@@ -882,6 +887,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.store.sessions = upsertSession(m.store.sessions, msg.session)
+		m.store.version++
 		m.cfg.SessionID, m.screen = msg.session.ID, ScreenSession
 		m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
 		m.status = "forked"
@@ -946,6 +952,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.permState = newPermissionState()
 				m.permRequestID = ""
 				m.store.permissions = removeByID(m.store.permissions, msg.id, func(q Permission) string { return q.ID })
+				m.store.version++
 				return m, nil
 			}
 			// Keep the request so the user can retry — the daemon is still blocked.
@@ -955,6 +962,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.permState = newPermissionState()
 		m.permRequestID = ""
 		m.store.permissions = removeByID(m.store.permissions, msg.id, func(q Permission) string { return q.ID })
+		m.store.version++
 		return m, nil
 
 	case questionRepliedMsg:
@@ -973,6 +981,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.qDeferredSSE = opcode42client.SSEEvent{}
 				}
 				m.store.questions = removeByID(m.store.questions, msg.id, func(x Question) string { return x.ID })
+				m.store.version++
 				return m.resetQuestion(), nil
 			}
 			// Plan 08e §E4: a non-404 error means the daemon rejected the
@@ -1002,6 +1011,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.qDeferredSSE = opcode42client.SSEEvent{}
 		}
 		m.store.questions = removeByID(m.store.questions, msg.id, func(x Question) string { return x.ID })
+		m.store.version++
 		return m.resetQuestion(), nil
 
 	case permissionsReconciledMsg:
@@ -1010,6 +1020,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// unchanged — a flaky GET must not wipe the UI.
 		if msg.err == nil {
 			m.store.permissions = msg.permissions
+			m.store.version++
 		}
 		return m, nil
 
@@ -1021,6 +1032,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil {
 			prevQ := questionID(m.pendingQuestion())
 			m.store.questions = msg.questions
+			m.store.version++
 			if questionID(m.pendingQuestion()) != prevQ {
 				m = m.resetQuestion()
 			}
@@ -1042,6 +1054,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, ss := range msg.sessions {
 			m.store.sessions = upsertSession(m.store.sessions, ss)
 		}
+		m.store.version++
 		// Open the requested session, else the newest.
 		if m.cfg.SessionID == "" && len(msg.sessions) > 0 {
 			m.cfg.SessionID = msg.sessions[0].ID
@@ -1056,6 +1069,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messagesLoadedMsg:
 		if msg.err == nil {
 			m.store = m.store.ingestHistory(msg.sessionID, msg.items)
+			m.store.version++
 		}
 		m.todos = nil // todos are per-session; refetch for the opened one if the dock is up
 		cmds := []tea.Cmd{}
@@ -1179,6 +1193,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for _, ss := range msg.children {
 				m.store.sessions = upsertSession(m.store.sessions, ss)
 			}
+			m.store.version++
 		}
 		return m, nil
 
@@ -1191,6 +1206,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// card to retry.
 		if msg.err == nil {
 			m.store = m.store.ingestHistory(msg.childID, msg.items)
+			m.store.version++
 		}
 		return m, nil
 
