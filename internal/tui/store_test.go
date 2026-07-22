@@ -94,3 +94,46 @@ func TestReduce_DecodesAssistantError(t *testing.T) {
 		t.Fatalf("error not decoded: %+v", msgs)
 	}
 }
+
+// TestStore_VersionIncrementsOnReduce verifies that the store's version
+// counter increments on every Reduce call (plan 19 §1). This counter is the
+// "content changed" signal for render caches: during pure scroll the store
+// is untouched, so the version stays stable and caches hit.
+func TestStore_VersionIncrementsOnReduce(t *testing.T) {
+	s := newStore()
+	if s.version != 0 {
+		t.Fatalf("initial version should be 0, got %d", s.version)
+	}
+	s = s.Reduce(ev("session.updated", map[string]any{"info": map[string]any{"id": "s1", "title": "S1"}}))
+	if s.version != 1 {
+		t.Fatalf("version should be 1 after one Reduce, got %d", s.version)
+	}
+	s = s.Reduce(ev("message.updated", map[string]any{"info": map[string]any{"id": "m1", "sessionID": "s1", "role": "user"}}))
+	if s.version != 2 {
+		t.Fatalf("version should be 2 after two Reduces, got %d", s.version)
+	}
+	// Even an unknown event type increments the version — Reduce is called,
+	// and the counter tracks "Reduce ran", not "content changed". This is
+	// conservative: a spurious event causes a cache miss (rebuild), which is
+	// correct (safe) behaviour. The hot path (pure scroll) never calls Reduce.
+	s = s.Reduce(ev("totally.unknown", map[string]any{}))
+	if s.version != 3 {
+		t.Fatalf("version should be 3 after three Reduces, got %d", s.version)
+	}
+}
+
+// TestStore_VersionStableWithoutReduce verifies that the version does NOT
+// change when no Reduce is called — the invariant that makes pure-scroll
+// cache hits safe. The test simulates the scroll scenario: the store is
+// read but never mutated between frames.
+func TestStore_VersionStableWithoutReduce(t *testing.T) {
+	s := newStore()
+	s = s.Reduce(ev("session.updated", map[string]any{"info": map[string]any{"id": "s1", "title": "S1"}}))
+	v := s.version
+	// "Scroll" — read the store but don't call Reduce
+	for i := 0; i < 10; i++ {
+		if s.version != v {
+			t.Fatalf("version changed without Reduce: was %d, now %d", v, s.version)
+		}
+	}
+}

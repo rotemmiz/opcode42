@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"os/exec"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -369,5 +372,145 @@ func TestSidebar_FooterHasMicroLogo(t *testing.T) {
 	// Note: "•" may appear elsewhere (LSP dot), so we check the specific chip form.
 	if strings.Contains(plain, "• Opcode42") {
 		t.Errorf("sidebar footer still has the old '• Opcode42' bullet form — micro-mark not applied\n%s", plain)
+	}
+}
+
+// TestGitBranch_CachedWithinTTL verifies that gitBranch results are cached
+// per directory for gitBranchTTL (plan 19 §4). Without the cache, sidebarView
+// calls gitBranch on every frame — spawning an exec.Command subprocess
+// 20-200×/s during scroll. The cache is a sync.Map so it survives Model
+// value-copies.
+func TestGitBranch_CachedWithinTTL(t *testing.T) {
+	dir := t.TempDir()
+	// Init a git repo with a commit so HEAD exists and rev-parse works.
+	mustGitRepo(t, dir, "test-branch")
+
+	// Clear the cache for this dir to ensure a clean start.
+	gitBranchCache.Delete(dir)
+
+	// First call — should spawn the subprocess and cache the result.
+	branch1 := gitBranch(dir)
+	if branch1 != "test-branch" {
+		t.Fatalf("first call: expected branch %q, got %q", "test-branch", branch1)
+	}
+
+	// Verify the cache entry was stored.
+	v, ok := gitBranchCache.Load(dir)
+	if !ok {
+		t.Fatal("cache entry not stored after first call")
+	}
+	entry := v.(gitBranchEntry)
+	if entry.branch != "test-branch" {
+		t.Fatalf("cached branch = %q, want %q", entry.branch, "test-branch")
+	}
+
+	// Second call within TTL — should return the cached value without
+	// spawning a new subprocess. We verify by checking the cache still holds
+	// the same entry (same fetched timestamp).
+	branch2 := gitBranch(dir)
+	if branch2 != branch1 {
+		t.Fatalf("second call: expected %q, got %q", branch1, branch2)
+	}
+	v2, _ := gitBranchCache.Load(dir)
+	entry2 := v2.(gitBranchEntry)
+	if !entry.fetched.Equal(entry2.fetched) {
+		t.Fatal("cache entry was overwritten on second call — TTL not respected")
+	}
+}
+
+// TestGitBranch_EmptyDirReturnsEmpty verifies that gitBranch("") returns ""
+// without touching the cache or spawning a subprocess.
+func TestGitBranch_EmptyDirReturnsEmpty(t *testing.T) {
+	if got := gitBranch(""); got != "" {
+		t.Fatalf("gitBranch(\"\") = %q, want \"\"", got)
+	}
+}
+
+// TestGitBranch_NonGitDirReturnsEmpty verifies that gitBranch on a directory
+// that is not a git repo returns "" and caches that result (so subsequent
+// calls don't keep trying to run git).
+func TestGitBranch_NonGitDirReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	gitBranchCache.Delete(dir)
+
+	if got := gitBranch(dir); got != "" {
+		t.Fatalf("gitBranch(non-git dir) = %q, want \"\"", got)
+	}
+	// The empty result should be cached so the next call doesn't spawn git again.
+	v, ok := gitBranchCache.Load(dir)
+	if !ok {
+		t.Fatal("empty result not cached for non-git dir")
+	}
+	if v.(gitBranchEntry).branch != "" {
+		t.Fatalf("cached branch for non-git dir = %q, want \"\"", v.(gitBranchEntry).branch)
+	}
+}
+
+// TestGitBranch_CacheExpiresAfterTTL verifies that after the TTL expires, a
+// new call re-runs git and updates the cache. This ensures a branch switch is
+// picked up without a TUI restart.
+func TestGitBranch_CacheExpiresAfterTTL(t *testing.T) {
+	dir := t.TempDir()
+	mustGitRepo(t, dir, "branch-1")
+	gitBranchCache.Delete(dir)
+
+	// Prime the cache.
+	if got := gitBranch(dir); got != "branch-1" {
+		t.Fatalf("first call: got %q, want %q", got, "branch-1")
+	}
+
+	// Manually backdate the cache entry to simulate TTL expiry.
+	gitBranchCache.Store(dir, gitBranchEntry{
+		branch:  "branch-1",
+		fetched: time.Now().Add(-(gitBranchTTL + time.Second)),
+	})
+
+	// Rename the branch so the next git call returns a different result.
+	if err := exec.Command("git", "-C", dir, "branch", "-m", "branch-2").Run(); err != nil {
+		t.Skipf("git branch -m failed: %v — skipping", err)
+	}
+
+	// After TTL expiry, the call should re-run git and pick up the new branch.
+	got := gitBranch(dir)
+	if got != "branch-2" {
+		t.Fatalf("after TTL: got %q, want %q", got, "branch-2")
+	}
+}
+
+// TestGitBranch_CacheConcurrentAccess verifies the sync.Map cache is safe for
+// concurrent access (the sidebar can be rendered from multiple goroutines in
+// theory, and the cache is a package-level var).
+func TestGitBranch_CacheConcurrentAccess(t *testing.T) {
+	dir := t.TempDir()
+	mustGitRepo(t, dir, "concurrent-test")
+	gitBranchCache.Delete(dir)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if got := gitBranch(dir); got != "concurrent-test" {
+				t.Errorf("concurrent call: got %q, want %q", got, "concurrent-test")
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// mustGitRepo creates a git repo in dir with an initial commit on branch, so
+// rev-parse --abbrev-ref HEAD succeeds (a fresh repo has no HEAD ref until the
+// first commit). Skips the test if git is unavailable.
+func mustGitRepo(t *testing.T, dir, branch string) {
+	t.Helper()
+	for _, args := range [][]string{
+		{"init", "-b", branch, dir},
+		{"-C", dir, "config", "user.email", "test@test.test"},
+		{"-C", dir, "config", "user.name", "Test"},
+		{"-C", dir, "commit", "--allow-empty", "-m", "init"},
+	} {
+		if err := exec.Command("git", args...).Run(); err != nil {
+			t.Skipf("git %v failed: %v — skipping git cache test", args, err)
+		}
 	}
 }
