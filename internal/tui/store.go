@@ -216,7 +216,8 @@ type store struct {
 	// forkedMsg, permissionRepliedMsg, questionRepliedMsg,
 	// permissionsReconciledMsg, questionsReconciledMsg, sessionsLoadedMsg,
 	// messagesLoadedMsg, childrenLoadedMsg, childMessagesLoadedMsg) and
-	// question.go (recordAnsweredQuestion).
+	// question.go (recordLocalAnsweredQuestion, which calls the store's
+	// recordAnsweredQuestion then bumps version).
 	version int
 }
 
