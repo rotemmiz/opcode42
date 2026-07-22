@@ -245,3 +245,53 @@ func finalizeReasoning(m *Model) {
 		}
 	}
 }
+
+// TestSidebarCache_HitOnScroll verifies that cachedSidebar returns the same
+// string on a cache hit (pure scroll — only m.scroll.Offset changes).
+func TestSidebarCache_HitOnScroll(t *testing.T) {
+	m := seededSessionModel(t)
+	finalizeReasoning(&m)
+	m.ensureMDCache()
+	m.sidebarHidden = false // sidebar visible
+
+	s1 := m.cachedSidebar()
+	if s1 == "" {
+		t.Fatal("first call returned empty sidebar")
+	}
+
+	m.scroll.Back(3)
+
+	s2 := m.cachedSidebar()
+	if s1 != s2 {
+		t.Fatal("cache miss on scroll — sidebar should be byte-identical")
+	}
+}
+
+// TestSidebarCache_InvalidatedOnStoreChange verifies that a store mutation
+// invalidates the sidebar cache.
+func TestSidebarCache_InvalidatedOnStoreChange(t *testing.T) {
+	m := seededSessionModel(t)
+	finalizeReasoning(&m)
+	m.ensureMDCache()
+	m.sidebarHidden = false
+
+	s1 := m.cachedSidebar()
+	v1 := m.store.version
+
+	// Apply a store change (new session.updated event — changes the sidebar's
+	// session title + token display).
+	m.store = m.store.Reduce(ev("session.updated", map[string]any{"info": map[string]any{
+		"id": "ses_1", "title": "Updated title",
+	}}))
+	if m.store.version <= v1 {
+		t.Fatal("store.version did not increment")
+	}
+
+	s2 := m.cachedSidebar()
+	// The sidebar should have been rebuilt (cache miss → new entry).
+	if len(m.sidebarCache) < 2 {
+		t.Fatal("store change did not create a new cache entry")
+	}
+	_ = s1
+	_ = s2
+}

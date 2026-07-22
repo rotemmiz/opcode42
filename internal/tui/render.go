@@ -77,6 +77,33 @@ func (m Model) buildFooter(leftW int) string {
 	return strings.Join(footerParts, "\n")
 }
 
+// cachedSidebar returns the rendered sidebar string, cached by content
+// version (plan 19 §3). The sidebar reads session state (child statuses,
+// tokens) but not scroll offset, so during pure scroll the cache hits and
+// the full sidebarView rebuild (gitBranch + childStatus JSON decode loops
+// + ~300 lipgloss.Render calls) is skipped.
+func (m Model) cachedSidebar() string {
+	key := sidebarCacheKey{
+		storeVersion: m.store.version,
+		sessionID:    m.cfg.SessionID,
+		viewVersion:  m.viewVersion,
+		themeName:    m.themeName,
+		width:        m.width,
+	}
+	animating := m.animating()
+	if animating {
+		key.animFrame = m.animFrame
+	}
+	if s, ok := m.sidebarCache[key]; ok {
+		return s
+	}
+	s := m.sidebarView()
+	if !animating && m.sidebarCache != nil {
+		m.sidebarCache[key] = s
+	}
+	return s
+}
+
 // sessionStreamBlocks builds the chat-stream block list for a session: the
 // per-message blocks (user/assistant parts) followed by the in-stream
 // answered-question cards (plan 08e §E4, plan 17 §B6). Plan 17 §B6 drops the

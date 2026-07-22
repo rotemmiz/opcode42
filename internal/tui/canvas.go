@@ -371,7 +371,7 @@ func (m Model) sessionLayers() []*lipgloss.Layer {
 	// innerW starting at X(streamGutter), so the 2-col right gutter between
 	// the stream and the sidebar at X(leftW) is blank base Bg).
 	if m.sidebarVisible() {
-		sidebar := m.sidebarView()
+		sidebar := m.cachedSidebar()
 		layers = append(layers, lipgloss.NewLayer(sidebar).X(leftW).Y(0).Z(zPane))
 	}
 
