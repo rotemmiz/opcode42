@@ -3,6 +3,7 @@ package tui
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -79,9 +80,14 @@ func (m Model) buildFooter(leftW int) string {
 
 // cachedSidebar returns the rendered sidebar string, cached by content
 // version (plan 19 §3). The sidebar reads session state (child statuses,
-// tokens) but not scroll offset, so during pure scroll the cache hits and
-// the full sidebarView rebuild (gitBranch + childStatus JSON decode loops
-// + ~300 lipgloss.Render calls) is skipped.
+// tokens, MCP count, context limit) but not scroll offset, so during pure
+// scroll the cache hits and the full sidebarView rebuild (gitBranch +
+// childStatus JSON decode loops + many lipgloss.Render calls) is skipped.
+//
+// A time bucket (aligned to the gitBranch TTL) is part of the key so the
+// cache expires when the gitBranch cache expires — otherwise a branch
+// switch after the TTL would leave the cached sidebar showing the old
+// branch indefinitely on an idle session.
 func (m Model) cachedSidebar() string {
 	key := sidebarCacheKey{
 		storeVersion: m.store.version,
@@ -89,6 +95,7 @@ func (m Model) cachedSidebar() string {
 		viewVersion:  m.viewVersion,
 		themeName:    m.themeName,
 		width:        m.width,
+		timeBucket:   time.Now().Unix() / int64(gitBranchTTL.Seconds()),
 	}
 	animating := m.animating()
 	if animating {

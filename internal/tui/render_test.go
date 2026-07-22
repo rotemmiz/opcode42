@@ -281,7 +281,7 @@ func TestSidebarCache_InvalidatedOnStoreChange(t *testing.T) {
 	// Apply a store change (new session.updated event — changes the sidebar's
 	// session title + token display).
 	m.store = m.store.Reduce(ev("session.updated", map[string]any{"info": map[string]any{
-		"id": "ses_1", "title": "Updated title",
+		"id": "ses_1", "title": "Updated title that is definitely different",
 	}}))
 	if m.store.version <= v1 {
 		t.Fatal("store.version did not increment")
@@ -292,6 +292,8 @@ func TestSidebarCache_InvalidatedOnStoreChange(t *testing.T) {
 	if len(m.sidebarCache) < 2 {
 		t.Fatal("store change did not create a new cache entry")
 	}
-	_ = s1
-	_ = s2
+	// The content should differ — the title changed.
+	if s1 == s2 {
+		t.Fatal("sidebar content unchanged after store mutation — cache did not invalidate")
+	}
 }

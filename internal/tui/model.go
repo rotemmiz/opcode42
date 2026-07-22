@@ -300,6 +300,12 @@ type sidebarCacheKey struct {
 	themeName    string
 	width        int
 	animFrame    int // only when animating()
+	// timeBucket expires the cache entry at the same cadence as the
+	// gitBranch TTL (5s). The sidebar renders gitBranch(dir), which is
+	// TTL-cached separately; without this bucket, a branch switch after
+	// the TTL expires would leave the cached sidebar showing the old
+	// branch indefinitely (no other key field changes on an idle session).
+	timeBucket int64
 }
 
 // sidebarCacheMap maps cache keys to sidebar strings.
@@ -804,6 +810,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case configLoadedMsg:
 		if !m.model.ok() {
 			m.model = promptModel{Provider: msg.provider, Model: msg.model}
+			m.viewVersion++ // sidebar reads contextLimitForActiveModel (m.model)
 		}
 		return m, nil
 
