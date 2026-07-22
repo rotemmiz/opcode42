@@ -294,6 +294,13 @@ func (m Model) childStatus(childID string) string {
 // parent-parts) total, vs O(children × parent-msgs × parent-parts) for the
 // per-child call.
 func (m Model) recomputeChildStatuses() Model {
+	// Skip the O(sessions × msgs × parts) scan when the store hasn't
+	// changed since the last recompute. anim ticks, PTY output, composer
+	// keypresses etc. don't change child statuses — only store mutations
+	// (SSE events, direct mutations) do, and those bump store.version.
+	if m.childStatusMap != nil && m.childStatusVersion == m.store.version {
+		return m
+	}
 	if m.childStatusMap == nil {
 		m.childStatusMap = make(map[string]string)
 	}
@@ -343,6 +350,7 @@ func (m Model) recomputeChildStatuses() Model {
 			}
 		}
 	}
+	m.childStatusVersion = m.store.version
 	return m
 }
 

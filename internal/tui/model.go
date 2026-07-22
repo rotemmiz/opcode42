@@ -258,6 +258,11 @@ type Model struct {
 	// map is a reference type; ensureMDCache initialises it on the root
 	// Model so all copies share one map.
 	childStatusMap map[string]string
+	// childStatusVersion tracks the store.version when childStatusMap was
+	// last recomputed. recomputeChildStatuses skips the O(sessions × msgs
+	// × parts) scan when the version is unchanged (e.g. anim ticks, PTY
+	// output, composer keypresses don't change child statuses).
+	childStatusVersion int
 
 	// animatingCache is the cached result of animating(), computed once per
 	// Update cycle (plan 20 §1b). Without this, animating() iterates all
