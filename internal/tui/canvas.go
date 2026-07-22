@@ -41,7 +41,6 @@ package tui
 
 import (
 	"math"
-	"strings"
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -355,10 +354,8 @@ func (m Model) sessionLayers() []*lipgloss.Layer {
 	// the window is computed over the body alone (the footer is not a
 	// suffix), so the scroll math never touches the footer.
 	sid := m.cfg.SessionID
-	header := m.styles.Section.Render(truncate(m.sessionTitle(sid), innerW))
-	blocks := m.sessionStreamBlocks(sid)
-	body := header + "\n\n" + strings.Join(blocks, "\n\n")
-	stream := m.frameStream(body, bodyH)
+	bodyLines := m.cachedBodyLines(sid, innerW)
+	stream := m.frameStreamLines(bodyLines, bodyH)
 	layers = append(layers, lipgloss.NewLayer(stream).X(streamGutter).Y(0).Z(zPane))
 
 	// Footer layer: pinned at Y=bodyH so it never moves with the scroll. The

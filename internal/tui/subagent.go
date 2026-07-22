@@ -115,6 +115,7 @@ func (m Model) openSession(id string) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.cfg.SessionID = id
+	m.viewVersion++
 	m.screen = ScreenSession
 	m.scroll.ToTail() // snap to the live tail of the new stream
 	// loadMessagesCmd's completion also fetches this session's children, so the

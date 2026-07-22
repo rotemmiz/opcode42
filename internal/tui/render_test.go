@@ -125,3 +125,105 @@ func TestRenderSession_SurfacesAssistantError(t *testing.T) {
 		}
 	}
 }
+
+// TestBodyLines_CachedOnScroll verifies that cachedBodyLines returns the same
+// []string on a cache hit (pure scroll — only m.scroll.Offset changes).
+func TestBodyLines_CachedOnScroll(t *testing.T) {
+	m := seededSessionModel(t)
+	m.ensureMDCache()
+	innerW := m.width - 2*streamGutter
+
+	lines1 := m.cachedBodyLines(m.cfg.SessionID, innerW)
+	if len(lines1) == 0 {
+		t.Fatal("first call returned no lines")
+	}
+
+	m.scroll.Back(3)
+
+	lines2 := m.cachedBodyLines(m.cfg.SessionID, innerW)
+	if len(lines1) != len(lines2) {
+		t.Fatalf("cache miss on scroll: lines1=%d lines2=%d", len(lines1), len(lines2))
+	}
+	for i := range lines1 {
+		if lines1[i] != lines2[i] {
+			t.Fatalf("line %d differs on scroll:\n  was: %q\n  got: %q", i, lines1[i], lines2[i])
+		}
+	}
+}
+
+// TestBodyLines_InvalidatedOnStoreChange verifies that a store mutation
+// (via Reduce) invalidates the cache.
+func TestBodyLines_InvalidatedOnStoreChange(t *testing.T) {
+	m := seededSessionModel(t)
+	m.ensureMDCache()
+	innerW := m.width - 2*streamGutter
+
+	lines1 := m.cachedBodyLines(m.cfg.SessionID, innerW)
+	v1 := m.store.version
+
+	m.store = m.store.Reduce(ev("message.part.delta", map[string]any{
+		"messageID": "msg_2", "partID": "prt_4", "field": "text", "delta": " Updated!",
+	}))
+	if m.store.version <= v1 {
+		t.Fatal("store.version did not increment after Reduce")
+	}
+
+	lines2 := m.cachedBodyLines(m.cfg.SessionID, innerW)
+	found := false
+	for _, line := range lines2 {
+		if strings.Contains(stripANSI(line), "Updated!") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("cache miss did not rebuild: appended text not found")
+	}
+	_ = lines1
+}
+
+// TestBodyLines_InvalidatedOnViewToggle verifies that a view-state toggle
+// (viewVersion++) invalidates the cache.
+func TestBodyLines_InvalidatedOnViewToggle(t *testing.T) {
+	m := seededSessionModel(t)
+	m.ensureMDCache()
+	innerW := m.width - 2*streamGutter
+
+	lines1 := m.cachedBodyLines(m.cfg.SessionID, innerW)
+	m.view.hideThinking = false
+	m.viewVersion++
+	lines2 := m.cachedBodyLines(m.cfg.SessionID, innerW)
+
+	same := true
+	if len(lines1) != len(lines2) {
+		same = false
+	} else {
+		for i := range lines1 {
+			if lines1[i] != lines2[i] {
+				same = false
+				break
+			}
+		}
+	}
+	if same {
+		t.Fatal("view toggle did not invalidate cache — body is identical")
+	}
+}
+
+// TestBodyLines_InvalidatedOnWidthChange verifies that a width change
+// invalidates the cache.
+func TestBodyLines_InvalidatedOnWidthChange(t *testing.T) {
+	m := seededSessionModel(t)
+	m.ensureMDCache()
+	innerW := m.width - 2*streamGutter
+
+	m.cachedBodyLines(m.cfg.SessionID, innerW)
+	m.width = 120
+	m.viewVersion++
+	newInnerW := m.width - 2*streamGutter
+	m.cachedBodyLines(m.cfg.SessionID, newInnerW)
+
+	if len(m.bodyLinesCache) < 2 {
+		t.Fatal("width change did not create a new cache entry")
+	}
+}

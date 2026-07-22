@@ -250,7 +250,39 @@ type Model struct {
 	// pushToast enqueues and toastTick purges; the canvas composites the
 	// toast layer at zToast bottom-right over the base Bg fill (canvas.go).
 	toasts []toast
+
+	// viewVersion is a monotonic counter incremented on every content-
+	// affecting state change OUTSIDE the store (plan 19 §2): view toggles
+	// (hideThinking, expandedThinking, hideTools, images, tool collapse),
+	// sidebar/tasks/shell toggles, theme switch, width/height change,
+	// session switch, and animation frame. Together with store.version,
+	// this forms the cache key for bodyLinesCache — during pure scroll
+	// neither increments, so the cache hits and the full body rebuild is
+	// skipped.
+	viewVersion int
+
+	// bodyLinesCache memoizes the pre-split body lines for the conversation
+	// stream (plan 19 §2). Keyed on (storeVersion, sessionID, viewVersion,
+	// themeName, streamWidth, animFrame-when-animating). On a cache hit
+	// (pure scroll), sessionStreamBlocks + the join/split are skipped
+	// entirely — the cached []string is re-windowed directly. The map is a
+	// reference type; ensureBodyLinesCache initialises it on the root Model
+	// so all copies share one map.
+	bodyLinesCache bodyLinesCacheMap
 }
+
+// bodyLinesKey is the cache key for bodyLinesCache (plan 19 §2).
+type bodyLinesKey struct {
+	storeVersion int
+	sessionID    string
+	viewVersion  int
+	themeName    string
+	streamWidth  int
+	animFrame    int // only included when animating()
+}
+
+// bodyLinesCacheMap maps cache keys to pre-split body line slices.
+type bodyLinesCacheMap map[bodyLinesKey][]string
 
 // pickDefaultTheme returns the appropriate default theme name based on whether
 // the terminal has a dark background. This mirrors opencode's theme_mode_lock
@@ -375,6 +407,7 @@ func New(cfg Config) Model {
 // behind everything so foreground-only renderers stay legible on any terminal.
 func (m Model) applyTheme(name string, p theme.Palette) Model {
 	m.themeName = name
+	m.viewVersion++
 	m.styles = theme.New(p)
 	txt := lipgloss.NewStyle().Foreground(p.Fg).Background(p.Bg)
 	ph := lipgloss.NewStyle().Foreground(p.FgGhost).Background(p.Bg)
@@ -487,6 +520,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.viewVersion++
 		m = m.resizeComposer()
 		if cmd := m.resizePTY(); cmd != nil {
 			return m, cmd
@@ -705,6 +739,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.store.sessions = upsertSession(m.store.sessions, msg.session)
 		m.store.version++
 		m.cfg.SessionID, m.screen, m.modal = msg.session.ID, ScreenSession, modalNone
+		m.viewVersion++
 		// Reset animation frame so the sweep starts from the left in the new session.
 		m.animFrame = 0
 		// Entering the session screen — the bg-pulse is splash-only (plan 08e §B2).
@@ -803,6 +838,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.store.sessions = upsertSession(m.store.sessions, msg.session)
 		m.store.version++
 		m.cfg.SessionID = msg.session.ID
+		m.viewVersion++
 		m.screen = ScreenSession
 		m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
 		if msg.command != "" { // a "/command" created this session — run it
@@ -889,6 +925,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.store.sessions = upsertSession(m.store.sessions, msg.session)
 		m.store.version++
 		m.cfg.SessionID, m.screen = msg.session.ID, ScreenSession
+		m.viewVersion++
 		m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
 		m.status = "forked"
 		return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
@@ -1058,6 +1095,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Open the requested session, else the newest.
 		if m.cfg.SessionID == "" && len(msg.sessions) > 0 {
 			m.cfg.SessionID = msg.sessions[0].ID
+			m.viewVersion++
 		}
 		if m.cfg.SessionID != "" {
 			m.screen = ScreenSession
@@ -1302,6 +1340,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toastTick()
 		if m.animating() {
 			m.animFrame++
+			m.viewVersion++
 			return m, animTickCmd()
 		}
 		// Not animating — stop; the next animating state will re-kick via maybeKickAnim.
@@ -1589,9 +1628,11 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "b":
 		m.sidebarHidden = !m.sidebarHidden
+		m.viewVersion++
 		return m.resizeComposer(), nil // width changed → re-fit the composer
 	case "t":
 		m.tasksOpen = !m.tasksOpen
+		m.viewVersion++
 		if m.tasksOpen {
 			return m, loadTodosCmd(m.ctx, m.client, m.cfg.SessionID)
 		}
@@ -1613,6 +1654,7 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// opencode ThinkingMode vocabulary ("show" / "hide") rather than the
 		// on/off toggle style other display toggles use.
 		m.view.hideThinking = !m.view.hideThinking
+		m.viewVersion++
 		if m.view.hideThinking {
 			m.status = "thinking: hide"
 		} else {
@@ -1627,6 +1669,7 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// (opencode's ReasoningHeader ignores `open` when toggleable is
 		// false — index.tsx:1594-1597, 1657-1659).
 		m.view.expandedThinking = !m.view.expandedThinking
+		m.viewVersion++
 		if m.view.expandedThinking {
 			m.status = "thought: expanded"
 		} else {
@@ -1635,6 +1678,7 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "o":
 		m.view.hideTools = !m.view.hideTools
+		m.viewVersion++
 		m.status = toggleHint("tool output", !m.view.hideTools)
 		return m, nil
 	case "v":
@@ -1644,6 +1688,7 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// the inline transcript populates on first expand (plan 08e §C1).
 		if id := m.lastToolPartID(); id != "" {
 			m.view = m.view.toggleToolCollapse(id)
+			m.viewVersion++
 			if m.view.isToolCollapsed(id) {
 				m.status = "tool output: collapsed"
 			} else {
@@ -1687,6 +1732,7 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// escape (Sixel or iTerm2 inline) or falls back to a placeholder
 		// glyph when no support is advertised.
 		m.view.images = !m.view.images
+		m.viewVersion++
 		m.status = toggleHint("images", m.view.images)
 		return m, nil
 	case "down":
