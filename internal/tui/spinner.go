@@ -78,9 +78,13 @@ func exitTickCmd() tea.Cmd {
 
 // ── animating predicate ────────────────────────────────────────────────────────
 
-// animating reports whether any animation is currently in progress.  The tick
+// animating reports whether any animation is currently in progress. The tick
 // reschedules only when this returns true, so at idle no further ticks are queued
 // and the render loop is never woken unnecessarily.
+//
+// Plan 20 §1b: this returns the cached m.animatingCache, computed once per
+// Update cycle by computeAnimating. The maybeKickAnim and animTickMsg handler
+// read this directly — zero JSON decodes per frame.
 //
 // "Animating" means one of:
 //   - The splash screen is visible (ScreenSplash) — the logo shimmer sweep runs
@@ -100,6 +104,15 @@ func exitTickCmd() tea.Cmd {
 // Idle-safety: on ScreenSession with no running tools, no streaming reasoning
 // parts, and no live toasts this returns false, stopping the tick.
 func (m Model) animating() bool {
+	return m.animatingCache
+}
+
+// computeAnimating runs the animating() derivation once and returns the
+// result. Callers (the Update loop) store this in m.animatingCache after
+// any mutation that could flip the predicate (store change, anim tick).
+// The body is the pre-plan-20 animating() logic, kept verbatim so the
+// derivation doesn't drift.
+func (m Model) computeAnimating() bool {
 	// Live toasts need the tick to count down their TTL (plan 08c M11),
 	// even with --no-anim. Without this, toasts would never expire.
 	if m.toastsLive() {
@@ -155,8 +168,14 @@ func (m Model) animating() bool {
 // other returned cmds.  Bubble Tea queues ticks as goroutines; calling this
 // multiple times is safe — only one extra tick is live at a time since each
 // tick only reschedules when animating() is still true.
+//
+// Plan 20: this calls computeAnimating() directly (not the cached
+// animatingCache) because the caller may have just mutated state (e.g.
+// pushToast added a toast) and the cache hasn't been refreshed yet. The
+// computation is cheap (a single pass over the current session's messages)
+// and only runs when a kick is potentially needed — not on every frame.
 func (m *Model) maybeKickAnim() tea.Cmd {
-	if m.animating() {
+	if m.computeAnimating() {
 		return animTickCmd()
 	}
 	return nil

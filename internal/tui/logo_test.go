@@ -248,7 +248,7 @@ func makeTestModelForScreen(screen Screen) Model {
 // (logo shimmer must tick continuously while the home screen is visible).
 func TestAnimatingSplashScreen(t *testing.T) {
 	m := makeTestModelForScreen(ScreenSplash)
-	if !m.animating() {
+	if !m.computeAnimating() {
 		t.Error("animating() should be true on ScreenSplash (logo shimmer)")
 	}
 }
@@ -261,7 +261,7 @@ func TestAnimatingSplashScreenNoSession(t *testing.T) {
 		store:  newStore(),
 		screen: ScreenSplash,
 	}
-	if !m.animating() {
+	if !m.computeAnimating() {
 		t.Error("animating() should be true on ScreenSplash regardless of session")
 	}
 }
@@ -277,7 +277,7 @@ func TestAnimatingSessionIdleIsFalse(t *testing.T) {
 		{ID: "p1", MessageID: "msg1", SessionID: "s1", Type: "tool",
 			State: makeToolPartStateForLogo("completed")},
 	}
-	if m.animating() {
+	if m.computeAnimating() {
 		t.Error("animating() should be false on ScreenSession with only completed tools")
 	}
 }
@@ -293,7 +293,7 @@ func TestAnimatingSessionRunningToolIsTrue(t *testing.T) {
 		{ID: "p1", MessageID: "msg1", SessionID: "s1", Type: "tool",
 			State: makeToolPartStateForLogo("running")},
 	}
-	if !m.animating() {
+	if !m.computeAnimating() {
 		t.Error("animating() should be true on ScreenSession with a running tool")
 	}
 }

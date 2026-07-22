@@ -214,15 +214,27 @@ func (m Model) handleAutocompleteKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) 
 		return true, m, nil
 	case "tab":
 		if m.ac.mode == acMention {
-			return true, m.acceptMention(), nil
+			m = m.acceptMention()
+			// Plan 20: composer text changed → re-render footer.
+			m = m.rerenderChrome()
+			return true, m, nil
 		}
-		return true, m.completeSlash(), nil
+		m = m.completeSlash()
+		// Plan 20: composer text changed → re-render footer.
+		m = m.rerenderChrome()
+		return true, m, nil
 	case "enter":
 		if m.ac.mode == acMention {
-			return true, m.acceptMention(), nil
+			m = m.acceptMention()
+			// Plan 20: composer text changed → re-render footer.
+			m = m.rerenderChrome()
+			return true, m, nil
 		}
 		nm, cmd := m.acceptSlash()
-		return true, nm, cmd
+		m = nm.(Model)
+		// Plan 20: composer text + status changed → re-render footer.
+		m = m.rerenderChrome()
+		return true, m, cmd
 	}
 	return false, m, nil
 }

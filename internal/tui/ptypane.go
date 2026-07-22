@@ -169,6 +169,8 @@ func (m Model) handlePTYKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "ctrl+]" {
 		m.pty.focused = false
 		m.status = "terminal unfocused — ctrl+x ` to refocus"
+		// Plan 20: status changed → re-render footer.
+		m = m.rerenderChrome()
 		return m, nil
 	}
 	if m.pty.conn == nil {

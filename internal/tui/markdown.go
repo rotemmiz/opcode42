@@ -645,7 +645,8 @@ func splitMarkdownBlocks(text string) (stable []string, streaming string) {
 // Called from New() so that all Model copies share non-nil maps from birth.
 // Both the full-text cache (mdCache) and the per-stable-block streaming
 // cache (mdBlockCache) are reference-typed maps, so a single ensure on the
-// root Model is enough for all copies to share state.
+// root Model is enough for all copies to share state. Also initialises the
+// plan-20 derived-state maps (childStatusMap).
 func (m *Model) ensureMDCache() {
 	if m.mdCache == nil {
 		m.mdCache = make(mdCache)
@@ -653,10 +654,7 @@ func (m *Model) ensureMDCache() {
 	if m.mdBlockCache == nil {
 		m.mdBlockCache = make(mdBlockCache)
 	}
-	if m.bodyLinesCache == nil {
-		m.bodyLinesCache = make(bodyLinesCacheMap)
-	}
-	if m.sidebarCache == nil {
-		m.sidebarCache = make(sidebarCacheMap)
+	if m.childStatusMap == nil {
+		m.childStatusMap = make(map[string]string)
 	}
 }
