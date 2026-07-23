@@ -182,6 +182,10 @@ type Model struct {
 	history        []string            // submitted prompts (persisted; recalled with up/down when empty)
 	histIdx        int                 // browse cursor into history (-1 = not browsing)
 	persistEnabled bool                // gate local-KV reads/writes (off in tests; on via Restore)
+	// revertMessageID is the local undo checkpoint (opencode session.revert.messageID).
+	// Set after a successful revert; cleared on unrevert. undoLastTurn skips user
+	// messages at/after this id so repeated undos walk further back (08f H1b).
+	revertMessageID string
 
 	// Diff reviewer (plan 08b §1).
 	diff           diffState // full-screen diff reviewer (open == active)
@@ -944,11 +948,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case revertedMsg:
 		if msg.err != nil {
 			m.status = "revert failed: " + msg.err.Error()
+			m = m.rerenderChrome()
+			return m, nil
+		}
+		if msg.redo {
+			m.revertMessageID = ""
+			m.status = "redone"
 		} else {
+			m.revertMessageID = msg.messageID
 			m.status = "reverted"
 		}
-		// Plan 20: status changed → re-render footer.
 		m = m.rerenderChrome()
+		if m.cfg.SessionID != "" {
+			return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
+		}
 		return m, nil
 
 	case renamedMsg:
@@ -1253,7 +1266,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case messagesLoadedMsg:
 		if msg.err == nil {
-			m.store = m.store.ingestHistory(msg.sessionID, msg.items)
+			// Replace (not upsert) so a post-revert reload drops turns the
+			// daemon no longer returns (08f H1b review).
+			m.store = m.store.replaceHistory(msg.sessionID, msg.items)
 			m.store.version++
 		}
 		m.todos = nil // todos are per-session; refetch for the opened one if the dock is up
@@ -1854,6 +1869,17 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Plan 20: tasks dock closed → re-render footer (dock hidden).
 		m = m.rerenderChrome()
 		return m, nil
+	case "u":
+		// messages_undo (opencode <leader>u) — plan 08f H1b.
+		return m.undoLastTurn()
+	case "U":
+		// messages_redo (opencode <leader>r) — keep ctrl+x r for thinking;
+		// shift+u is redo so undo/redo share a chord family (08f H1b).
+		return m.redoTurn()
+	case "L":
+		// messages_last_user — jump scroll toward the last user turn.
+		m = m.jumpLastUser()
+		return m, nil
 	case "y":
 		if txt := m.lastAssistantText(); txt != "" {
 			m.status = "copied last response"
@@ -1866,15 +1892,8 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m = m.rerenderChrome()
 		return m, nil
 	case "r":
-		// ctrl+x r toggles the ThinkingMode collapse/expand (plan 17 §D1):
-		// hideThinking == true → "hide" mode (1-line "Thought" header, body
-		// hidden); false → "show" mode (header + body always render). This is
-		// NOT a hard drop — reasoning parts always render at least the header
-		// (matching opencode's full TUI showThinking = createMemo(() => true),
-		// tui/routes/session/index.tsx:254). The status hint uses the
-		// opencode ThinkingMode vocabulary ("show" / "hide") rather than the
-		// on/off toggle style other display toggles use.
-		// Note: session rename is ctrl+r (global), not this leader chord.
+		// ctrl+x r toggles the ThinkingMode collapse/expand (plan 17 §D1).
+		// messages_redo uses ctrl+x U (shift+u) so this chord stays thinking.
 		m.view.hideThinking = !m.view.hideThinking
 		if m.view.hideThinking {
 			m.status = "thinking: hide"

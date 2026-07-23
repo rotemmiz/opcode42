@@ -11,11 +11,11 @@
            │   Switch agent                                         │           
            │   Switch theme                                         │           
            │   Timeline                                             │           
+           │   Undo last turn                                       │           
+           │   Redo (unrevert)                                      │           
            │   Status                                               │           
            │   Rename session                                       │           
            │   Fork session                                         │           
-           │   Summarize context                                    │           
-           │   Interrupt (abort turn)                               │           
            │  ↓ more                                                │           
            │                                                        │           
            │  ↑↓ move · enter select · esc close                    │           

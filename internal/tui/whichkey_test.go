@@ -230,7 +230,7 @@ func TestWhichKeyOverlay_NoWrapAtCommonWidths(t *testing.T) {
 // with " …" when the chord list doesn't fit, and that the most frequent
 // chords are shown first (whichKeyChords is ordered by frequency). At a
 // narrow width (e.g. 40 cols) the strip shows fewer chords than at a wide
-// width (e.g. 320 cols, where all 24 chords fit).
+// width (e.g. 480 cols, where all chords fit).
 func TestWhichKeyOverlay_TruncatesAtNarrowWidths(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.screen = ScreenSession
@@ -242,10 +242,10 @@ func TestWhichKeyOverlay_TruncatesAtNarrowWidths(t *testing.T) {
 		t.Errorf("at width=40 the strip should truncate with '…'; got:\n%s", narrow)
 	}
 
-	m.width, m.height = 320, 24
+	m.width, m.height = 480, 24
 	wide := stripANSI(m.whichKeyView())
 	if strings.Contains(wide, "…") {
-		t.Errorf("at width=320 the strip should show all chords (no '…'); got:\n%s", wide)
+		t.Errorf("at width=480 the strip should show all chords (no '…'); got:\n%s", wide)
 	}
 
 	// The narrow strip should show fewer chords than the wide strip. We
