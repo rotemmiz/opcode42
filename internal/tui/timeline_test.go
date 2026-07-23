@@ -27,17 +27,21 @@ func TestTimelineItems_UserTurnsWithTitle(t *testing.T) {
 	}
 }
 
-func TestTimelineModal_SelectReverts(t *testing.T) {
+func TestTimelineModal_SelectOpensMessageActions(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.store.messages["ses_1"] = []Message{{ID: "msg_1", SessionID: "ses_1", Role: "user"}}
 	m.store.parts["msg_1"] = []Part{{ID: "p1", Type: "text", Text: "hi"}}
 	m.modal, m.modalSel = modalTimeline, 0
 	next, cmd := m.modalSelect()
-	if cmd == nil {
-		t.Fatal("selecting a timeline turn should dispatch a revert")
+	if cmd != nil {
+		t.Fatal("timeline select should open DialogMessage, not dispatch yet")
 	}
-	if next.(Model).modal != modalNone {
-		t.Fatal("select should close the modal")
+	nm := next.(Model)
+	if nm.modal != modalMessage {
+		t.Fatalf("modal=%v, want modalMessage", nm.modal)
+	}
+	if nm.messageActionID != "msg_1" {
+		t.Fatalf("messageActionID=%q", nm.messageActionID)
 	}
 }
 

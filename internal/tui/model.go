@@ -200,6 +200,9 @@ type Model struct {
 	// Set after a successful revert; cleared on unrevert. undoLastTurn skips user
 	// messages at/after this id so repeated undos walk further back (08f H1b).
 	revertMessageID string
+	// messageActionID is the user message targeted by modalMessage
+	// (DialogMessage — plan 08f H9). Cleared when the modal closes.
+	messageActionID string
 
 	// Diff reviewer (plan 08b §1).
 	diff           diffState // full-screen diff reviewer (open == active)
@@ -1311,6 +1314,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cfg.SessionID, m.screen = msg.session.ID, ScreenSession
 		m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
 		m.status = "forked"
+		if msg.prompt != "" {
+			m.input.SetValue(msg.prompt)
+			m.input.CursorEnd()
+			m = m.resizeComposer()
+		}
 		// Plan 20: session switch → re-render body + footer + sidebar.
 		m = m.rerenderFull()
 		return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
@@ -1975,7 +1983,7 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "esc":
-		m.modal, m.modalSel = modalNone, 0
+		m.modal, m.modalSel, m.messageActionID = modalNone, 0, ""
 		return m, nil
 	case "up", "k", "ctrl+p":
 		if m.modalSel > 0 {

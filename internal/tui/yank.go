@@ -24,6 +24,22 @@ func (m Model) messageText(messageID string) string {
 	return b.String()
 }
 
+// userPromptText concatenates a user message's text parts for DialogMessage
+// copy/fork restore (plan 08f H9; opencode dialog-message.tsx skips reasoning
+// and non-text parts).
+func (m Model) userPromptText(messageID string) string {
+	var b strings.Builder
+	for _, p := range m.store.parts[messageID] {
+		if p.Type != "text" {
+			continue
+		}
+		if t := strings.TrimRight(p.Text, "\n"); t != "" {
+			b.WriteString(t)
+		}
+	}
+	return b.String()
+}
+
 // lastAssistantText returns the text of the most recent assistant message in the
 // open session (the "copy last response" target), or "" if there is none.
 func (m Model) lastAssistantText() string {
