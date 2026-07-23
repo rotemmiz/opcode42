@@ -197,9 +197,9 @@ func TestPTY_FocusedCapturesKeys(t *testing.T) {
 }
 
 func TestPTY_FocusYieldsToPermission(t *testing.T) {
-	m := withPTY()
+	m := openSes(withPTY(), "ses_1")
 	m.pty.focused = true
-	m.store.permissions = []Permission{{ID: "perm_1", Permission: "bash"}}
+	m.store.permissions = []Permission{{ID: "perm_1", SessionID: "ses_1", Permission: "bash"}}
 	// 'tab' must drive the permission selection, not be forwarded to the shell.
 	// Plan 17 §B2: permission uses tab/arrows + enter (not the old a/s/r).
 	m, _ = step(t, m, key("tab"))

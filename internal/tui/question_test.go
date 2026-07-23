@@ -34,7 +34,7 @@ func TestQuestion_AskedThenRepliedReduces(t *testing.T) {
 // TestQuestion_SingleSelectReplies verifies a single-select (one non-multiple
 // question) replies immediately on enter (questionPick → reply). Plan 17 §B5.
 func TestQuestion_SingleSelectReplies(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
 		{Header: "Color", Question: "Pick a color", Options: []QuestionOption{opt("red"), opt("green"), opt("blue")}},
@@ -73,7 +73,7 @@ func TestQuestion_SingleSelectReplies(t *testing.T) {
 // TestQuestion_MultiSelectTogglesThenReplies verifies a multi-select question
 // toggles on enter (NOT space, plan 17 §B2), then submits from the Confirm tab.
 func TestQuestion_MultiSelectTogglesThenReplies(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
 		{Question: "Pick some", Multiple: true, Options: []QuestionOption{opt("x"), opt("y"), opt("z")}},
@@ -118,7 +118,7 @@ func TestQuestion_MultiSelectTogglesThenReplies(t *testing.T) {
 // choose an option (footer.question.tsx:217-224). Single-select → immediate
 // reply; multi-select → toggle.
 func TestQuestion_DigitShortcuts(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
 		{Header: "Color", Question: "Pick", Options: []QuestionOption{opt("red"), opt("green"), opt("blue")}},
@@ -138,7 +138,7 @@ func TestQuestion_DigitShortcuts(t *testing.T) {
 // flow: each enter advances to the next tab, the Confirm tab submits all
 // answers (plan 17 §B5).
 func TestQuestion_MultiQuestionTabsThenReplies(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
 		{Question: "Q1", Options: []QuestionOption{opt("a1"), opt("a2")}},
@@ -177,7 +177,7 @@ func TestQuestion_MultiQuestionTabsThenReplies(t *testing.T) {
 // TestQuestion_RejectAndResolve verifies esc rejects (NOT r — plan 17 §B2),
 // the overlay stays until resolved.
 func TestQuestion_RejectAndResolve(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{{Question: "Q", Options: []QuestionOption{opt("a")}}}))
 	// r is NOT a reject shortcut anymore (plan 17 §B2 — opencode uses esc).
@@ -200,7 +200,7 @@ func TestQuestion_RejectAndResolve(t *testing.T) {
 // TestQuestion_FailedReplyRetryNoDoubleAppend verifies a failed reply keeps
 // the question so the user can retry, and the durable answers don't grow.
 func TestQuestion_FailedReplyRetryNoDoubleAppend(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
 		{Question: "Q1", Options: []QuestionOption{opt("a1"), opt("a2")}},
@@ -245,7 +245,7 @@ func TestQuestion_FailedReplyRetryNoDoubleAppend(t *testing.T) {
 // (no options, custom=true) can be answered via the custom-text field
 // (plan 17 §B5). The old behavior (free-text not supported) is gone.
 func TestQuestion_EmptyOptionsCanCustomText(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
 		{Question: "Type your name", Custom: true, Options: nil},
@@ -275,7 +275,7 @@ func TestQuestion_EmptyOptionsCanCustomText(t *testing.T) {
 }
 
 func TestQuestion_SSEClearResetsState(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
 		{Question: "Q1", Options: []QuestionOption{opt("a1"), opt("a2")}},
@@ -338,7 +338,7 @@ func TestQuestion_SSERejectedRecordsSkippedCard(t *testing.T) {
 // fallback. Deduped by id so the SSE event arriving afterwards doesn't add a
 // duplicate.
 func TestQuestionRepliedMsg_RecordsAnsweredCardWithLabels(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
 		{Header: "Color", Question: "Pick a color", Options: []QuestionOption{opt("red"), opt("green"), opt("blue")}},
@@ -367,7 +367,7 @@ func TestQuestionRepliedMsg_RecordsAnsweredCardWithLabels(t *testing.T) {
 // path records an answered card and the SSE question.replied event then
 // arrives, the answered-questions slice keeps a single entry (deduped by id).
 func TestQuestionRepliedMsg_DedupsWithSSEEvent(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
 		{Question: "Q", Options: []QuestionOption{opt("a"), opt("b")}},
@@ -392,7 +392,7 @@ func TestQuestionRepliedMsg_DedupsWithSSEEvent(t *testing.T) {
 // labels (plan 08e §E4). The qBody.rejecting flag distinguishes the in-flight
 // action so recordLocalAnsweredQuestion records Skipped for a reject.
 func TestQuestionRepliedMsg_LocalRejectRecordsSkipped(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
 		{Question: "Q", Options: []QuestionOption{opt("a"), opt("b")}},
@@ -419,7 +419,7 @@ func TestQuestionRepliedMsg_LocalRejectRecordsSkipped(t *testing.T) {
 // flag must be cleared on the reply attempt so a prior failed reject doesn't
 // taint the reply's answered-card state (plan 08e §E4).
 func TestQuestion_ReplyAfterFailedRejectRecordsLabels(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
 		{Question: "Q", Options: []QuestionOption{opt("a"), opt("b")}},
@@ -459,7 +459,7 @@ func TestQuestion_ReplyAfterFailedRejectRecordsLabels(t *testing.T) {
 // guards the plan 08e §E4 design: the SSE-clear-during-replying is deferred
 // to avoid losing the labels.
 func TestQuestionRepliedMsg_SSEArrivesFirst_UpgradesWithLabels(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(questionEvent(t, "qst_1", []QuestionInfo{
 		{Question: "Q", Options: []QuestionOption{opt("a"), opt("b")}},
