@@ -213,11 +213,11 @@ def main() -> int:
         sandbox.commands.run(f"fuser -k {AGENT_PORT}/tcp", timeout=10)
         time.sleep(1)
 
-        # Check that the agent actually produced changes
-        diff_check = sandbox.commands.run("cd repo && git diff --exit-code", timeout=10)
-        if diff_check.exit_code == 0:
+        # Check that the agent actually produced changes (including untracked files)
+        diff_check = sandbox.commands.run("cd repo && git status --porcelain", timeout=10)
+        if not diff_check.stdout.strip():
             _dump_opencode_logs(sandbox)
-            raise SystemExit("agent produced no changes — git diff is empty. Check opencode logs above.")
+            raise SystemExit("agent produced no changes — git status is empty. Check opencode logs above.")
 
         # 8. Run the gate (asciinema-recorded, separate process from the agent)
         print("worker: running agent-gate.sh (asciinema-recorded)...", flush=True)
@@ -257,9 +257,15 @@ def main() -> int:
         _wait_health(sandbox, AGENT_PORT)
         preview_url = f"https://{sandbox.get_host(AGENT_PORT)}"
 
-        # 11. Push branch + open PR
-        print(f"worker: pushing {branch}...", flush=True)
-        sandbox.commands.run(f"cd repo && git push origin {branch}", timeout=60)
+        # 11. Push branch + open PR. Stage all changes (including untracked
+        #     files the agent created) and commit before pushing.
+        print(f"worker: committing and pushing {branch}...", flush=True)
+        sandbox.commands.run(
+            f"cd repo && git add -A && "
+            f"git commit -m 'agent: resolve issue #{issue_number}' && "
+            f"git push origin {branch}",
+            timeout=60,
+        )
 
         pr_body = (
             f"## Gate recording\n{asciinema_url}\n\n"
