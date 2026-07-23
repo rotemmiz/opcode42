@@ -79,6 +79,12 @@ type Config struct {
 	// environment-based default or any persisted preference (plan 08f H11 /
 	// G.13). Set by --no-osc52.
 	NoOSC52 bool
+
+	// TUIConfigPath is the TUI config file path override (plan 08f H12 /
+	// G.14 — OPENCODE_TUI_CONFIG, mirrors opencode's flag.ts:60-62). Read
+	// from the environment by cmd/opcode-tui and stored here; unused until
+	// plan 08f H13 (G.15 config file resolution) consumes it.
+	TUIConfigPath string
 }
 
 // Model is the Bubble Tea application state.
@@ -317,6 +323,22 @@ type Model struct {
 	// OPENCODE_DISABLE_TERMINAL_TITLE is set.
 	terminalTitleEnabled bool
 
+	// mouseDisabled gates mouse capture (plan 08f H12 / G.14 —
+	// OPENCODE_DISABLE_MOUSE, mirrors opencode app.tsx:197). Set once in
+	// New() from the environment; View() reports MouseModeNone instead of
+	// MouseModeAllMotion when set. There is no CLI flag or KV persistence —
+	// opencode's flag is env-only.
+	mouseDisabled bool
+
+	// fastBoot mirrors OPENCODE_FAST_BOOT (plan 08f H12 / G.14, read in
+	// opencode's app.tsx:272-273 via process.env, not flag.ts). New() uses
+	// it to jump straight to ScreenSession when a session id is already
+	// known, or to freeze the splash animation when it isn't. Stored (not
+	// just consulted transiently) so Restore()'s KV-based animation
+	// preference doesn't clobber the fast-boot animation freeze, the same
+	// way cfg.NoAnim survives Restore().
+	fastBoot bool
+
 	// osc52Enabled gates OSC 52 clipboard-write escapes (plan 08f H11 / G.13).
 	// Default on locally, off over SSH (SSH_CONNECTION / SSH_TTY set);
 	// persisted as osc52_write_enabled KV; forced off by --no-osc52.
@@ -415,6 +437,17 @@ func New(cfg Config) Model {
 		fileContextEnabled:      true, // plan 08f H7 — default on
 		sessionDirFilterEnabled: true, // plan 08f H7 — default on
 	}
+	// OPENCODE_DISABLE_TERMINAL_TITLE also applies at construction time so
+	// callers that skip Restore() (tests, embedders) still see the title
+	// suppressed (plan 08f H12 / G.14; Restore() re-applies this after the
+	// persisted-KV lookup so the env var still wins either way).
+	if os.Getenv("OPENCODE_DISABLE_TERMINAL_TITLE") != "" {
+		m.terminalTitleEnabled = false
+	}
+	// OPENCODE_DISABLE_MOUSE turns off mouse capture entirely (plan 08f H12
+	// / G.14, mirrors opencode's app.tsx:197). Env-only — opencode has no
+	// CLI flag or persisted preference for it, so neither do we.
+	m.mouseDisabled = os.Getenv("OPENCODE_DISABLE_MOUSE") != ""
 	// The bg-pulse is on by default for the splash (plan 08e §B2). It is
 	// turned off when the session screen is entered (sessionOpenedMsg /
 	// sessionCreatedMsg / sessionsLoadedMsg / forkedMsg) and back on when
@@ -436,6 +469,42 @@ func New(cfg Config) Model {
 	// forces off regardless (plan 08f H11 / G.13). Restore() will apply any
 	// persisted KV override when the CLI flag was not passed.
 	m.osc52Enabled = !cfg.NoOSC52 && defaultOsc52WriteEnabled()
+	// OPENCODE_FAST_BOOT skips the splash "screen" (plan 08f H12 / G.14,
+	// opencode app.tsx:272-273): jump straight to ScreenSession when a
+	// session id is already known (--session), otherwise freeze the splash
+	// logo/bg-pulse animation so the connecting screen paints once instead
+	// of animating while sessions load.
+	m.fastBoot = os.Getenv("OPENCODE_FAST_BOOT") != ""
+	if m.fastBoot {
+		if m.cfg.SessionID != "" {
+			m.screen = ScreenSession
+			m.view.bgPulse = false
+		} else {
+			m.noAnim = true
+		}
+	}
+	// OPENCODE_ROUTE overrides the initial screen/session (plan 08f H12 /
+	// G.14, opencode app.tsx:272-273 parses this as JSON; here it's a plain
+	// string): "home" forces the splash, "session" opens the
+	// already-configured session id (if any), and any other value is
+	// treated as a literal session id to open directly. Takes priority
+	// over --session / OPENCODE_FAST_BOOT since it's the more specific ask.
+	if route := os.Getenv("OPENCODE_ROUTE"); route != "" {
+		switch route {
+		case "home":
+			m.screen, m.cfg.SessionID = ScreenSplash, ""
+			m.view.bgPulse = true
+		case "session":
+			if m.cfg.SessionID != "" {
+				m.screen = ScreenSession
+				m.view.bgPulse = false
+			}
+		default:
+			m.cfg.SessionID = route
+			m.screen = ScreenSession
+			m.view.bgPulse = false
+		}
+	}
 	// Auto-pick light vs dark by terminal background — mirrors opencode's
 	// theme_mode_lock behaviour. Restore() will override with any pinned KV theme.
 	// cfg.Theme (--theme flag) wins over both auto-pick and KV.
@@ -537,8 +606,10 @@ func (m Model) Restore() Model {
 	}
 	// --no-anim always wins (New() already set m.noAnim = cfg.NoAnim); only
 	// consult the persisted preference when the CLI flag was not passed
-	// (plan 08f H7 / G.11: "CLI --no-anim still forces off").
-	if !m.cfg.NoAnim {
+	// (plan 08f H7 / G.11: "CLI --no-anim still forces off"). OPENCODE_FAST_BOOT's
+	// splash-freeze (plan 08f H12 / G.14) gets the same treatment — it would
+	// be pointless if a KV animations-enabled preference undid it here.
+	if !m.cfg.NoAnim && !m.fastBoot {
 		m.noAnim = !kvAnimationsEnabled(kv)
 	}
 	// --no-osc52 always wins (New() already applied cfg.NoOSC52); only
@@ -2422,8 +2493,12 @@ func (m Model) View() tea.View {
 	v.AltScreen = true
 	// AllMotion is required for passive hover (plan 08f H4). CellMotion only
 	// reports motion while a button is held (drag), which made modal/
-	// autocomplete row preview unreachable.
+	// autocomplete row preview unreachable. OPENCODE_DISABLE_MOUSE (plan
+	// 08f H12 / G.14) drops capture entirely instead.
 	v.MouseMode = tea.MouseModeAllMotion
+	if m.mouseDisabled {
+		v.MouseMode = tea.MouseModeNone
+	}
 	v.WindowTitle = m.windowTitle()
 	return v
 }
