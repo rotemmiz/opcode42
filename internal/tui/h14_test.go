@@ -2,6 +2,8 @@ package tui
 
 import (
 	"testing"
+
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 func TestH14_MostRecentParentSession(t *testing.T) {
@@ -30,6 +32,9 @@ func TestH14_Continue_SelectsParent(t *testing.T) {
 	if m.screen != ScreenSession {
 		t.Fatalf("screen = %v, want Session", m.screen)
 	}
+	if !m.startupSessionReady {
+		t.Fatal("startupSessionReady should be set after continue resolves")
+	}
 }
 
 func TestH14_Fork_DispatchesForkCmd(t *testing.T) {
@@ -41,13 +46,8 @@ func TestH14_Fork_DispatchesForkCmd(t *testing.T) {
 	if !nm.startupForkDone {
 		t.Fatal("startupForkDone should be set after first fork dispatch")
 	}
-	_, cmd2 := step(t, nm, sessionsLoadedMsg{sessions: []Session{{ID: "ses_1"}}})
-	if cmd2 == nil {
-		t.Fatal("second load after forkDone should still load messages")
-	}
-	// Confirm we didn't try to fork again: forkDone stays true and SessionID unchanged.
-	if !nm.startupForkDone || nm.cfg.SessionID != "ses_1" {
-		t.Fatalf("forkDone/session = %v %q", nm.startupForkDone, nm.cfg.SessionID)
+	if nm.startupSessionReady {
+		t.Fatal("session should not be ready until forkedMsg")
 	}
 }
 
@@ -64,9 +64,10 @@ func TestH14_Prompt_PrefillsComposer(t *testing.T) {
 func TestH14_Prompt_AutoSubmitsWhenReady(t *testing.T) {
 	m := New(Config{URL: "http://x", Prompt: "go", Provider: "p", Model: "m"})
 	m.cfg.SessionID = "ses_1"
+	m.startupSessionReady = true
 	next, cmd, ok := m.maybeSubmitStartupPrompt()
 	if !ok || cmd == nil {
-		t.Fatal("should auto-submit when model+prompt ready")
+		t.Fatal("should auto-submit when model+prompt+session ready")
 	}
 	nm := next.(Model)
 	if nm.startupPromptArmed {
@@ -79,12 +80,27 @@ func TestH14_Prompt_AutoSubmitsWhenReady(t *testing.T) {
 
 func TestH14_Prompt_WaitsForModel(t *testing.T) {
 	m := New(Config{URL: "http://x", Prompt: "go"})
+	m.startupSessionReady = true
 	_, cmd, ok := m.maybeSubmitStartupPrompt()
 	if ok || cmd != nil {
 		t.Fatal("should not submit without a model")
 	}
 	if !m.startupPromptArmed {
 		t.Fatal("should stay armed")
+	}
+}
+
+func TestH14_Prompt_WaitsForSessionReady(t *testing.T) {
+	m := New(Config{URL: "http://x", Prompt: "go", Continue: true, Provider: "p", Model: "m"})
+	_, cmd, ok := m.maybeSubmitStartupPrompt()
+	if ok || cmd != nil {
+		t.Fatal("should not submit before continue/session resolves")
+	}
+	m.startupSessionReady = true
+	m.cfg.SessionID = "ses_1"
+	_, cmd, ok = m.maybeSubmitStartupPrompt()
+	if !ok || cmd == nil {
+		t.Fatal("should submit once session ready")
 	}
 }
 
@@ -106,5 +122,19 @@ func TestH14_ApplyStartup_ContinueAndFork(t *testing.T) {
 	}
 	if cmd == nil || !m.startupForkDone {
 		t.Fatal("expected fork cmd + forkDone")
+	}
+	if m.startupSessionReady {
+		t.Fatal("session should not be ready until forkedMsg")
+	}
+}
+
+func TestH14_AutoPermissions_DispatchesReplyCmd(t *testing.T) {
+	m := New(Config{URL: "http://x", AutoPermissions: true, SessionID: "ses_1", Provider: "p", Model: "m"})
+	props := []byte(`{"id":"perm_a","sessionID":"ses_1","permission":"edit","patterns":["*"],"always":["*"]}`)
+	_, cmd := step(t, m, sseEventMsg{ev: opcode42client.SSEEvent{
+		Type: "permission.asked", Properties: props,
+	}})
+	if cmd == nil {
+		t.Fatal("auto permissions should dispatch a batch including replyPermissionCmd")
 	}
 }

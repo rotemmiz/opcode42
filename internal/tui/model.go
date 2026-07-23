@@ -207,17 +207,20 @@ type Model struct {
 	// startupForkDone prevents double-forking when sessions reload after a
 	// --fork startup (plan 08f H14 / G.16).
 	startupForkDone bool
-	themeName       string              // active theme name (theme switcher)
-	sidebarHidden   bool                // right sidebar visibility (toggle: ctrl+x b)
-	streamWidth     int                 // transient: stream column width when the sidebar is shown
-	leader          bool                // ctrl+x leader pressed, awaiting the chord key
-	tasksOpen       bool                // tasks dock visibility (toggle: ctrl+x t)
-	todos           []Todo              // current session's todos (tasks dock)
-	scroll          scrollregion.Region // stream scrollback viewport (0 == live tail)
-	view            viewState           // display toggles (timestamps, tool output, thinking)
-	history         []string            // submitted prompts (persisted; recalled with up/down when empty)
-	histIdx         int                 // browse cursor into history (-1 = not browsing)
-	persistEnabled  bool                // gate local-KV reads/writes (off in tests; on via Restore)
+	// startupSessionReady is set once --continue/--session/--fork resolution
+	// has finished so --prompt does not race ahead into the wrong session.
+	startupSessionReady bool
+	themeName           string              // active theme name (theme switcher)
+	sidebarHidden       bool                // right sidebar visibility (toggle: ctrl+x b)
+	streamWidth         int                 // transient: stream column width when the sidebar is shown
+	leader              bool                // ctrl+x leader pressed, awaiting the chord key
+	tasksOpen           bool                // tasks dock visibility (toggle: ctrl+x t)
+	todos               []Todo              // current session's todos (tasks dock)
+	scroll              scrollregion.Region // stream scrollback viewport (0 == live tail)
+	view                viewState           // display toggles (timestamps, tool output, thinking)
+	history             []string            // submitted prompts (persisted; recalled with up/down when empty)
+	histIdx             int                 // browse cursor into history (-1 = not browsing)
+	persistEnabled      bool                // gate local-KV reads/writes (off in tests; on via Restore)
 	// revertMessageID is the local undo checkpoint (opencode session.revert.messageID).
 	// Set after a successful revert; cleared on unrevert. undoLastTurn skips user
 	// messages at/after this id so repeated undos walk further back (08f H1b).
@@ -1368,6 +1371,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cfg.SessionID, m.screen = msg.session.ID, ScreenSession
 		m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
 		m.status = "forked"
+		m.startupSessionReady = true
 		if msg.prompt != "" {
 			m.input.SetValue(msg.prompt)
 			m.input.CursorEnd()
@@ -1775,11 +1779,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if kick := m.maybeKickAnim(); kick != nil {
 			cmds = append(cmds, kick)
 		}
-		// --auto: reply "once" to newly asked permissions (plan 08f H14 / G.16).
+		// --auto: reply "once" to the permission just asked (plan 08f H14 /
+		// G.16). Reply against the event's own id (not pendingPermission) so
+		// concurrent permission.asked events each get a reply — opencode's
+		// sync.tsx fires permission.reply per event with no shared in-flight
+		// guard.
 		if m.cfg.AutoPermissions && msg.ev.Type == "permission.asked" {
-			if p := m.pendingPermission(); p != nil && !m.permState.replying {
-				m.permState = permSetReplying(m.permState, true)
-				m.permRequestID = p.ID
+			var p struct {
+				ID string `json:"id"`
+			}
+			if decode(msg.ev.Properties, &p) && p.ID != "" {
 				cmds = append(cmds, replyPermissionCmd(m.ctx, m.client, p.ID, "once", ""))
 			}
 		}

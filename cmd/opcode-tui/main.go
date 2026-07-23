@@ -1,3 +1,13 @@
+// Command opcode-tui is the Opcode42 terminal client (plan 08): a Bubble Tea app
+// that attaches to a running Opcode42 or opencode daemon over its HTTP+SSE wire
+// protocol. It owns no agent state — the daemon is the source of truth.
+//
+//	opcode-tui --url http://127.0.0.1:4096 --dir "$PWD"
+//	opcode-tui --continue --prompt "summarize the repo"
+//	opcode-tui --session <id> --fork --agent plan
+//	opcode-tui --theme opcode42-light           # pin theme for deterministic capture
+//	opcode-tui --no-anim                        # static logo + frozen spinner (capture / a11y)
+//	opcode-tui --no-osc52                       # force OSC 52 clipboard-write escapes off
 package main
 
 import (
