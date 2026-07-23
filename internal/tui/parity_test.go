@@ -106,9 +106,15 @@ func TestMCPStatus(t *testing.T) {
 		`{}`:                     "",
 	}
 	for in, want := range cases {
-		if got := mcpStatus(json.RawMessage(in)); got != want {
+		if got, _ := mcpStatus(json.RawMessage(in)); got != want {
 			t.Errorf("mcpStatus(%s) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestMCPStatus_Error(t *testing.T) {
+	if _, errMsg := mcpStatus(json.RawMessage(`{"status":"failed","error":"boom"}`)); errMsg != "boom" {
+		t.Errorf("mcpStatus error = %q, want %q", errMsg, "boom")
 	}
 }
 

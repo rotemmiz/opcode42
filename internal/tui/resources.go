@@ -13,16 +13,27 @@ import (
 // Read-only resource dialogs (plan 08a §G): configured MCP servers (GET /mcp)
 // and available skills (GET /skill). Plus the static help/keybindings table (§E).
 
-// mcpItem is one configured MCP server (GET /mcp is a name→config map).
+// mcpItem is one configured MCP server (GET /mcp — openapi MCPStatus map:
+// status + an optional error, matching opencode's sync.data.mcp).
 type mcpItem struct {
 	Name   string
-	Status string // best-effort: a status/state/enabled field if the daemon reports one
+	Status string // connected|disabled|failed|needs_auth|needs_client_registration
+	Error  string // present for "failed" (openapi MCPStatus.error)
 }
 
 // skillItem is one available skill (GET /skill items: name/description/...).
 type skillItem struct {
 	Name        string
 	Description string
+}
+
+// lspItem is one running LSP client's status (GET /lsp — openapi LSPStatus:
+// id, name, root, status), matching opencode's sync.data.lsp map.
+type lspItem struct {
+	ID     string
+	Name   string
+	Root   string
+	Status string // "connected" | "error"
 }
 
 type (
@@ -34,46 +45,74 @@ type (
 		items []skillItem
 		err   error
 	}
+	lspLoadedMsg struct {
+		items []lspItem
+		err   error
+	}
 )
 
-// loadMCPCmd fetches the configured MCP servers.
+// loadMCPCmd fetches the configured MCP servers' status.
 func loadMCPCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
 	return func() tea.Msg {
-		// GET /mcp is a loose map: { "<name>": { ... } }. List names; surface a
-		// status-ish field if one is present, else leave it blank.
+		// GET /mcp is a name→status map: { "<name>": { status, error? } }.
 		var raw map[string]json.RawMessage
 		if err := c.GetJSON(ctx, "/mcp", &raw); err != nil {
 			return mcpLoadedMsg{err: err}
 		}
 		items := make([]mcpItem, 0, len(raw))
 		for name, cfg := range raw {
-			items = append(items, mcpItem{Name: name, Status: mcpStatus(cfg)})
+			status, errMsg := mcpStatus(cfg)
+			items = append(items, mcpItem{Name: name, Status: status, Error: errMsg})
 		}
 		sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
 		return mcpLoadedMsg{items: items}
 	}
 }
 
-// mcpStatus best-effort pulls a human status from a server config blob.
-func mcpStatus(cfg json.RawMessage) string {
+// mcpStatus best-effort pulls the status + error out of a server status blob.
+// The daemon's GET /mcp returns {status, error?} (openapi MCPStatus); the
+// state/enabled/type fallbacks tolerate older/looser config-shaped payloads.
+func mcpStatus(cfg json.RawMessage) (status, errMsg string) {
 	var m struct {
 		Status  string `json:"status"`
 		State   string `json:"state"`
 		Type    string `json:"type"`
 		Enabled *bool  `json:"enabled"`
+		Error   string `json:"error"`
 	}
 	_ = json.Unmarshal(cfg, &m)
 	switch {
 	case m.Status != "":
-		return m.Status
+		status = m.Status
 	case m.State != "":
-		return m.State
+		status = m.State
 	case m.Enabled != nil && !*m.Enabled:
-		return "disabled"
+		status = "disabled"
 	case m.Type != "":
-		return m.Type
-	default:
-		return ""
+		status = m.Type
+	}
+	return status, m.Error
+}
+
+// loadLSPCmd fetches the running LSP clients' status (plan 08f G.5/G.6).
+// Bootstrapped on connect and re-fetched on the `lsp.updated` SSE event
+// (lsp/lsp.ts:294 fires it after a client's first successful handshake).
+func loadLSPCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
+	return func() tea.Msg {
+		var arr []struct {
+			ID     string `json:"id"`
+			Name   string `json:"name"`
+			Root   string `json:"root"`
+			Status string `json:"status"`
+		}
+		if err := c.GetJSON(ctx, "/lsp", &arr); err != nil {
+			return lspLoadedMsg{err: err}
+		}
+		items := make([]lspItem, 0, len(arr))
+		for _, it := range arr {
+			items = append(items, lspItem{ID: it.ID, Name: it.Name, Root: it.Root, Status: it.Status})
+		}
+		return lspLoadedMsg{items: items}
 	}
 }
 

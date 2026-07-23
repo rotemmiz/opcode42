@@ -230,6 +230,25 @@ func (m Model) statusBarView(width int) string {
 	if kids := m.childrenOf(m.cfg.SessionID); len(kids) > 0 {
 		right += s.Faint.Render(" · ") + s.Base.Render(strconv.Itoa(len(kids))) + s.Faint.Render(" subagents")
 	}
+	// G.6: LSP/MCP counts, mirroring opencode's session footer
+	// (routes/session/footer.tsx:69-85). LSP's dot is green when at least one
+	// client is running (muted otherwise); MCP is shown only when at least
+	// one server is connected, with a red dot when any server has failed
+	// (matches the lsp()/mcp()/mcpError() memos there).
+	lspDotColor := s.P.FgFaint
+	if len(m.lspServers) > 0 {
+		lspDotColor = s.P.Green
+	}
+	lspDot := lipgloss.NewStyle().Foreground(lspDotColor).Render("•")
+	right += s.Faint.Render(" · ") + lspDot + " " + s.Base.Render(strconv.Itoa(len(m.lspServers))) + s.Faint.Render(" LSP")
+	if mcpOn, mcpFailed := mcpCounts(m.mcpServers); mcpOn > 0 {
+		mcpCol := s.P.Green
+		if mcpFailed {
+			mcpCol = s.P.Red
+		}
+		mcpGlyph := lipgloss.NewStyle().Foreground(mcpCol).Render("⊙")
+		right += s.Faint.Render(" · ") + mcpGlyph + " " + s.Base.Render(strconv.Itoa(mcpOn)) + s.Faint.Render(" MCP")
+	}
 	right += s.Faint.Render(" · ") + s.Base.Render("ctrl+p") + s.Faint.Render(" commands")
 
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
@@ -247,6 +266,55 @@ func (m Model) statusBarView(width int) string {
 // chrome row from the composer (BgElev) without relying on ANSI emission
 // (plan 17 §F3).
 func (m Model) statusBarBackground() theme.Color { return m.styles.P.BgPanel }
+
+// mcpCounts returns the number of connected MCP servers and whether any
+// server has failed, matching opencode's mcp()/mcpError() memos
+// (routes/session/footer.tsx:13-14).
+func mcpCounts(servers []mcpItem) (connected int, anyFailed bool) {
+	for _, srv := range servers {
+		if srv.Status == "connected" {
+			connected++
+		}
+		if srv.Status == "failed" {
+			anyFailed = true
+		}
+	}
+	return connected, anyFailed
+}
+
+// mcpDotColor maps an MCP server status to its sidebar dot color, mirroring
+// opencode's dot() helper (feature-plugins/sidebar/mcp.tsx:20-27).
+func mcpDotColor(status string, p theme.Palette) theme.Color {
+	switch status {
+	case "connected":
+		return p.Green
+	case "failed", "needs_client_registration":
+		return p.Red
+	case "needs_auth":
+		return p.Amber
+	default:
+		return p.FgFaint
+	}
+}
+
+// mcpStatusLabel renders a short human label for an MCP status, mirroring
+// opencode's status Switch (feature-plugins/sidebar/mcp.tsx:61-69).
+func mcpStatusLabel(status string) string {
+	switch status {
+	case "connected":
+		return "Connected"
+	case "disabled":
+		return "Disabled"
+	case "needs_auth":
+		return "Needs auth"
+	case "needs_client_registration":
+		return "Needs client ID"
+	case "failed":
+		return "Failed"
+	default:
+		return status
+	}
+}
 
 // connGlyph is a colored dot for the connection state.
 func (m Model) connGlyph() string {
@@ -320,23 +388,44 @@ func (m Model) sidebarView() string {
 
 	b.WriteString("\n")
 
-	// LSP section — server count with status dot (opencode footer.tsx lines 70-72).
-	// Opcode42's TUI loads LSP info via the MCP server list; the count is the number
-	// of connected MCP items (best-effort — Opcode42 doesn't have a dedicated LSP endpoint
-	// yet so we show MCP-connected count the same way opencode shows LSP count).
+	// MCP section (opencode sidebar/mcp.tsx, order 200) — server status list,
+	// one row per configured server with a status dot, shown only when at
+	// least one server is configured (mirrors the plugin's
+	// `<Show when={list().length > 0}>`).
+	if len(m.mcpServers) > 0 {
+		b.WriteString(s.Dim.Render("MCP") + "\n")
+		for _, srv := range m.mcpServers {
+			dot := lipgloss.NewStyle().Foreground(mcpDotColor(srv.Status, s.P)).Render("•")
+			label := srv.Name
+			if lbl := mcpStatusLabel(srv.Status); lbl != "" {
+				label += "  " + lbl
+			}
+			b.WriteString(dot + " " + s.Base.Render(truncate(label, sidebarWidth-4)) + "\n")
+		}
+		b.WriteString("\n")
+	}
+
+	// LSP section (opencode sidebar/lsp.tsx, order 300) — one row per running
+	// LSP client with a connected/error status dot; "servers will activate as
+	// files are read" placeholder when none have spawned yet (lsp is lazy —
+	// see internal/server/lsp_handlers.go).
 	b.WriteString(s.Dim.Render("LSP") + "\n")
-	lspCount := 0
-	for _, srv := range m.mcpServers {
-		if srv.Status == "connected" || srv.Status == "" {
-			lspCount++
+	if len(m.lspServers) == 0 {
+		b.WriteString(s.Faint.Render("LSPs will activate as files are read") + "\n")
+	} else {
+		for _, it := range m.lspServers {
+			col := s.P.Green
+			if it.Status != "connected" {
+				col = s.P.Red
+			}
+			dot := lipgloss.NewStyle().Foreground(col).Render("•")
+			label := it.ID
+			if it.Root != "" {
+				label += " " + it.Root
+			}
+			b.WriteString(dot + " " + s.Faint.Render(truncate(label, sidebarWidth-4)) + "\n")
 		}
 	}
-	dotColor := s.P.FgFaint
-	if lspCount > 0 {
-		dotColor = s.P.Green
-	}
-	dot := lipgloss.NewStyle().Foreground(dotColor).Render("•")
-	b.WriteString(dot + " " + s.Base.Render(strconv.Itoa(lspCount)) + s.Faint.Render(" servers") + "\n")
 
 	// TASKS section (plan 08e §C3) — live sub-agent status, only while the
 	// open session has children. Mirrors Android's D1 tasks flake and the

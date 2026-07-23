@@ -57,4 +57,4 @@
                                                                                                     
                                                                                                     
   ┃ Ask anything... "Fix a TODO in the                                                              
-   Build                                                ● connecting to http://x · ctrl+p commands  
+   Build                                      ● connecting to http://x · • 0 LSP · ctrl+p commands  
