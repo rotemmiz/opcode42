@@ -10,7 +10,7 @@ import (
 // longSessionModel builds a session whose transcript is far taller than the
 // viewport, with the right sidebar visible, so we can exercise scrolling and the
 // pinned footer/sidebar invariants (plan 08c bug-fix: no terminal overflow).
-func longSessionModel(t *testing.T) Model {
+func longSessionModel(t testing.TB) Model {
 	t.Helper()
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession

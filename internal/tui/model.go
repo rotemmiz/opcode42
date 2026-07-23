@@ -293,6 +293,12 @@ type Model struct {
 	// Update (plan 20 §4). View() just windows this via frameStreamLines —
 	// zero rendering in View.
 	bodyLines []string
+
+	// frameCanvas is the reused lipgloss canvas for composeCanvas (plan 20
+	// Layer 4 / 08f perf gate). Allocated/resized in Update on
+	// WindowSizeMsg; View only Clear()s and redraws — avoids NewCanvas +
+	// screen-buffer alloc per scroll frame (~260KB/op before reuse).
+	frameCanvas *lipgloss.Canvas
 }
 
 // pickDefaultTheme returns the appropriate default theme name based on whether
@@ -523,6 +529,23 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(healthCmd(m.ctx, m.client), m.maybeKickAnim())
 }
 
+// ensureFrameCanvas allocates or resizes m.frameCanvas to match m.width×m.height
+// (plan 20 Layer 4). Called from Update on WindowSizeMsg so View's composeCanvas
+// can Clear+redraw without NewCanvas.
+func (m Model) ensureFrameCanvas() Model {
+	if m.width <= 0 || m.height <= 0 {
+		return m
+	}
+	if m.frameCanvas == nil {
+		m.frameCanvas = lipgloss.NewCanvas(m.width, m.height)
+		return m
+	}
+	if m.frameCanvas.Width() != m.width || m.frameCanvas.Height() != m.height {
+		m.frameCanvas.Resize(m.width, m.height)
+	}
+	return m
+}
+
 // Update handles messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// The composer placeholder follows the mode/screen (opencode
@@ -538,6 +561,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m = m.ensureFrameCanvas()
 		m = m.resizeComposer()
 		if cmd := m.resizePTY(); cmd != nil {
 			return m, cmd

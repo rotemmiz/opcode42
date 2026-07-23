@@ -548,3 +548,24 @@ func abs(n int) int {
 	}
 	return n
 }
+
+// TestComposeCanvas_ReusesFrameBuffer locks plan 20 Layer 4: after
+// WindowSizeMsg allocates frameCanvas, successive composeCanvas calls return
+// the same *lipgloss.Canvas (Clear+redraw), not a fresh NewCanvas each frame.
+func TestComposeCanvas_ReusesFrameBuffer(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	m.screen = ScreenSession
+	m.width, m.height = 40, 12
+	m = m.ensureFrameCanvas()
+	if m.frameCanvas == nil {
+		t.Fatal("ensureFrameCanvas left frameCanvas nil")
+	}
+	first := m.composeCanvas()
+	second := m.composeCanvas()
+	if first == nil || second == nil {
+		t.Fatal("composeCanvas returned nil")
+	}
+	if first != m.frameCanvas || second != m.frameCanvas {
+		t.Fatalf("composeCanvas did not reuse frameCanvas: first=%p second=%p frame=%p", first, second, m.frameCanvas)
+	}
+}
