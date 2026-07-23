@@ -14,6 +14,12 @@
 - [06 — SDK generation](06-sdk-generation.md): Go SDK generated from the OpenAPI spec
 - [12 — Compatibility](12-test-compatibility.md): conformance harness
 - [Design reference](../design/tui/): Claude design handoff — tokens, screens, components (high-fidelity; `design/tui/README.md`)
+- [**08f — Input & presentation map**](08f-tui-input-presentation-map.md): the complete
+  opencode-TUI input/presentation surface (every keybind, paste, mouse, route, pane, part,
+  and the SSE→store→render update flow) + the delta to the current Opcode42 TUI and the
+  remaining gap closures. **Read this before any parity work** — it is the single
+  source-grounded reference for "what opencode does" that the sibling plans (08a–e) name
+  but do not enumerate.
 
 ---
 
