@@ -435,6 +435,13 @@ func (m Model) composerView() string {
 		Width(m.barWidth()) // -1: the left border renders outside Width
 	view := bar.Render(m.input.View())
 	var above []string
+	if len(m.pasteParts) > 0 {
+		chips := make([]string, 0, len(m.pasteParts))
+		for _, p := range m.pasteParts {
+			chips = append(chips, m.styles.Dim.Render(pasteSummaryLabel(p)))
+		}
+		above = append(above, strings.Join(chips, " "))
+	}
 	if len(m.pendingFiles) > 0 {
 		chips := make([]string, 0, len(m.pendingFiles))
 		for i, f := range m.pendingFiles {
