@@ -42,7 +42,16 @@ template = (
         f"| tar -C /usr/local -xz",
         user="root",
     )
-    .set_envs({"PATH": "/usr/local/go/bin:/usr/local/.bun/bin:$PATH"})
+    # Set PATH system-wide so the runtime 'user' (not root) can find go, bun,
+    # and opencode. E2B's set_envs only applies during build, not at runtime.
+    .run_cmd(
+        'echo "PATH=/usr/local/go/bin:/usr/local/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin" > /etc/environment',
+        user="root",
+    )
+    .run_cmd(
+        'echo "export PATH=/usr/local/go/bin:/usr/local/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin" > /etc/profile.d/opencode-path.sh',
+        user="root",
+    )
     # gh CLI (for branch-pusher to open PRs inside the sandbox — needs root for apt)
     .run_cmd([
         "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg "
@@ -78,19 +87,21 @@ template = (
     # Bun (opencode's runtime). Install to /usr/local/.bun (shared, accessible
     # by the runtime 'user' — /root is not accessible at runtime).
     .run_cmd(
-        "BUN_INSTALL=/usr/local/.bun curl -fsSL https://bun.sh/install | bash && "
+        "export BUN_INSTALL=/usr/local/.bun && "
+        "curl -fsSL https://bun.sh/install | bash && "
         "chmod -R a+rX /usr/local/.bun",
         user="root",
     )
     # opencode (the agent runtime — the thing worker.py drives via HTTP).
     # https://opencode.ai/install (307 → raw.githubusercontent.com/.../install).
-    # The install script puts the binary in ~/.local/bin — but HOME=/root at
-    # build time and HOME=/home/user at runtime, so symlink to /usr/local/bin.
-    .run_cmd(
-        "curl -fsSL https://opencode.ai/install | bash && "
-        "ln -sf /root/.local/bin/opencode /usr/local/bin/opencode",
-        user="root",
-    )
+    # Installs to /root/.opencode/bin/opencode. The runtime 'user' can't read
+    # /root, so chmod the path and symlink to /usr/local/bin.
+    .run_cmd([
+        "curl -fsSL https://opencode.ai/install | bash",
+        "chmod a+rx /root /root/.opencode /root/.opencode/bin",
+        "rm -f /usr/local/bin/opencode",
+        "ln -s /root/.opencode/bin/opencode /usr/local/bin/opencode",
+    ], user="root")
     # Verify opencode actually runs (fails the bake if Bun/opencode is broken)
     .run_cmd("opencode --version", user="root")
 )
