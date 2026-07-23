@@ -99,8 +99,10 @@ func (m Model) composeCanvas() *lipgloss.Canvas {
 
 	var canvas *lipgloss.Canvas
 	if m.frameCanvas != nil && m.frameCanvas.Width() == m.width && m.frameCanvas.Height() == m.height {
-		// Layer 4: reuse the frame buffer across paints. Clear resets cells so
-		// prior frame content cannot leak under shorter layers.
+		// Layer 4: reuse the frame buffer. Clear() to EmptyCell is required —
+		// not just for shorter-layer leak safety, but because SetCell's
+		// equality path is cheap only when the prior cell is EmptyCell; skipping
+		// Clear() regresses to thousands of allocs/op on scroll.
 		m.frameCanvas.Clear()
 		canvas = m.frameCanvas
 	} else {
