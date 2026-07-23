@@ -127,12 +127,13 @@ type Model struct {
 	deleting bool
 
 	// Command overlay.
-	modal       modalKind
-	modalSel    int
-	renameInput textinput.Model // text-input overlay (rename current session)
-	mcpServers  []mcpItem       // read-only MCP list (GET /mcp)
-	lspServers  []lspItem       // read-only LSP status list (GET /lsp; refreshed on lsp.updated)
-	skills      []skillItem     // read-only skills list (GET /skill)
+	modal        modalKind
+	modalSel     int
+	renameInput  textinput.Model // text-input overlay (rename current session)
+	mcpServers   []mcpItem       // read-only MCP list (GET /mcp)
+	lspServers   []lspItem       // read-only LSP status list (GET /lsp; refreshed on lsp.updated)
+	mcpResources []mcpResource   // MCP resources for @-mention (GET /experimental/resource; 08f H10)
+	skills       []skillItem     // read-only skills list (GET /skill)
 	// permState is the 3-stage permission UI state machine (plan 17 §B3):
 	// permission → always confirm → reject message. The render path
 	// (permission.go permissionView) reads it; the key path
@@ -1112,7 +1113,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// preload the provider + command catalogs so the switcher/slash popup open
 		// populated. Also bootstrap the LSP/MCP status chrome (plan 08f G.5/G.6)
 		// so the sidebar/footer counts are populated without opening either modal.
-		return m, tea.Batch(openSSECmd(m.ctx, m.client), loadSessionsCmd(m.ctx, m.client), loadConfigCmd(m.ctx, m.client), loadProvidersCmd(m.ctx, m.client), loadCommandsCmd(m.ctx, m.client), loadAgentsCmd(m.ctx, m.client), loadLSPCmd(m.ctx, m.client), loadMCPCmd(m.ctx, m.client))
+		return m, tea.Batch(openSSECmd(m.ctx, m.client), loadSessionsCmd(m.ctx, m.client), loadConfigCmd(m.ctx, m.client), loadProvidersCmd(m.ctx, m.client), loadCommandsCmd(m.ctx, m.client), loadAgentsCmd(m.ctx, m.client), loadLSPCmd(m.ctx, m.client), loadMCPCmd(m.ctx, m.client), loadMCPResourcesCmd(m.ctx, m.client))
 
 	case configLoadedMsg:
 		if !m.model.ok() {
@@ -1335,6 +1336,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.mcpServers = msg.items
 		// Plan 20: MCP count changed → re-render sidebar + footer (MCP counts).
 		m = m.rerenderFull()
+		return m, nil
+
+	case mcpResourcesLoadedMsg:
+		// Soft-fail: resources are optional autocomplete extras; leave the
+		// prior list alone on error so a flaky experimental endpoint doesn't
+		// wipe useful mentions mid-session.
+		if msg.err == nil {
+			m.mcpResources = msg.items
+		}
 		return m, nil
 
 	case lspLoadedMsg:

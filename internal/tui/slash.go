@@ -183,7 +183,7 @@ func (m Model) refreshAutocomplete() (Model, tea.Cmd) {
 	// filesFoundMsg opens/closes it when the search returns.
 	if q, ok := mentionQuery(v); ok {
 		m.ac = autocomplete{open: m.ac.mode == acMention && len(m.ac.files) > 0, mode: acMention, files: m.ac.files, sel: clampSel(m.ac.sel, len(m.ac.files))}
-		return m, findFilesCmd(m.ctx, m.client, q)
+		return m, findFilesCmd(m.ctx, m.client, q, m.mcpResources)
 	}
 
 	m.ac = autocomplete{}
