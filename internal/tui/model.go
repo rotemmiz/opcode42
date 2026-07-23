@@ -625,6 +625,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Plan 08f H4 (G.3): hovering a modal row previews the selection;
 		// hovering an autocomplete row does the same. Deliberately scoped to
 		// just these two surfaces — tool-row / user-message hover is deferred.
+		// Permission/question overlays outrank a stale modal (same priority
+		// as KeyPressMsg / MouseWheelMsg).
+		if m.pendingPermission() != nil || m.pendingQuestion() != nil {
+			return m, nil
+		}
 		if m.modal != modalNone {
 			if row, ok := m.modalRowAtY(msg.X, msg.Y); ok {
 				m.modalSel = row
@@ -644,6 +649,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// it and submits/accepts — mirroring "hover to select, enter to
 		// accept" but in one motion.
 		if msg.Button != tea.MouseLeft {
+			return m, nil
+		}
+		if m.pendingPermission() != nil || m.pendingQuestion() != nil {
 			return m, nil
 		}
 		if m.modal != modalNone {
@@ -2344,7 +2352,10 @@ func (m Model) insertComposerText(s string) (Model, tea.Cmd) {
 func (m Model) View() tea.View {
 	v := tea.NewView(m.composeView())
 	v.AltScreen = true
-	v.MouseMode = tea.MouseModeCellMotion
+	// AllMotion is required for passive hover (plan 08f H4). CellMotion only
+	// reports motion while a button is held (drag), which made modal/
+	// autocomplete row preview unreachable.
+	v.MouseMode = tea.MouseModeAllMotion
 	v.WindowTitle = m.windowTitle()
 	return v
 }

@@ -135,15 +135,15 @@ func TestScroll_StickyAtTailOnNewContent(t *testing.T) {
 	}
 }
 
-// TestMouseMode_EnabledInView pins Plan 18 §A1: View() sets
-// MouseMode=MouseModeCellMotion (enables wheel events) and keeps AltScreen on.
+// TestMouseMode_EnabledInView pins Plan 18 §A1 + 08f H4: View() sets
+// MouseMode=MouseModeAllMotion (wheel + passive hover) and keeps AltScreen on.
 func TestMouseMode_EnabledInView(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	v := m.View()
 	if v.AltScreen != true {
 		t.Errorf("View().AltScreen = false, want true")
 	}
-	if v.MouseMode != tea.MouseModeCellMotion {
-		t.Errorf("View().MouseMode = %v, want MouseModeCellMotion", v.MouseMode)
+	if v.MouseMode != tea.MouseModeAllMotion {
+		t.Errorf("View().MouseMode = %v, want MouseModeAllMotion", v.MouseMode)
 	}
 }

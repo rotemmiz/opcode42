@@ -279,3 +279,31 @@ func TestH4_ModalTakesPriorityOverAutocomplete(t *testing.T) {
 		t.Fatalf("autocomplete sel should be untouched while a modal owns mouse input, got %d", next.ac.sel)
 	}
 }
+
+// TestH4_PermissionOutranksModalMouse: a pending permission overlay must
+// swallow mouse clicks even when a modal is still open in the model (SSE can
+// arrive while the palette is up). Mirrors KeyPressMsg / MouseWheel priority.
+func TestH4_PermissionOutranksModalMouse(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	m = openSes(m, "ses_1")
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 120, Height: 40})
+	m.modal, m.modalSel = modalPalette, 0
+	m.store = m.store.Reduce(permEvent(t, "perm_1", "bash", map[string]any{"command": "ls"}))
+	if m.pendingPermission() == nil {
+		t.Fatal("setup: pendingPermission nil")
+	}
+	b := m.buildModalPanel()
+	px, py, _ := centeredCardPos(m.width, m.height, b.panel)
+	x, y := px+2, py+2+b.rowFirstLine
+
+	next, cmd := step(t, m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	if next.modal != modalPalette {
+		t.Fatalf("permission should block modal click, modal=%v", next.modal)
+	}
+	if cmd != nil {
+		t.Fatal("permission should block modalSelect dispatch")
+	}
+	if next.modalSel != 0 {
+		t.Fatalf("modalSel should be unchanged, got %d", next.modalSel)
+	}
+}
