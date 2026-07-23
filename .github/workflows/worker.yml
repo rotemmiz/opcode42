@@ -1,0 +1,56 @@
+name: Worker
+
+# Fires when a comment is created on an issue. Filters to:
+#   - body == /approve (exact match — no trailing space; post a NEW comment,
+#     editing won't re-trigger)
+#   - issue (not a PR) — github.event.issue.pull_request == null
+#   - authored by the repo OWNER only (so the public can't burn E2B/Ollama
+#     credits on a public repo)
+#
+# concurrency: one worker per issue; a second /approve cancels the first.
+#
+# Boots an E2B sandbox, drives opencode serve via HTTP, runs the gate, opens a
+# PR with a Gist recording + live preview URL. The sandbox self-destructs at
+# E2B timeout=1500s (before the Actions 30min cap), so no leak even if the
+# finally: doesn't run on cancel.
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  work:
+    if: >-
+      github.event.comment.body == '/approve' &&
+      github.event.issue.pull_request == null &&
+      github.event.comment.author_association == 'OWNER'
+    concurrency:
+      group: worker-${{ github.event.issue.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install e2b requests
+
+      - name: Run worker
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+          E2B_TEMPLATE: ${{ secrets.E2B_TEMPLATE }}
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_MODEL: ${{ secrets.OLLAMA_MODEL }}
+          BRANCH_PUSHER_TOKEN: ${{ secrets.BRANCH_PUSHER_TOKEN }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/worker.py
