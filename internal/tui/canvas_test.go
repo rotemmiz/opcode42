@@ -26,6 +26,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -547,4 +548,66 @@ func abs(n int) int {
 		return -n
 	}
 	return n
+}
+
+// TestComposeCanvas_ReusesFrameBuffer locks plan 20 Layer 4: after
+// WindowSizeMsg allocates frameCanvas, successive composeCanvas calls return
+// the same *lipgloss.Canvas (Clear+redraw), not a fresh NewCanvas each frame.
+func TestComposeCanvas_ReusesFrameBuffer(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	m.screen = ScreenSession
+	m.width, m.height = 40, 12
+	m = m.ensureFrameCanvas()
+	if m.frameCanvas == nil {
+		t.Fatal("ensureFrameCanvas left frameCanvas nil")
+	}
+	first := m.composeCanvas()
+	second := m.composeCanvas()
+	if first == nil || second == nil {
+		t.Fatal("composeCanvas returned nil")
+	}
+	if first != m.frameCanvas || second != m.frameCanvas {
+		t.Fatalf("composeCanvas did not reuse frameCanvas: first=%p second=%p frame=%p", first, second, m.frameCanvas)
+	}
+}
+
+// TestEnsureFrameCanvas_ResizeGrowShrink drives real WindowSizeMsg grow then
+// shrink so ensureFrameCanvas hits Resize (not only the nil-alloc path).
+func TestEnsureFrameCanvas_ResizeGrowShrink(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_1"})
+	m.screen = ScreenSession
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 40, Height: 12})
+	if m.frameCanvas == nil {
+		t.Fatal("frameCanvas nil after first WindowSizeMsg")
+	}
+	ptr := m.frameCanvas
+	if gotW, gotH := ptr.Width(), ptr.Height(); gotW != 40 || gotH != 12 {
+		t.Fatalf("after grow alloc: size %dx%d, want 40x12", gotW, gotH)
+	}
+
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 100, Height: 40})
+	if m.frameCanvas != ptr {
+		t.Fatalf("grow replaced frameCanvas pointer: was %p now %p", ptr, m.frameCanvas)
+	}
+	if gotW, gotH := m.frameCanvas.Width(), m.frameCanvas.Height(); gotW != 100 || gotH != 40 {
+		t.Fatalf("after grow: size %dx%d, want 100x40", gotW, gotH)
+	}
+	c := m.composeCanvas()
+	if c != m.frameCanvas {
+		t.Fatal("composeCanvas did not reuse resized frameCanvas")
+	}
+
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 20, Height: 6})
+	if m.frameCanvas != ptr {
+		t.Fatalf("shrink replaced frameCanvas pointer: was %p now %p", ptr, m.frameCanvas)
+	}
+	if gotW, gotH := m.frameCanvas.Width(), m.frameCanvas.Height(); gotW != 20 || gotH != 6 {
+		t.Fatalf("after shrink: size %dx%d, want 20x6", gotW, gotH)
+	}
+	out := m.composeView()
+	for i, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if w := lipgloss.Width(line); w != 20 {
+			t.Fatalf("line %d width %d after shrink, want 20", i, w)
+		}
+	}
 }

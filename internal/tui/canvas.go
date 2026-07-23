@@ -88,12 +88,26 @@ func (m Model) composeView() string {
 // nil when dimensions are non-positive (the caller falls back to bodyContent
 // in that case). Exposed so tests can inspect the canvas cells directly
 // rather than re-deriving the fill/composite logic.
+//
+// Plan 20 Layer 4: prefer the reused m.frameCanvas (Clear + redraw) over
+// NewCanvas every frame. Tests that never send WindowSizeMsg still get an
+// ephemeral canvas so cell inspections keep working.
 func (m Model) composeCanvas() *lipgloss.Canvas {
 	if m.width <= 0 || m.height <= 0 {
 		return nil
 	}
 
-	canvas := lipgloss.NewCanvas(m.width, m.height)
+	var canvas *lipgloss.Canvas
+	if m.frameCanvas != nil && m.frameCanvas.Width() == m.width && m.frameCanvas.Height() == m.height {
+		// Layer 4: reuse the frame buffer. Clear() to EmptyCell is required —
+		// not just for shorter-layer leak safety, but because SetCell's
+		// equality path is cheap only when the prior cell is EmptyCell; skipping
+		// Clear() regresses to thousands of allocs/op on scroll.
+		m.frameCanvas.Clear()
+		canvas = m.frameCanvas
+	} else {
+		canvas = lipgloss.NewCanvas(m.width, m.height)
+	}
 
 	// Fill the base with the theme Bg so every cell is owned. We set each
 	// cell directly with a space content and the Bg style — this is the
