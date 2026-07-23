@@ -264,10 +264,14 @@ def main() -> int:
         preview_url = f"https://{sandbox.get_host(AGENT_PORT)}"
 
         # 11. Push branch + open PR. Stage all changes (including untracked
-        #     files the agent created) and commit before pushing.
+        #     files the agent created) and commit before pushing. Set git
+        #     identity first — the E2B sandbox has no user.name/email configured.
         print(f"worker: committing and pushing {branch}...", flush=True)
         sandbox.commands.run(
-            f"cd repo && git add -A && "
+            f"cd repo && "
+            f"git config user.email 'agent@opcode42.dev' && "
+            f"git config user.name 'opcode42-agent' && "
+            f"git add -A && "
             f"git commit -m 'agent: resolve issue #{issue_number}' && "
             f"git push origin {branch}",
             timeout=60,
