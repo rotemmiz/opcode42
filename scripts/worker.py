@@ -131,12 +131,18 @@ def main() -> int:
         sid = json.loads(resp_lines[0])["id"]
         print(f"worker: session={sid}, sending plan as prompt...", flush=True)
 
-        # Send the plan as the prompt. Use prompt_async (returns 204 immediately,
-        # agent runs in background) instead of the synchronous /message endpoint
-        # (which blocks until the agent loop completes). Use a temp file to
-        # avoid shell-escaping the potentially large plan text.
+        # Send the plan as the prompt with clear implementation instructions.
+        # The plan alone is just analysis — the agent needs to be told to ACT on it.
+        # Use prompt_async (returns 204 immediately, agent runs in background).
         plan_path = "/tmp/plan.json"
-        plan_body = json.dumps({"parts": [{"type": "text", "text": plan_comment}]})
+        agent_prompt = (
+            f"You are working on GitHub issue #{issue_number}. "
+            f"Implement the following plan. Write the code changes now — edit files, "
+            f"create new files, make all necessary changes to resolve the issue. "
+            f"Do not just describe what to do — actually do it.\n\n"
+            f"---\n\n{plan_comment}"
+        )
+        plan_body = json.dumps({"parts": [{"type": "text", "text": agent_prompt}]})
         sandbox.files.write(plan_path, plan_body.encode())
         msg_resp = sandbox.commands.run(
             f"curl -s -o /dev/null -w '%{{http_code}}' -X POST {base}/session/{sid}/prompt_async "
