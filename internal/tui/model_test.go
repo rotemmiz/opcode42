@@ -16,6 +16,21 @@ func step(t *testing.T, m Model, msg tea.Msg) (Model, tea.Cmd) {
 	return next.(Model), cmd
 }
 
+// openSes binds the model to a root session id so pendingPermission /
+// pendingQuestion scope matches (plan 08f H18). Most unit tests use
+// ses_1 — the default sessionID in permEvent/questionEvent helpers.
+func openSes(m Model, id string) Model {
+	m.cfg.SessionID = id
+	m.screen = ScreenSession
+	for _, s := range m.store.sessions {
+		if s.ID == id {
+			return m
+		}
+	}
+	m.store.sessions = append(m.store.sessions, Session{ID: id})
+	return m
+}
+
 func TestNew_BuildsClient(t *testing.T) {
 	m := New(Config{URL: "http://127.0.0.1:4096", Directory: "/tmp"})
 	if m.client == nil {

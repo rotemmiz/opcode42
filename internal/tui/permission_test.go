@@ -33,7 +33,7 @@ func TestPermission_AskedThenRepliedReduces(t *testing.T) {
 }
 
 func TestPermission_OverlayBlocksAndReplies(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(permEvent(t, "perm_1", "bash", map[string]any{"command": "ls"}))
 
@@ -85,7 +85,7 @@ func (e errTestType) Error() string { return string(e) }
 // escapes. The old a/s/r shortcuts no longer work.
 func TestPermission_ShortcutKeys(t *testing.T) {
 	mk := func() Model {
-		m := New(Config{URL: "http://x"})
+		m := openSes(New(Config{URL: "http://x"}), "ses_1")
 		m.store = m.store.Reduce(permEvent(t, "perm_1", "edit", nil))
 		return m
 	}
@@ -144,7 +144,7 @@ func TestPermission_ShortcutKeys(t *testing.T) {
 // TestPermission_ThreeStageFlow verifies the 3-stage state machine
 // (plan 17 §B3): permission → always confirm → reject message.
 func TestPermission_ThreeStageFlow(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(permEvent(t, "perm_1", "bash", map[string]any{"command": "ls"}))
 
@@ -209,7 +209,7 @@ func TestPermission_ThreeStageFlow(t *testing.T) {
 //   - from the permission stage → transition to the reject stage
 //   - from the reject stage → back to the permission stage (cancel)
 func TestPermission_EscapeTransitions(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.store = m.store.Reduce(permEvent(t, "perm_1", "edit", nil))
 

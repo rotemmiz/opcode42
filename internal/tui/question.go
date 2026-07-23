@@ -45,13 +45,21 @@ import (
 // (footer.question.tsx:238-242). This replaces Opcode42's prior `space`
 // toggle (plan 17 §B2).
 
-// pendingQuestion is the question request currently being answered (oldest), or
-// nil when there is none.
+// pendingQuestion is the oldest in-scope question awaiting answers, or nil
+// when there is none. Scope matches pendingPermission (plan 08f H18 /
+// pendingScopeIDs): parent + direct children when viewing a parent; empty
+// when viewing a child or on splash.
 func (m Model) pendingQuestion() *Question {
-	if len(m.store.questions) == 0 {
+	scope := m.pendingScopeIDs()
+	if len(scope) == 0 {
 		return nil
 	}
-	return &m.store.questions[0]
+	for i := range m.store.questions {
+		if scope[m.store.questions[i].SessionID] {
+			return &m.store.questions[i]
+		}
+	}
+	return nil
 }
 
 // questionRepliedMsg is the result of replying/rejecting a question.

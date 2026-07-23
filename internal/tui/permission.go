@@ -42,13 +42,58 @@ import (
 // (footer.permission.tsx:373-391) using the shared renderUnifiedDiff helper
 // from Workstream C (diffrender.go).
 
-// pendingPermission is the permission currently awaiting a reply (the oldest), or
-// nil when there is none.
-func (m Model) pendingPermission() *Permission {
-	if len(m.store.permissions) == 0 {
+// pendingScopeIDs returns the session IDs whose pending permission/question
+// prompts surface in the current view (plan 08f §PC.3 / G.21).
+//
+// Mirrors opencode routes/session/index.tsx:207-236:
+//   - not on the session screen / no open session → empty
+//   - open session not yet in store.sessions → empty (don't guess parent vs child)
+//   - open session is a child (ParentID != "") → empty (child views do not
+//     aggregate; prompts are answered from the parent)
+//   - open session is a parent/root → {open} ∪ direct children (flat, one level)
+func (m Model) pendingScopeIDs() map[string]bool {
+	if m.screen != ScreenSession {
 		return nil
 	}
-	return &m.store.permissions[0]
+	sid := m.cfg.SessionID
+	if sid == "" {
+		return nil
+	}
+	found := false
+	for _, s := range m.store.sessions {
+		if s.ID != sid {
+			continue
+		}
+		found = true
+		if s.ParentID != "" {
+			return nil
+		}
+		break
+	}
+	if !found {
+		return nil
+	}
+	out := map[string]bool{sid: true}
+	for _, c := range m.childrenOf(sid) {
+		out[c.ID] = true
+	}
+	return out
+}
+
+// pendingPermission is the oldest in-scope permission awaiting a reply, or
+// nil when there is none. Scope is parent+direct-children when viewing a
+// parent (plan 08f H18); see pendingScopeIDs.
+func (m Model) pendingPermission() *Permission {
+	scope := m.pendingScopeIDs()
+	if len(scope) == 0 {
+		return nil
+	}
+	for i := range m.store.permissions {
+		if scope[m.store.permissions[i].SessionID] {
+			return &m.store.permissions[i]
+		}
+	}
+	return nil
 }
 
 // permissionRepliedMsg is the result of replying to a permission.

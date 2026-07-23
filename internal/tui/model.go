@@ -1305,14 +1305,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// cleanly. Other SSE events (and question.replied/rejected for a
 		// different request id) are applied normally.
 		if m.qBody.replying && (msg.ev.Type == "question.replied" || msg.ev.Type == "question.rejected") {
-			if q := m.pendingQuestion(); q != nil {
-				var p struct {
-					RequestID string `json:"requestID"`
-				}
-				if decode(msg.ev.Properties, &p) && p.RequestID == q.ID {
-					m.qDeferredSSE = msg.ev
-					msg.ev = opcode42client.SSEEvent{} // neutralize; not applied below
-				}
+			// Match the in-flight request via qBody.requestID — not
+			// pendingQuestion(), which is scope-filtered (08f H18) and can
+			// return nil after navigating to a child/splash while the reply
+			// HTTP round-trip is still open.
+			var p struct {
+				RequestID string `json:"requestID"`
+			}
+			if m.qBody.requestID != "" && decode(msg.ev.Properties, &p) && p.RequestID == m.qBody.requestID {
+				m.qDeferredSSE = msg.ev
+				msg.ev = opcode42client.SSEEvent{} // neutralize; not applied below
 			}
 		}
 		if msg.ev.Type != "" {
