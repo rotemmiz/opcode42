@@ -106,7 +106,7 @@ func readClipboardImage() (mime string, data []byte, ok bool) {
 		}
 		path := tmp.Name()
 		_ = tmp.Close()
-		defer os.Remove(path)
+		defer func() { _ = os.Remove(path) }()
 		script := `set imageData to the clipboard as "PNGf"
 set fileRef to open for access POSIX file "` + path + `" with write permission
 set eof fileRef to 0
