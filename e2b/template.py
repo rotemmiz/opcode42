@@ -4,7 +4,7 @@
 # Bake:  python e2b/build_prod.py
 # Boots: <200ms, full toolchain ready, no apt install at runtime.
 #
-# Contains: Ubuntu 24.04 + Go 1.23 + Node 20 + Bun + gh CLI + golangci-lint
+# Contains: Ubuntu 24.04 + Go 1.26 + Node 20 + Bun + gh CLI + golangci-lint
 #           + asciinema + gitleaks + opencode (the agent runtime).
 #
 # The sandbox does NOT set a start_cmd — the worker.py starts opencode serve
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from e2b import Template
 
-GO_VERSION = "1.23.0"
+GO_VERSION = "1.26.3"
 NODE_MAJOR = "20"
 
 template = (
