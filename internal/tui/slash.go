@@ -43,6 +43,11 @@ var builtinCommands = []slashItem{
 	{name: "/status", desc: "Connection status", kind: slashBuiltin},
 	{name: "/connect", desc: "Connect to a daemon (mDNS + URL)", kind: slashBuiltin},
 	{name: "/help", desc: "Keybindings & commands reference", kind: slashBuiltin},
+	{name: "/share", desc: "Share the current session", kind: slashBuiltin},
+	{name: "/unshare", desc: "Revoke the session share link", kind: slashBuiltin},
+	{name: "/compact", desc: "Summarize / compact context", kind: slashBuiltin},
+	{name: "/export", desc: "Copy the full transcript", kind: slashBuiltin},
+	{name: "/copy", desc: "Copy the full transcript", kind: slashBuiltin},
 }
 
 // acMode is what the composer popup is completing.
@@ -310,6 +315,14 @@ func (m Model) acceptSlash() (tea.Model, tea.Cmd) {
 			// ctrl+x h. Static content generated from helpRows().
 			m.modal, m.modalSel = modalHelp, 0
 			return m, nil
+		case "/share":
+			return m.shareOrCopyLink()
+		case "/unshare":
+			return m.unshareCurrent()
+		case "/compact":
+			return m.compactSession()
+		case "/export", "/copy":
+			return m.copyTranscript()
 		}
 		return m, nil
 	}
