@@ -192,10 +192,29 @@ def main() -> int:
             _dump_opencode_logs(sandbox)
             raise SystemExit("agent did not finish within 25 min — killing sandbox")
 
-        # 7. Kill the agent's opencode serve so PORT=4096 is free for conformance
+        # 6b. After the agent finishes, check what it actually did
+        print("worker: checking agent output...", flush=True)
+        try:
+            msgs_resp = sandbox.commands.run(
+                f"curl -sf {base}/session/{sid}/messages", timeout=10
+            )
+            if msgs_resp.exit_code == 0:
+                msgs = json.loads(msgs_resp.stdout)
+                msg_count = len(msgs) if isinstance(msgs, list) else 0
+                print(f"worker: session has {msg_count} messages", flush=True)
+        except Exception:
+            pass
+
+        # Kill the agent's opencode serve so PORT=4096 is free for conformance
         print("worker: killing agent opencode serve (free port for conformance)...", flush=True)
         sandbox.commands.run(f"fuser -k {AGENT_PORT}/tcp", timeout=10)
         time.sleep(1)
+
+        # Check that the agent actually produced changes
+        diff_check = sandbox.commands.run("cd repo && git diff --exit-code", timeout=10)
+        if diff_check.exit_code == 0:
+            _dump_opencode_logs(sandbox)
+            raise SystemExit("agent produced no changes — git diff is empty. Check opencode logs above.")
 
         # 8. Run the gate (asciinema-recorded, separate process from the agent)
         print("worker: running agent-gate.sh (asciinema-recorded)...", flush=True)
