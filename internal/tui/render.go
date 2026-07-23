@@ -177,6 +177,11 @@ func (m Model) renderMessage(msg Message, parts []Part) string {
 			} else {
 				out = append(out, m.fileChip(p))
 			}
+		case "compaction":
+			// Plan 08f G.19 / §M.3: top-bordered "Compaction" divider that
+			// separates pre-compaction history from the continuation
+			// (opencode routes/session/index.tsx:1442-1450).
+			out = append(out, m.compactionDivider())
 		}
 	}
 	// Surface an assistant turn's error (auth, overflow, rate limit, …) — never
@@ -201,6 +206,27 @@ func (m Model) userTurn(text string) string {
 		PaddingLeft(1).
 		Width(m.barWidth()) // -1: the left border renders outside Width
 	return bar.Render(m.styles.Base.Render(text))
+}
+
+// compactionDivider renders the top-bordered "Compaction" marker that
+// separates pre-compaction history from the post-compaction continuation
+// (plan 08f G.19; opencode index.tsx:1442-1450 — border=["top"],
+// title=" Compaction ", borderColor=theme.borderActive).
+func (m Model) compactionDivider() string {
+	w := m.contentWidth()
+	if w < 1 {
+		w = 1
+	}
+	const title = " Compaction "
+	titleW := lipgloss.Width(title)
+	rule := lipgloss.NormalBorder().Top
+	if titleW >= w {
+		return lipgloss.NewStyle().Foreground(m.styles.P.BorderActive).Render(truncate(title, w))
+	}
+	left := (w - titleW) / 2
+	right := w - titleW - left
+	line := strings.Repeat(rule, left) + title + strings.Repeat(rule, right)
+	return lipgloss.NewStyle().Foreground(m.styles.P.BorderActive).Render(line)
 }
 
 // prose renders assistant text as styled markdown via glamour (plan 08c M4).
