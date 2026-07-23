@@ -108,6 +108,10 @@ type Model struct {
 	// key, a prompt submit, or a 5s timeout cancels it. Mirrors opencode's
 	// exit counter + armExitTimer.
 	exiting bool
+	// deleting is the two-press ctrl+d delete-session guard (plan 08f H1a):
+	// first ctrl+d arms it; second deletes the open session; any other key
+	// cancels. Mirrors the exiting guard pattern.
+	deleting bool
 
 	// Command overlay.
 	modal       modalKind
@@ -594,6 +598,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.exiting && msg.String() != "ctrl+c" {
 			m.exiting = false
 		}
+		// Same for the ctrl+d delete-session guard (plan 08f H1a).
+		if m.deleting && msg.String() != "ctrl+d" {
+			m.deleting = false
+		}
 		// ctrl+c is context-dependent (opencode prompt-input.tsx:806 +
 		// app.tsx:963-966, footer.ts:987-1006): with text in the composer it
 		// clears the input; with an empty composer it enters a two-press
@@ -672,6 +680,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+p":
 			m.modal, m.modalSel = modalPalette, 0
 			return m, nil
+		case "ctrl+r":
+			// session_rename (opencode ctrl+r) — plan 08f H1a.
+			return m.openRename()
+		case "ctrl+d":
+			// session_delete (opencode ctrl+d) with two-press confirm — plan 08f H1a.
+			return m.confirmDeleteSession()
 		case "ctrl+t":
 			m = m.cycleVariant() // cycle model variants (opencode variant_cycle)
 			// Plan 20: variant changed → re-render footer (status bar variant
@@ -1803,7 +1817,12 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.modal, m.modalSel = modalHelp, 0
 		return m, nil
 	case "c":
+		// session_compact / summarize (opencode <leader>c) — plan 08f H1a.
+		// Connect moved to ctrl+x k so this chord matches opencode.
+		return m.compactSession()
+	case "k":
 		// Open the connect overlay (plan 08e §D2): mDNS browser + manual URL.
+		// Was ctrl+x c; moved so <leader>c can be compact (08f H1a).
 		m = m.openConnectModal()
 		if m.discoverCtx != nil {
 			return m, startDiscoverCmd(m.discoverCtx)
@@ -1848,6 +1867,7 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// tui/routes/session/index.tsx:254). The status hint uses the
 		// opencode ThinkingMode vocabulary ("show" / "hide") rather than the
 		// on/off toggle style other display toggles use.
+		// Note: session rename is ctrl+r (global), not this leader chord.
 		m.view.hideThinking = !m.view.hideThinking
 		if m.view.hideThinking {
 			m.status = "thinking: hide"
