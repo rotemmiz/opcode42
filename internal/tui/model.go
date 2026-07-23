@@ -551,7 +551,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// fallthrough at the end of the KeyPressMsg case. Without this case the
 		// message is dropped and cmd+v (macOS bracketed paste) does nothing.
 		m.histIdx = -1
-		m.exiting = false // pasting is input activity — cancel the exit guard
+		m.exiting = false  // pasting is input activity — cancel the exit guard
+		m.deleting = false // and the delete-session guard (08f H1a)
 		var cmd, acCmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		m = m.resizeComposer()
@@ -684,8 +685,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// session_rename (opencode ctrl+r) — plan 08f H1a.
 			return m.openRename()
 		case "ctrl+d":
-			// session_delete (opencode ctrl+d) with two-press confirm — plan 08f H1a.
-			return m.confirmDeleteSession()
+			// session_delete (opencode ctrl+d) with two-press confirm — plan 08f
+			// H1a. Only when the composer is empty: with text, fall through so
+			// the textarea gets forward-delete (ctrl+d).
+			if strings.TrimSpace(m.input.Value()) == "" {
+				return m.confirmDeleteSession()
+			}
 		case "ctrl+t":
 			m = m.cycleVariant() // cycle model variants (opencode variant_cycle)
 			// Plan 20: variant changed → re-render footer (status bar variant
@@ -1541,9 +1546,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case exitTickMsg:
-		// The two-press exit guard timed out (opencode footer.ts:954-961):
-		// cancel the armed exit so the status bar drops the EXIT chip.
+		// The two-press exit/delete guards timed out (opencode footer.ts:954-961):
+		// cancel the armed exit so the status bar drops the EXIT chip; same for
+		// the ctrl+d delete-session guard (08f H1a).
 		m.exiting = false
+		m.deleting = false
 		// Plan 20: exit guard cleared → re-render footer (EXIT chip gone).
 		m = m.rerenderChrome()
 		return m, nil
@@ -2017,7 +2024,8 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
-	m.exiting = false // sending a prompt cancels the armed exit guard
+	m.exiting = false  // sending a prompt cancels the armed exit guard
+	m.deleting = false // and the delete-session guard (08f H1a)
 	if !m.model.ok() {
 		m.status = "no model configured (pass --provider/--model)"
 		// Plan 20: status changed → re-render footer.

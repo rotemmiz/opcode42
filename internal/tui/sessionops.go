@@ -116,7 +116,7 @@ func (m Model) confirmDeleteSession() (Model, tea.Cmd) {
 	m.deleting = true
 	m.status = "press ctrl+d again to delete session"
 	m = m.rerenderChrome()
-	return m, nil
+	return m, exitTickCmd() // auto-cancel after 5s (same timer as exit guard)
 }
 
 // compactSession summarizes/compacts the open session (opencode <leader>c /
