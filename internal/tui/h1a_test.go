@@ -41,11 +41,10 @@ func TestH1a_CtrlD_TwoPressDelete(t *testing.T) {
 }
 
 // TestH1a_CtrlD_ForwardsWhenComposerHasText pins that ctrl+d with text does
-// forward-delete in the textarea, not session delete.
+// not arm session delete (falls through to the textarea).
 func TestH1a_CtrlD_ForwardsWhenComposerHasText(t *testing.T) {
 	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m.input.SetValue("hello")
-	m.input.SetCursor(0) // at start → ctrl+d deletes 'h'
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, _ = step(t, m, key("ctrl+d"))
 	if m.deleting {
