@@ -81,9 +81,8 @@ type Config struct {
 	NoOSC52 bool
 
 	// TUIConfigPath is the TUI config file path override (plan 08f H12 /
-	// G.14 — OPENCODE_TUI_CONFIG, mirrors opencode's flag.ts:60-62). Read
-	// from the environment by cmd/opcode-tui and stored here; unused until
-	// plan 08f H13 (G.15 config file resolution) consumes it.
+	// G.14 — OPENCODE_TUI_CONFIG). Consumed by New() via loadMergedTUIConfig
+	// (plan 08f H13 / G.15).
 	TUIConfigPath string
 }
 
@@ -331,8 +330,25 @@ type Model struct {
 	// OPENCODE_DISABLE_MOUSE, mirrors opencode app.tsx:197). Set once in
 	// New() from the environment; View() reports MouseModeNone instead of
 	// MouseModeAllMotion when set. There is no CLI flag or KV persistence —
-	// opencode's flag is env-only.
+	// opencode's flag is env-only. File-config `mouse: false` (H13) can also
+	// set this when the env var is unset.
 	mouseDisabled bool
+
+	// scrollStep is the stream/diff scroll line increment (plan 08f H13).
+	// Zero means use defaultScrollStep. Overridden by tui.json scroll_speed.
+	scrollStep int
+
+	// leaderTimeoutMs is the configured leader-key timeout from tui.json
+	// (plan 08f H13). Stored for future armed-leader expiry; 0 = unset.
+	leaderTimeoutMs int
+
+	// composerMaxRows overrides maxComposerRows when set from prompt.max_height.
+	composerMaxRows int
+
+	// tuiKeybinds holds keybind overrides loaded from tui.json / opencode.json
+	// (plan 08f H13). Remapping the Update switch is deferred; the map is
+	// retained so a shared config parses cleanly today.
+	tuiKeybinds map[string]string
 
 	// fastBoot mirrors OPENCODE_FAST_BOOT (plan 08f H12 / G.14, read in
 	// opencode's app.tsx:272-273 via process.env, not flag.ts). New() uses
@@ -452,6 +468,10 @@ func New(cfg Config) Model {
 	// / G.14, mirrors opencode's app.tsx:197). Env-only — opencode has no
 	// CLI flag or persisted preference for it, so neither do we.
 	m.mouseDisabled = os.Getenv("OPENCODE_DISABLE_MOUSE") != ""
+	m.scrollStep = defaultScrollStep
+	// Plan 08f H13 / G.15: overlay opencode-compatible TUI file config
+	// (OPENCODE_TUI_CONFIG / tui.json / opencode.json) onto flags + defaults.
+	m.applyTUIFileConfig(loadMergedTUIConfig(cfg.TUIConfigPath, cfg.Directory))
 	// The bg-pulse is on by default for the splash (plan 08e §B2). It is
 	// turned off when the session screen is entered (sessionOpenedMsg /
 	// sessionCreatedMsg / sessionsLoadedMsg / forkedMsg) and back on when
@@ -758,9 +778,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch msg.Button {
 		case tea.MouseWheelUp:
-			m.scroll.Back(scrollStep)
+			m.scroll.Back(m.scrollLines())
 		case tea.MouseWheelDown:
-			m.scroll.Forward(scrollStep)
+			m.scroll.Forward(m.scrollLines())
 		}
 		return m, nil
 
@@ -970,10 +990,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// ↑/↓ below) is untouched. Plan 17 §A3: kept as Opcode42's
 			// line-scroll convention (opencode uses ctrl+alt+y/e — see the
 			// known-divergence registry).
-			m.scroll.Back(scrollStep)
+			m.scroll.Back(m.scrollLines())
 			return m, nil
 		case "ctrl+down", "pgdown", "pgdn":
-			m.scroll.Forward(scrollStep)
+			m.scroll.Forward(m.scrollLines())
 			return m, nil
 		case "ctrl+alt+u":
 			// Half-page up (opencode messages_half_page_up, plan 17 §A3).
@@ -2091,8 +2111,12 @@ func (m Model) resizeComposer() Model {
 	}
 	m.input.SetWidth(cols)
 	h := visualRows(m.input.Value(), cols)
-	if h > maxComposerRows {
-		h = maxComposerRows
+	cap := maxComposerRows
+	if m.composerMaxRows > 0 {
+		cap = m.composerMaxRows
+	}
+	if h > cap {
+		h = cap
 	}
 	m.input.SetHeight(h)
 	return m
@@ -2396,8 +2420,44 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	return m, promptCmd(m.ctx, m.client, m.cfg.SessionID, text, m.model, m.agent, files)
 }
 
-// scrollStep is the lines moved per scrollback keypress (and per wheel notch).
-const scrollStep = 3
+// scrollStep is the default lines moved per scrollback keypress / wheel notch
+// when no scroll_speed is configured (plan 08f H13). Prefer m.scrollLines().
+const scrollStep = defaultScrollStep
+
+// applyTUIFileConfig overlays a loaded tui.json / opencode.json TUI section
+// onto the Model (plan 08f H13 / G.15). CLI/env knobs already applied in New()
+// win over the file (e.g. OPENCODE_DISABLE_MOUSE, --theme).
+func (m *Model) applyTUIFileConfig(cfg tuiFileConfig) {
+	if cfg.Mouse != nil && !*cfg.Mouse && os.Getenv("OPENCODE_DISABLE_MOUSE") == "" {
+		m.mouseDisabled = true
+	}
+	if cfg.ScrollSpeed != nil {
+		m.scrollStep = scrollStepFromSpeed(*cfg.ScrollSpeed)
+	}
+	if cfg.DiffStyle == "stacked" {
+		m.diffTreeHidden = true
+	}
+	if cfg.Theme != "" && m.cfg.Theme == "" {
+		m.cfg.Theme = cfg.Theme
+	}
+	if cfg.LeaderTimeout != nil && *cfg.LeaderTimeout > 0 {
+		m.leaderTimeoutMs = *cfg.LeaderTimeout
+	}
+	if cfg.Prompt != nil && cfg.Prompt.MaxHeight != nil && *cfg.Prompt.MaxHeight > 0 {
+		m.composerMaxRows = *cfg.Prompt.MaxHeight
+	}
+	if len(cfg.Keybinds) > 0 {
+		m.tuiKeybinds = cfg.Keybinds
+	}
+}
+
+// scrollLines returns the effective stream scroll step (config overlay).
+func (m Model) scrollLines() int {
+	if m.scrollStep > 0 {
+		return m.scrollStep
+	}
+	return defaultScrollStep
+}
 
 // scrollBodyHeight returns the height of the stream viewport (screen height
 // minus the footer's height) — the dimension the half-page scroll keys (plan

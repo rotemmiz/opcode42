@@ -42,7 +42,7 @@ func main() {
 	urlVal := *url
 
 	// OPENCODE_TUI_CONFIG (plan 08f H12 / G.14, mirrors opencode
-	// flag.ts:60-62) is stashed on Config for plan 08f H13 (G.15 config
+	// flag.ts:60-62) is consumed by New() via loadMergedTUIConfig (plan 08f H13 / G.15 config
 	// file resolution) to consume; the TUI itself doesn't read it yet.
 	model := tui.New(tui.Config{
 		URL: urlVal, Directory: *dir, SessionID: *session,
