@@ -116,29 +116,40 @@ def main() -> int:
             "title": f"issue-{issue_number}",
         })
         sess_resp = sandbox.commands.run(
-            f"curl -sf -X POST {base}/session "
+            f"curl -s -w '\\n%{{http_code}}' -X POST {base}/session "
             f"-H 'Content-Type: application/json' "
             f"-d '{session_body}'",
             timeout=30,
         )
         if sess_resp.exit_code != 0:
             raise SystemExit(f"failed to create session: {sess_resp.stderr}")
-        sid = json.loads(sess_resp.stdout)["id"]
+        resp_lines = sess_resp.stdout.strip().rsplit("\n", 1)
+        http_code = resp_lines[-1] if len(resp_lines) > 1 else "???"
+        if http_code != "200":
+            _dump_opencode_logs(sandbox)
+            raise SystemExit(f"session create returned HTTP {http_code} (expected 200) — check opencode logs above")
+        sid = json.loads(resp_lines[0])["id"]
         print(f"worker: session={sid}, sending plan as prompt...", flush=True)
 
-        # Send the plan as the prompt. Use a temp file to avoid shell-escaping
-        # the potentially large plan text.
+        # Send the plan as the prompt. Use prompt_async (returns 204 immediately,
+        # agent runs in background) instead of the synchronous /message endpoint
+        # (which blocks until the agent loop completes). Use a temp file to
+        # avoid shell-escaping the potentially large plan text.
         plan_path = "/tmp/plan.json"
         plan_body = json.dumps({"parts": [{"type": "text", "text": plan_comment}]})
         sandbox.files.write(plan_path, plan_body.encode())
         msg_resp = sandbox.commands.run(
-            f"curl -sf -X POST {base}/session/{sid}/message "
+            f"curl -s -o /dev/null -w '%{{http_code}}' -X POST {base}/session/{sid}/prompt_async "
             f"-H 'Content-Type: application/json' "
             f"-d @{plan_path}",
             timeout=30,
         )
         if msg_resp.exit_code != 0:
             raise SystemExit(f"failed to send message: {msg_resp.stderr}")
+        http_code = msg_resp.stdout.strip()
+        if http_code != "204":
+            _dump_opencode_logs(sandbox)
+            raise SystemExit(f"prompt_async returned HTTP {http_code} (expected 204) — check opencode logs above")
 
         # 6. Poll GET /session/status — two-phase wait.
         #    status.ts:42-44 DELETES a session from the map when it goes idle,
