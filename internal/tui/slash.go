@@ -48,6 +48,7 @@ var builtinCommands = []slashItem{
 	{name: "/compact", desc: "Summarize / compact context", kind: slashBuiltin},
 	{name: "/export", desc: "Copy the full transcript", kind: slashBuiltin},
 	{name: "/copy", desc: "Copy the full transcript", kind: slashBuiltin},
+	{name: "/docs", desc: "Open documentation in the browser", kind: slashBuiltin},
 }
 
 // acMode is what the composer popup is completing.
@@ -358,6 +359,8 @@ func (m Model) acceptSlash() (tea.Model, tea.Cmd) {
 			return m.compactSession()
 		case "/export", "/copy":
 			return m.copyTranscript()
+		case "/docs":
+			return m, openDocsCmd()
 		}
 		return m, nil
 	}
