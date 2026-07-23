@@ -182,6 +182,10 @@ type Model struct {
 	history        []string            // submitted prompts (persisted; recalled with up/down when empty)
 	histIdx        int                 // browse cursor into history (-1 = not browsing)
 	persistEnabled bool                // gate local-KV reads/writes (off in tests; on via Restore)
+	// revertMessageID is the local undo checkpoint (opencode session.revert.messageID).
+	// Set after a successful revert; cleared on unrevert. undoLastTurn skips user
+	// messages at/after this id so repeated undos walk further back (08f H1b).
+	revertMessageID string
 
 	// Diff reviewer (plan 08b §1).
 	diff           diffState // full-screen diff reviewer (open == active)
@@ -947,9 +951,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.rerenderChrome()
 			return m, nil
 		}
-		m.status = "reverted"
+		if msg.redo {
+			m.revertMessageID = ""
+			m.status = "redone"
+		} else {
+			m.revertMessageID = msg.messageID
+			m.status = "reverted"
+		}
 		m = m.rerenderChrome()
-		// Reload history so the stream drops/restores the reverted turns.
 		if m.cfg.SessionID != "" {
 			return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
 		}
@@ -1257,7 +1266,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case messagesLoadedMsg:
 		if msg.err == nil {
-			m.store = m.store.ingestHistory(msg.sessionID, msg.items)
+			// Replace (not upsert) so a post-revert reload drops turns the
+			// daemon no longer returns (08f H1b review).
+			m.store = m.store.replaceHistory(msg.sessionID, msg.items)
 			m.store.version++
 		}
 		m.todos = nil // todos are per-session; refetch for the opened one if the dock is up

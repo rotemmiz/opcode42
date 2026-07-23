@@ -84,6 +84,17 @@ func (s store) ingestHistory(sessionID string, items []wireWithParts) store {
 	return s
 }
 
+// replaceHistory clears the session's messages/parts then ingests the wire
+// payload. Used by messagesLoadedMsg so a post-revert reload drops turns the
+// daemon no longer returns (upsert alone would leave stale entries).
+func (s store) replaceHistory(sessionID string, items []wireWithParts) store {
+	for _, msg := range s.messages[sessionID] {
+		delete(s.parts, msg.ID)
+	}
+	s.messages[sessionID] = nil
+	return s.ingestHistory(sessionID, items)
+}
+
 // sessionByID returns the session with the given id, or nil when absent.
 func (s store) sessionByID(id string) *Session {
 	for i := range s.sessions {
