@@ -80,7 +80,13 @@ func main() {
 			"empty = push relay disabled (registration still persists)")
 	pluginHost := flag.Bool("plugin-host", false, "enable the opencode-plugin host sidecar (plan 05; off by default)")
 	showVersion := flag.Bool("version", false, "print version and exit")
+	healthCheck := flag.Bool("health-check", false, "print \"ok\" and exit 0 without starting the daemon (pipeline liveness probe)")
 	flag.Parse()
+
+	if *healthCheck {
+		fmt.Println("ok")
+		os.Exit(0)
+	}
 
 	if *showVersion {
 		fmt.Println(version)
