@@ -1,0 +1,40 @@
+name: Planner
+
+# Fires when a new issue is opened. Boots a read-only planning step: reads the
+# issue + the repo's plans/ from the checkout, calls Ollama Cloud, and posts a
+# structured plan as a comment. The user then /approves to trigger the worker.
+#
+# No E2B sandbox needed — planning is just file reads + an LLM call, both fine
+# on the runner. No PAT needed — the auto GITHUB_TOKEN with issues:write posts
+# the comment.
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests
+
+      - name: Run planner
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          REPO: ${{ github.repository }}
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_URL: ${{ secrets.OLLAMA_URL }}
+          OLLAMA_MODEL: ${{ secrets.OLLAMA_MODEL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/planner.py
