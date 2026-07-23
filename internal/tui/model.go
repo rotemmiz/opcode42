@@ -621,6 +621,55 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case tea.MouseMotionMsg:
+		// Plan 08f H4 (G.3): hovering a modal row previews the selection;
+		// hovering an autocomplete row does the same. Deliberately scoped to
+		// just these two surfaces — tool-row / user-message hover is deferred.
+		if m.modal != modalNone {
+			if row, ok := m.modalRowAtY(msg.X, msg.Y); ok {
+				m.modalSel = row
+			}
+			return m, nil
+		}
+		if m.ac.open {
+			if row, ok := m.acRowAtY(msg.X, msg.Y); ok {
+				m.ac.sel = row
+			}
+			return m, nil
+		}
+		return m, nil
+
+	case tea.MouseClickMsg:
+		// Plan 08f H4 (G.3): a left-click on a modal/autocomplete row selects
+		// it and submits/accepts — mirroring "hover to select, enter to
+		// accept" but in one motion.
+		if msg.Button != tea.MouseLeft {
+			return m, nil
+		}
+		if m.modal != modalNone {
+			row, ok := m.modalRowAtY(msg.X, msg.Y)
+			if !ok {
+				return m, nil
+			}
+			m.modalSel = row
+			if m.modal == modalConnect {
+				// Clicking a server row hands focus to the list (mirrors the
+				// "tab" toggle) so the selection bar renders immediately.
+				m.connectFieldFocus = false
+				m.connectURLInput.Blur()
+			}
+			return m.modalSelect()
+		}
+		if m.ac.open {
+			row, ok := m.acRowAtY(msg.X, msg.Y)
+			if !ok {
+				return m, nil
+			}
+			m.ac.sel = row
+			return m.acceptAutocomplete()
+		}
+		return m, nil
+
 	case tea.KeyPressMsg:
 		// A focused terminal captures every key (ctrl+c included, so the shell can
 		// interrupt) — only ctrl+] escapes, handled inside handlePTYKey. A pending

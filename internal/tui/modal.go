@@ -566,22 +566,27 @@ func blurInput(ti textinput.Model) textinput.Model {
 	return ti
 }
 
-// modalView renders the active modal as a centered panel over the background.
-//
-// Border: rounded border with BorderActive color (brighter than Border) to
-// signal an "owned surface" — mirrors opencode's dialog-select.tsx which uses a
-// themed border.
-//
-// Surface fill: every row is rendered through Surface(BgElev) padded to the
-// inner content width so the panel background is uniform — no transparent
-// trailing cells on light terminals. (plan 08c M8 Tier 0 fill rule)
-//
-// Filter affordance: a "Search  /" hint below the title signals that typing
-// filters the list — mirrors opencode's dialog-select.tsx filter input rendering.
-//
-// Selected row: s.Selection already provides the amber selection bar;
-// Surface(BgElev) is applied to non-selected rows so they too have a fill.
-func (m Model) modalView() string {
+// modalPanelBuild is the result of buildModalPanel: the rendered (but not yet
+// centered) panel string, plus the row-selection geometry needed to map a
+// mouse Y to a modalSel index (plan 08f H4 / G.3). rowFirstLine is the line
+// index — 0-based, counted within the panel's JoinVertical content, i.e.
+// before the border+padding wrapper is applied — of the first VISIBLE
+// selectable row; rowStart/rowEnd is the [start,end) window of modalSel
+// values currently shown (from windowAround/the connect list window). ok is
+// false when the modal has no selectable rows to hover/click (e.g. the
+// rename text-input overlay, or an empty connect server list).
+type modalPanelBuild struct {
+	panel                          string
+	rowFirstLine, rowStart, rowEnd int
+	ok                             bool
+}
+
+// buildModalPanel builds the active modal's panel content. It is the single
+// source of truth for the modal's on-screen layout: modalView() wraps the
+// panel with centerScreen for rendering, and modalRowAtY() (H4) uses the same
+// row geometry to hit-test a mouse click/hover — so the two can never drift
+// out of sync.
+func (m Model) buildModalPanel() modalPanelBuild {
 	s := m.styles
 
 	// innerWidth is the usable content width inside Padding(1,2): width - 2*2 = width-4.
@@ -598,7 +603,8 @@ func (m Model) modalView() string {
 		return s.Surface(s.P.BgElev).Width(innerWidth).Render(content)
 	}
 
-	// The rename overlay is a single text field, not a list.
+	// The rename overlay is a single text field, not a list — no selectable
+	// rows to hover/click.
 	if m.modal == modalRename {
 		body := lipgloss.JoinVertical(lipgloss.Left,
 			surfaceRow(s.Section.Render("Rename session")),
@@ -613,7 +619,7 @@ func (m Model) modalView() string {
 			BorderBackground(s.P.BgElev).
 			Background(s.P.BgElev).
 			Padding(1, 2).Width(width + 2).Render(body) // v2: +2 for the border cols Width now includes
-		return centerScreen(m.width, m.height, panel)
+		return modalPanelBuild{panel: panel}
 	}
 
 	// The connect overlay (plan 08e §D2) is a manual URL field + a nearby-
@@ -630,14 +636,16 @@ func (m Model) modalView() string {
 		lines = append(lines, m.connectURLInput.View())
 		lines = append(lines, surfaceRow(""))
 		lines = append(lines, surfaceRow(s.Faint.Render("Nearby servers")))
+		var rowFirstLine, start, end int
 		if len(m.discoveredServers) == 0 {
 			lines = append(lines, surfaceRow(s.Faint.Render("(browsing…)")))
 		} else {
 			const maxRows = 10
-			start, end := windowAround(m.modalSel, len(m.discoveredServers), maxRows)
+			start, end = windowAround(m.modalSel, len(m.discoveredServers), maxRows)
 			if start > 0 {
 				lines = append(lines, surfaceRow(s.Faint.Render("↑ more")))
 			}
+			rowFirstLine = len(lines)
 			for i := start; i < end; i++ {
 				row := m.connectRowLabel(m.discoveredServers[i])
 				if i == m.modalSel && !m.connectFieldFocus {
@@ -659,7 +667,7 @@ func (m Model) modalView() string {
 			Background(s.P.BgElev).
 			Padding(1, 2).Width(width + 2).
 			Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
-		return centerScreen(m.width, m.height, panel)
+		return modalPanelBuild{panel: panel, rowFirstLine: rowFirstLine, rowStart: start, rowEnd: end, ok: end > start}
 	}
 
 	title, rows, footer := m.modalItems()
@@ -695,6 +703,7 @@ func (m Model) modalView() string {
 	if start > 0 {
 		lines = append(lines, surfaceRow(s.Faint.Render("↑ more")))
 	}
+	rowFirstLine := len(lines)
 	for i := start; i < end; i++ {
 		if i == m.modalSel {
 			// Selection bar: amber bg, dark bold text — full inner width so the
@@ -720,7 +729,65 @@ func (m Model) modalView() string {
 		Width(width + 2). // v2: +2 for the border cols Width now includes
 		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 
-	return centerScreen(m.width, m.height, panel)
+	return modalPanelBuild{panel: panel, rowFirstLine: rowFirstLine, rowStart: start, rowEnd: end, ok: end > start}
+}
+
+// modalView renders the active modal as a centered panel over the background.
+//
+// Border: rounded border with BorderActive color (brighter than Border) to
+// signal an "owned surface" — mirrors opencode's dialog-select.tsx which uses a
+// themed border.
+//
+// Surface fill: every row is rendered through Surface(BgElev) padded to the
+// inner content width so the panel background is uniform — no transparent
+// trailing cells on light terminals. (plan 08c M8 Tier 0 fill rule)
+//
+// Filter affordance: a "Search  /" hint below the title signals that typing
+// filters the list — mirrors opencode's dialog-select.tsx filter input rendering.
+//
+// Selected row: s.Selection already provides the amber selection bar;
+// Surface(BgElev) is applied to non-selected rows so they too have a fill.
+func (m Model) modalView() string {
+	return centerScreen(m.width, m.height, m.buildModalPanel().panel)
+}
+
+// modalRowAtY maps a mouse position to a modalSel row index for hover/click
+// (plan 08f H4 / G.3). It rebuilds the modal panel via buildModalPanel — the
+// same code path modalView() renders — so the row geometry always matches
+// what's on screen, then locates the panel's on-screen origin the same way
+// lipgloss.Place centers it (centeredCardPos mirrors Place's Center math).
+// Returns ok=false when the modal has no rows (e.g. the rename overlay) or
+// the point falls outside the row band.
+func (m Model) modalRowAtY(x, y int) (int, bool) {
+	if m.modal == modalNone {
+		return 0, false
+	}
+	b := m.buildModalPanel()
+	if !b.ok {
+		return 0, false
+	}
+	px, py, ok := centeredCardPos(m.width, m.height, b.panel)
+	if !ok {
+		return 0, false
+	}
+	pw, ph := lipgloss.Width(b.panel), lipgloss.Height(b.panel)
+	if x < px || x >= px+pw || y < py || y >= py+ph {
+		return 0, false
+	}
+	const borderAndPadTop = 2 // 1 border row + 1 Padding(1,2) top row
+	contentLine := y - py - borderAndPadTop
+	if contentLine < 0 {
+		return 0, false
+	}
+	rowOffset := contentLine - b.rowFirstLine
+	if rowOffset < 0 {
+		return 0, false
+	}
+	row := b.rowStart + rowOffset
+	if row < b.rowStart || row >= b.rowEnd {
+		return 0, false
+	}
+	return row, true
 }
 
 // isFilterableModal returns true for dialogs where typing filters the list —
