@@ -67,7 +67,7 @@ func TestH2_UsageChip_LastAssistantTokens(t *testing.T) {
 	if chip == "" {
 		t.Fatal("usageChip empty")
 	}
-	if !strings.Contains(chip, "1,500") {
+	if !strings.Contains(chip, "1.5K") {
 		t.Fatalf("usageChip should include token count, got %q", chip)
 	}
 	if !strings.Contains(chip, "%") {
@@ -77,7 +77,7 @@ func TestH2_UsageChip_LastAssistantTokens(t *testing.T) {
 		t.Fatalf("usageChip should include cost, got %q", chip)
 	}
 	bar := m.statusBarView(120)
-	if !strings.Contains(bar, "1,500") {
+	if !strings.Contains(bar, "1.5K") {
 		t.Fatalf("statusBarView should show usage chip, got %q", bar)
 	}
 }
