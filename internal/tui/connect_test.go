@@ -198,8 +198,8 @@ func TestSlashConnect_OpensModal(t *testing.T) {
 	}
 }
 
-// TestLeaderConnect_OpensModal presses ctrl+x then c and asserts the connect
-// modal opens (plan 08e §D2 — ctrl+x c leader key).
+// TestLeaderConnect_OpensModal presses ctrl+x then k and asserts the connect
+// modal opens (plan 08f H1a — connect moved from ctrl+x c so compact can own c).
 func TestLeaderConnect_OpensModal(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -207,9 +207,9 @@ func TestLeaderConnect_OpensModal(t *testing.T) {
 	if !m.leader {
 		t.Fatal("ctrl+x should arm the leader")
 	}
-	m, _ = step(t, m, key("c"))
+	m, _ = step(t, m, key("k"))
 	if m.modal != modalConnect {
-		t.Fatalf("ctrl+x c should open modalConnect, got %v", m.modal)
+		t.Fatalf("ctrl+x k should open modalConnect, got %v", m.modal)
 	}
 }
 

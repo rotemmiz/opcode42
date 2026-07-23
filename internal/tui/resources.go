@@ -129,8 +129,11 @@ func helpRows() []string {
 		"  ctrl+x t     toggle tasks dock",
 		"  ctrl+x g     timeline (revert to a turn)",
 		"  ctrl+x s     status modal",
-		"  ctrl+x c     connect to daemon (mDNS)",
+		"  ctrl+x c     compact / summarize context",
+		"  ctrl+x k     connect to daemon (mDNS)",
 		"  ctrl+x y     copy last response",
+		"  ctrl+r       rename session",
+		"  ctrl+d       delete session (press twice)",
 		"",
 		"Thinking & tools",
 		"  ctrl+x r     thinking hide/show (default hide)",
@@ -159,6 +162,7 @@ func helpRows() []string {
 		"Slash commands",
 		"  /new /sessions /models /agents /themes",
 		"  /timeline /diff /terminal /variant /stash",
-		"  /status /connect /help",
+		"  /status /connect /help /share /unshare",
+		"  /compact /export /copy",
 	}
 }

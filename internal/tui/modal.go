@@ -396,42 +396,13 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 			m.modal, m.modalSel = modalStatus, 0
 			return m, nil
 		case paRename:
-			if m.cfg.SessionID == "" {
-				m.status = "no session to rename"
-				return m, nil
-			}
-			m.modal = modalRename
-			if cur := m.currentSession(); cur != nil {
-				m.renameInput.SetValue(cur.Title)
-			}
-			m.renameInput.CursorEnd()
-			m.renameInput.Focus()
-			return m, nil
+			return m.openRename()
 		case paShare:
-			if m.cfg.SessionID == "" {
-				m.status = "no session to share"
-				return m, nil
-			}
-			cur := m.currentSession()
-			if cur != nil && cur.Share != nil && cur.Share.URL != "" {
-				sh := cur.Share
-				m.status = "shared · " + sh.URL + " (copied)"
-				return m, copyClipboardCmd(sh.URL)
-			}
-			m.status = "sharing…"
-			return m, shareSessionCmd(m.ctx, m.client, m.cfg.SessionID)
+			return m.shareOrCopyLink()
 		case paUnshare:
-			if m.cfg.SessionID == "" {
-				return m, nil
-			}
-			return m, unshareSessionCmd(m.ctx, m.client, m.cfg.SessionID)
+			return m.unshareCurrent()
 		case paSummarize:
-			if m.cfg.SessionID == "" || !m.model.ok() {
-				m.status = "summarize needs an open session + model"
-				return m, nil
-			}
-			m.status = "summarizing…"
-			return m, summarizeSessionCmd(m.ctx, m.client, m.cfg.SessionID, m.model)
+			return m.compactSession()
 		case paAbort:
 			if m.cfg.SessionID == "" {
 				return m, nil

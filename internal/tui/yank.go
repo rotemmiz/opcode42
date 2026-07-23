@@ -37,3 +37,35 @@ func (m Model) lastAssistantText() string {
 	}
 	return ""
 }
+
+// formatTranscript builds a plain-text transcript of the open session
+// (plan 08f H1a — /export + /copy). User/assistant turns are labeled; empty
+// messages are skipped.
+func (m Model) formatTranscript() string {
+	sid := m.cfg.SessionID
+	if sid == "" {
+		return ""
+	}
+	var b strings.Builder
+	if cur := m.currentSession(); cur != nil && cur.Title != "" {
+		b.WriteString("# ")
+		b.WriteString(cur.Title)
+		b.WriteString("\n\n")
+	}
+	for _, msg := range m.store.messages[sid] {
+		body := m.messageText(msg.ID)
+		if body == "" {
+			continue
+		}
+		role := msg.Role
+		if role == "" {
+			role = "message"
+		}
+		b.WriteString("## ")
+		b.WriteString(role)
+		b.WriteString("\n\n")
+		b.WriteString(body)
+		b.WriteString("\n\n")
+	}
+	return strings.TrimSpace(b.String())
+}
