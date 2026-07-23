@@ -434,11 +434,25 @@ func (m Model) composerView() string {
 		PaddingLeft(1).
 		Width(m.barWidth()) // -1: the left border renders outside Width
 	view := bar.Render(m.input.View())
-	if m.shellMode {
-		label := lipgloss.NewStyle().Foreground(m.styles.P.Red).Render("! shell — enter run · esc cancel")
-		return lipgloss.JoinVertical(lipgloss.Left, label, view)
+	var above []string
+	if len(m.pendingFiles) > 0 {
+		chips := make([]string, 0, len(m.pendingFiles))
+		for i, f := range m.pendingFiles {
+			label := f.Filename
+			if strings.HasPrefix(f.Mime, "image/") {
+				label = "Image " + humanInt(i+1)
+			}
+			chips = append(chips, m.styles.Dim.Render("["+label+"]"))
+		}
+		above = append(above, strings.Join(chips, " "))
 	}
-	return view
+	if m.shellMode {
+		above = append(above, lipgloss.NewStyle().Foreground(m.styles.P.Red).Render("! shell — enter run · esc cancel"))
+	}
+	if len(above) == 0 {
+		return view
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, append(above, view)...)
 }
 
 // composerBackground is the surface background the composer paints — opencode's

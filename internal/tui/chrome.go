@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"math"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -217,11 +218,10 @@ func (m Model) statusBarView(width int) string {
 	// Token/cost counts are independent of the status text (opencode
 	// footer.view.tsx:856-862 activityMeta is its own box, shown even while
 	// the exit guard is armed), so they append regardless of mode.
-	if ss := m.currentSession(); ss != nil && ss.Tokens.Total() > 0 {
-		right += s.Faint.Render(" · ") + s.Dim.Render(humanInt(ss.Tokens.Total())+" tok")
-		if ss.Cost > 0 {
-			right += s.Faint.Render(" · ") + s.Dim.Render(fmt.Sprintf("$%.4f", ss.Cost))
-		}
+	// Plan 08f H2 / G.4: prefer the opencode usage chip from the last
+	// assistant message (tokens + context % + session cost).
+	if chip := m.usageChip(); chip != "" {
+		right += s.Faint.Render(" · ") + s.Dim.Render(chip)
 	}
 	// F6: context hints on the right. opencode footer.view.tsx:884-896 shows
 	// background/queued/subagents chips (key + label) gated by a responsive
@@ -431,6 +431,41 @@ func (m Model) contextLimitForActiveModel() int {
 		}
 	}
 	return 0
+}
+
+// usageChip formats the opencode prompt usage line (prompt/index.tsx:259-277):
+// "<tokens> (<pct%>) · $<cost>" from the last assistant message with
+// tokens.output > 0 plus the session cost. Empty when nothing to show.
+func (m Model) usageChip() string {
+	msgs := m.store.messages[m.cfg.SessionID]
+	var last *Message
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "assistant" && msgs[i].Tokens.Output > 0 {
+			last = &msgs[i]
+			break
+		}
+	}
+	if last == nil {
+		return ""
+	}
+	tokens := int(last.Tokens.Total())
+	if tokens <= 0 {
+		return ""
+	}
+	context := humanInt(tokens)
+	limit := m.contextLimitForActiveModel()
+	if limit <= 0 {
+		limit = defaultContextLimit
+	}
+	if limit > 0 {
+		pct := int(math.Round(float64(tokens) / float64(limit) * 100))
+		context = fmt.Sprintf("%s (%d%%)", humanInt(tokens), pct)
+	}
+	parts := []string{context}
+	if ss := m.currentSession(); ss != nil && ss.Cost > 0 {
+		parts = append(parts, fmt.Sprintf("$%.4f", ss.Cost))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // humanInt formats n with thousands separators (1234 → "1,234").

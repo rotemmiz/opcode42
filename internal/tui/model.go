@@ -299,6 +299,10 @@ type Model struct {
 	// WindowSizeMsg; View only Clear()s and redraws — avoids NewCanvas +
 	// screen-buffer alloc per scroll frame (~260KB/op before reuse).
 	frameCanvas *lipgloss.Canvas
+
+	// pendingFiles are clipboard image attachments staged for the next
+	// submit (plan 08f H2 / opencode pasteAttachment). Cleared on send.
+	pendingFiles []pendingFile
 }
 
 // pickDefaultTheme returns the appropriate default theme name based on whether
@@ -639,8 +643,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// timeout cancels it. A focused PTY keeps the unconditional quit
 		// above via handlePTYKey.
 		if msg.String() == "ctrl+c" {
-			if strings.TrimSpace(m.input.Value()) != "" {
+			if strings.TrimSpace(m.input.Value()) != "" || len(m.pendingFiles) > 0 {
 				m.input.SetValue("")
+				m.pendingFiles = nil
 				m = m.resizeComposer()
 				m, acCmd := m.refreshAutocomplete()
 				// Plan 20: composer cleared → re-render footer.
@@ -712,6 +717,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+r":
 			// session_rename (opencode ctrl+r) — plan 08f H1a.
 			return m.openRename()
+		case "ctrl+v":
+			// prompt.paste (opencode ctrl+v) — read system clipboard and
+			// insert / attach (plan 08f H2). Overlay owners keep the key.
+			if m.modal != modalNone || m.diff.open ||
+				(m.pty.open && m.pty.focused) ||
+				m.pendingPermission() != nil || m.pendingQuestion() != nil {
+				break
+			}
+			return m, readClipboardCmd()
 		case "ctrl+d":
 			// session_delete (opencode ctrl+d) with two-press confirm — plan 08f
 			// H1a. Only when the composer is empty: with text, fall through so
@@ -959,7 +973,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.command != "" { // a "/command" created this session — run it
 			return m, runCommandCmd(m.ctx, m.client, msg.session.ID, msg.command, msg.arguments)
 		}
-		return m, promptCmd(m.ctx, m.client, msg.session.ID, msg.text, m.model, m.agent)
+		files := m.pendingFiles
+		m.pendingFiles = nil
+		return m, promptCmd(m.ctx, m.client, msg.session.ID, msg.text, m.model, m.agent, files)
 
 	case promptSentMsg:
 		if msg.err != nil {
@@ -1113,6 +1129,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Plan 20: a toast was pushed → re-render chrome (toast layer).
 		m = m.rerenderChrome()
 		return m, cmd
+
+	case clipboardReadMsg:
+		// ctrl+v / prompt.paste result (plan 08f H2).
+		return m.applyClipboardRead(msg)
 
 	case editorDoneMsg:
 		if msg.path != "" {
@@ -2064,7 +2084,7 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // Requires a resolved model.
 func (m Model) submit() (tea.Model, tea.Cmd) {
 	text := strings.TrimSpace(m.input.Value())
-	if text == "" {
+	if text == "" && len(m.pendingFiles) == 0 {
 		return m, nil
 	}
 	m.exiting = false  // sending a prompt cancels the armed exit guard
@@ -2075,8 +2095,12 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 		m = m.rerenderChrome()
 		return m, nil
 	}
-	m = m.pushHistory(text) // remember the submission for up/down recall
+	if text != "" {
+		m = m.pushHistory(text) // remember the submission for up/down recall
+	}
 	m.persist()
+	files := m.pendingFiles
+	m.pendingFiles = nil
 	// Shell mode: run the text as a command in the open session; output streams
 	// back as tool parts. Requires an existing session (no implicit create).
 	if m.shellMode {
@@ -2101,7 +2125,7 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	if m.cfg.SessionID == "" {
 		return m, createSessionCmd(m.ctx, m.client, text)
 	}
-	return m, promptCmd(m.ctx, m.client, m.cfg.SessionID, text, m.model, m.agent)
+	return m, promptCmd(m.ctx, m.client, m.cfg.SessionID, text, m.model, m.agent, files)
 }
 
 // scrollStep is the lines moved per scrollback keypress (and per wheel notch).
@@ -2169,6 +2193,49 @@ func (m Model) effectiveAgent() string {
 		return m.agents[0].name
 	}
 	return "build"
+}
+
+// applyClipboardRead handles clipboardReadMsg from ctrl+v (plan 08f H2).
+// Text inserts via the bracketed-paste path; images stage a pendingFile and
+// insert an [Image N] marker into the composer (opencode pasteAttachment).
+func (m Model) applyClipboardRead(msg clipboardReadMsg) (Model, tea.Cmd) {
+	if msg.Err != nil {
+		m.status = "clipboard: " + msg.Err.Error()
+		m = m.rerenderChrome()
+		return m, nil
+	}
+	m.histIdx = -1
+	m.exiting = false
+	m.deleting = false
+	if strings.HasPrefix(msg.Mime, "image/") {
+		n := 1
+		for _, f := range m.pendingFiles {
+			if strings.HasPrefix(f.Mime, "image/") {
+				n++
+			}
+		}
+		name := "clipboard"
+		m.pendingFiles = append(m.pendingFiles, pendingFile{
+			Filename: name,
+			Mime:     msg.Mime,
+			URL:      dataURL(msg.Mime, msg.Data),
+		})
+		marker := "[Image " + humanInt(n) + "] "
+		return m.insertComposerText(marker)
+	}
+	// text/plain (and any non-image fallback)
+	return m.insertComposerText(string(msg.Data))
+}
+
+// insertComposerText inserts s at the cursor via the textarea's PasteMsg
+// handler (same path as bracketed paste), then re-fits chrome.
+func (m Model) insertComposerText(s string) (Model, tea.Cmd) {
+	var cmd, acCmd tea.Cmd
+	m.input, cmd = m.input.Update(tea.PasteMsg{Content: s})
+	m = m.resizeComposer()
+	m, acCmd = m.refreshAutocomplete()
+	m = m.rerenderFull()
+	return m, tea.Batch(cmd, acCmd)
 }
 
 // View renders the active screen via the v2 canvas compositor (plan 08e §A1+A2).
