@@ -217,9 +217,11 @@ func TestMCPToolCall_PermissionDenied(t *testing.T) {
 // deterministically (the in-process transport doesn't deliver server-side
 // list-changed notifications without sampling/elicitation handlers).
 type watchConn struct {
-	mu      sync.Mutex
-	tools   []mcp.Tool
-	handler func(mcp.JSONRPCNotification)
+	mu        sync.Mutex
+	tools     []mcp.Tool
+	resources []mcp.Resource
+	contents  []mcp.ResourceContents
+	handler   func(mcp.JSONRPCNotification)
 }
 
 func (c *watchConn) Start(context.Context) error { return nil }
@@ -230,6 +232,16 @@ func (c *watchConn) ListTools(context.Context, mcp.ListToolsRequest) (*mcp.ListT
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return &mcp.ListToolsResult{Tools: append([]mcp.Tool(nil), c.tools...)}, nil
+}
+func (c *watchConn) ListResources(context.Context, mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return &mcp.ListResourcesResult{Resources: append([]mcp.Resource(nil), c.resources...)}, nil
+}
+func (c *watchConn) ReadResource(context.Context, mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return &mcp.ReadResourceResult{Contents: append([]mcp.ResourceContents(nil), c.contents...)}, nil
 }
 func (c *watchConn) CallTool(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return mcp.NewToolResultText("ok"), nil
@@ -290,3 +302,30 @@ func TestToolsChanged_PublishesEvent(t *testing.T) {
 	}
 	m.Close()
 }
+
+// TestResources_ListsFromConnectedServer proves Resources() returns URI-keyed
+// entries with client set after a successful dial+list.
+func TestResources_ListsFromConnectedServer(t *testing.T) {
+	wc := &watchConn{
+		tools:     []mcp.Tool{{Name: "ping"}},
+		resources: []mcp.Resource{{Name: "docs", URI: "mcp://r/docs", Description: "D", MIMEType: "text/plain"}},
+		contents:  []mcp.ResourceContents{mcp.TextResourceContents{URI: "mcp://r/docs", Text: "body"}},
+	}
+	m := NewManager(map[string]Server{"r": {Type: "local", Command: []string{"x"}}})
+	m.dial = func(context.Context, Server) (conn, bool, error) { return wc, false, nil }
+
+	got := m.Resources(context.Background())
+	res, ok := got["mcp://r/docs"]
+	if !ok {
+		t.Fatalf("Resources = %+v, want mcp://r/docs", got)
+	}
+	if res.Name != "docs" || res.Client != "r" || res.MimeType != "text/plain" {
+		t.Fatalf("resource = %+v", res)
+	}
+	content, err := m.ReadResource(context.Background(), "r", "mcp://r/docs")
+	if err != nil || content == nil || len(content.Contents) != 1 {
+		t.Fatalf("ReadResource = %+v err=%v", content, err)
+	}
+	m.Close()
+}
+

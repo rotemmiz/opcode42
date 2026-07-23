@@ -46,9 +46,21 @@ type conn interface {
 	Start(ctx context.Context) error
 	Initialize(ctx context.Context, req mcp.InitializeRequest) (*mcp.InitializeResult, error)
 	ListTools(ctx context.Context, req mcp.ListToolsRequest) (*mcp.ListToolsResult, error)
+	ListResources(ctx context.Context, req mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error)
+	ReadResource(ctx context.Context, req mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error)
 	CallTool(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error)
 	OnNotification(handler func(mcp.JSONRPCNotification))
 	Close() error
+}
+
+// Resource is one MCP resource exposed on GET /experimental/resource
+// (openapi McpResource; opencode mcp/index.ts resources()).
+type Resource struct {
+	Name        string `json:"name"`
+	URI         string `json:"uri"`
+	Client      string `json:"client"`
+	Description string `json:"description,omitempty"`
+	MimeType    string `json:"mimeType,omitempty"`
 }
 
 // Manager owns one instance's MCP clients. Connection is lazy (on first Status/
@@ -70,6 +82,9 @@ type Manager struct {
 	status  map[string]Status
 	clients map[string]conn
 	tools   map[string][]mcp.Tool // server name → its tools
+	// resources caches each connected server's resources/list result (empty when
+	// the server does not support resources).
+	resources map[string][]mcp.Resource // server name → its resources
 	// dynamic holds servers added at runtime via Add() (mcp/index.ts State.config),
 	// merged over the config-loaded `servers` for lookups.
 	dynamic map[string]Server
@@ -144,18 +159,20 @@ func (m *Manager) connect(ctx context.Context) {
 		status := map[string]Status{}
 		clients := map[string]conn{}
 		tools := map[string][]mcp.Tool{}
+		resources := map[string][]mcp.Resource{}
 		for name, s := range servers {
 			if !s.enabled() {
 				status[name] = Status{Status: "disabled"}
 				continue
 			}
-			c, tl, err := m.dialAndList(ctx, name, s)
+			c, tl, res, err := m.dialAndList(ctx, name, s)
 			if err != nil {
 				status[name] = m.dialErrorStatus(ctx, name, s, err)
 				continue
 			}
 			clients[name] = c
 			tools[name] = tl
+			resources[name] = res
 			status[name] = Status{Status: "connected"}
 		}
 
@@ -167,7 +184,7 @@ func (m *Manager) connect(ctx context.Context) {
 			}
 			return
 		}
-		m.status, m.clients, m.tools = status, clients, tools
+		m.status, m.clients, m.tools, m.resources = status, clients, tools, resources
 		m.mu.Unlock()
 	})
 }
@@ -210,11 +227,12 @@ func probeInitialize(ctx context.Context, c conn) error {
 	return err
 }
 
-// dialAndList connects, initializes, and lists a server's tools. When dial
+// dialAndList connects, initializes, and lists a server's tools (and resources,
+// soft-failing when the server does not support resources/list). When dial
 // already handshook the connection (ready), the Start/Initialize here is
 // skipped so a remote transport isn't initialized twice (some servers reject a
 // second `initialize`).
-func (m *Manager) dialAndList(ctx context.Context, name string, s Server) (conn, []mcp.Tool, error) {
+func (m *Manager) dialAndList(ctx context.Context, name string, s Server) (conn, []mcp.Tool, []mcp.Resource, error) {
 	timeout := defaultTimeout
 	if s.Timeout > 0 {
 		timeout = time.Duration(s.Timeout) * time.Millisecond
@@ -224,7 +242,7 @@ func (m *Manager) dialAndList(ctx context.Context, name string, s Server) (conn,
 
 	c, ready, err := m.dial(ctx, s)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if !ready {
 		// Note: the stdio constructor already spawns the subprocess (under its own
@@ -232,20 +250,24 @@ func (m *Manager) dialAndList(ctx context.Context, name string, s Server) (conn,
 		// Initialize/ListTools rather than the spawn itself.
 		if err := c.Start(ctx); err != nil {
 			_ = c.Close()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if err := probeInitialize(ctx, c); err != nil {
 			_ = c.Close()
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 	res, err := c.ListTools(ctx, mcp.ListToolsRequest{})
 	if err != nil {
 		_ = c.Close()
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	var resources []mcp.Resource
+	if rres, rerr := c.ListResources(ctx, mcp.ListResourcesRequest{}); rerr == nil && rres != nil {
+		resources = rres.Resources
 	}
 	m.watch(name, c)
-	return c, res.Tools, nil
+	return c, res.Tools, resources, nil
 }
 
 // watch registers a notifications/tools/list_changed handler on a connected
@@ -335,6 +357,58 @@ func (m *Manager) Tools(ctx context.Context) []ToolDef {
 		})
 	}
 	return out
+}
+
+// Resources returns every connected server's listed resources keyed by URI
+// (opencode mcp.resources / GET /experimental/resource). First-wins on URI
+// collisions across servers.
+func (m *Manager) Resources(ctx context.Context) map[string]Resource {
+	m.connect(ctx)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[string]Resource{}
+	// Stable iteration order so first-wins is deterministic under tests.
+	names := make([]string, 0, len(m.resources))
+	for name := range m.resources {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, client := range names {
+		for _, r := range m.resources[client] {
+			if r.URI == "" || r.Name == "" {
+				continue
+			}
+			if _, exists := out[r.URI]; exists {
+				continue
+			}
+			out[r.URI] = Resource{
+				Name:        r.Name,
+				URI:         r.URI,
+				Client:      client,
+				Description: r.Description,
+				MimeType:    r.MIMEType,
+			}
+		}
+	}
+	return out
+}
+
+// ReadResource fetches one resource's contents from a connected client
+// (opencode mcp.readResource). Returns nil, nil when the client is unknown or
+// not connected.
+func (m *Manager) ReadResource(ctx context.Context, clientName, uri string) (*mcp.ReadResourceResult, error) {
+	m.connect(ctx)
+	m.mu.Lock()
+	c := m.clients[clientName]
+	m.mu.Unlock()
+	if c == nil {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+	req := mcp.ReadResourceRequest{}
+	req.Params.URI = uri
+	return c.ReadResource(ctx, req)
 }
 
 // HasTool reports whether name resolves to a connected MCP tool. It connects

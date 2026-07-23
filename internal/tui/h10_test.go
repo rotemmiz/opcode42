@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -25,31 +26,53 @@ func TestH10_FilterMCPResourceNames(t *testing.T) {
 }
 
 func TestH10_MergeMentionOptions(t *testing.T) {
+	// Resources first; colliding "docs" keeps the resource row (file dropped).
 	got := mergeMentionOptions([]string{"src/a.go", "docs"}, []string{"docs", "notes"})
-	if len(got) != 3 || got[0] != "src/a.go" || got[1] != "docs" || got[2] != "notes" {
-		t.Fatalf("merge = %v", got)
+	if len(got) != 3 || got[0] != "docs" || got[1] != "notes" || got[2] != "src/a.go" {
+		t.Fatalf("merge = %v, want [docs notes src/a.go]", got)
 	}
 }
 
-func TestH10_AcceptMention_InsertsResourceURI(t *testing.T) {
+func TestH10_AcceptMention_StagesResourcePart(t *testing.T) {
 	m := New(Config{URL: "http://x"})
-	m.mcpResources = []mcpResource{{Name: "docs", URI: "mcp://server/docs"}}
+	m.mcpResources = []mcpResource{{Name: "docs", URI: "mcp://server/docs", Client: "server", MimeType: "text/markdown"}}
 	m.input.SetValue("see @do")
 	m.ac = autocomplete{open: true, mode: acMention, files: []string{"docs"}, sel: 0}
 	m = m.acceptMention()
-	if got := m.input.Value(); got != "see @mcp://server/docs " {
-		t.Fatalf("composer = %q, want resource URI inserted", got)
+	if got := m.input.Value(); got != "see @docs " {
+		t.Fatalf("composer = %q, want @name inserted", got)
+	}
+	if len(m.pendingFiles) != 1 {
+		t.Fatalf("pendingFiles = %d, want 1 staged resource part", len(m.pendingFiles))
+	}
+	f := m.pendingFiles[0]
+	if f.URL != "mcp://server/docs" || f.Filename != "docs" || f.Mime != "text/markdown" {
+		t.Fatalf("pending file = %+v", f)
+	}
+	var src struct {
+		Type       string `json:"type"`
+		ClientName string `json:"clientName"`
+		URI        string `json:"uri"`
+	}
+	if err := json.Unmarshal(f.Source, &src); err != nil {
+		t.Fatal(err)
+	}
+	if src.Type != "resource" || src.ClientName != "server" || src.URI != "mcp://server/docs" {
+		t.Fatalf("source = %+v", src)
 	}
 }
 
 func TestH10_AcceptMention_KeepsFilePath(t *testing.T) {
 	m := New(Config{URL: "http://x"})
-	m.mcpResources = []mcpResource{{Name: "docs", URI: "mcp://server/docs"}}
+	m.mcpResources = []mcpResource{{Name: "docs", URI: "mcp://server/docs", Client: "server"}}
 	m.input.SetValue("@src/main.go")
 	m.ac = autocomplete{open: true, mode: acMention, files: []string{"src/main.go"}, sel: 0}
 	m = m.acceptMention()
 	if got := m.input.Value(); got != "@src/main.go " {
 		t.Fatalf("composer = %q, want file path kept", got)
+	}
+	if len(m.pendingFiles) != 0 {
+		t.Fatalf("file accept should not stage pendingFiles, got %d", len(m.pendingFiles))
 	}
 }
 

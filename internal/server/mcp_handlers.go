@@ -30,6 +30,23 @@ func registerMCPRoutes(reg func(method, path string, h http.HandlerFunc), instan
 	reg(http.MethodPost, "/mcp/{name}/auth/callback", mcpAuthCallbackHandler(instances))
 	reg(http.MethodPost, "/mcp/{name}/auth/authenticate", mcpAuthAuthenticateHandler(instances))
 	reg(http.MethodDelete, "/mcp/{name}/auth", mcpAuthRemoveHandler(instances))
+	// Experimental resource list (openapi experimental.resource.list) — used by
+	// the TUI @-mention MCP resource autocomplete (plan 08f H10).
+	reg(http.MethodGet, "/experimental/resource", experimentalResourceHandler(instances))
+}
+
+// experimentalResourceHandler serves GET /experimental/resource: a URI→McpResource
+// map of every connected MCP server's listed resources (handlers/experimental.ts
+// resource → mcp.resources()).
+func experimentalResourceHandler(instances *instance.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		inst := instances.Get(DirectoryFromContext(r.Context()))
+		resources := inst.MCP.Resources(r.Context())
+		if resources == nil {
+			resources = map[string]mcp.Resource{}
+		}
+		writeJSON(w, http.StatusOK, resources)
+	}
 }
 
 // mcpStatusHandler returns each configured MCP server's status for the request

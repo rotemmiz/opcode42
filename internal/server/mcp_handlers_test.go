@@ -38,6 +38,19 @@ func TestMCPStatus_Empty(t *testing.T) {
 	}
 }
 
+// TestExperimentalResource_Empty proves GET /experimental/resource is wired
+// (not the 501 stub) and returns {} when no MCP servers expose resources.
+func TestExperimentalResource_Empty(t *testing.T) {
+	h := newBackedServer(t, auth.Config{})
+	rr, body := req(t, h, http.MethodGet, "/experimental/resource", t.TempDir())
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d; %s", rr.Code, body)
+	}
+	if string(body) != "{}\n" && string(body) != "{}" {
+		t.Fatalf("empty /experimental/resource must be {}; got %q", body)
+	}
+}
+
 func TestMCPStatus_DisabledFromConfig(t *testing.T) {
 	h := newBackedServer(t, auth.Config{})
 	dir := t.TempDir()
