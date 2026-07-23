@@ -135,6 +135,7 @@ func (m Model) sessionTitle(sid string) string {
 // renderMessage renders one message's parts into stacked blocks.
 func (m Model) renderMessage(msg Message, parts []Part) string {
 	var out []string
+	sawCompaction := false
 	for _, p := range parts {
 		switch p.Type {
 		case "text":
@@ -180,7 +181,13 @@ func (m Model) renderMessage(msg Message, parts []Part) string {
 		case "compaction":
 			// Plan 08f G.19 / §M.3: top-bordered "Compaction" divider that
 			// separates pre-compaction history from the continuation
-			// (opencode routes/session/index.tsx:1442-1450).
+			// (opencode routes/session/index.tsx:1442-1450). opencode only
+			// renders this inside UserMessage and takes the first match —
+			// skip non-user roles and emit at most one divider per message.
+			if msg.Role != "user" || sawCompaction {
+				continue
+			}
+			sawCompaction = true
 			out = append(out, m.compactionDivider())
 		}
 	}

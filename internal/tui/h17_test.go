@@ -27,6 +27,23 @@ func TestH17_CompactionPart_RendersDivider(t *testing.T) {
 	}
 }
 
+func TestH17_CompactionPart_UserOnlyOnce(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	asst := stripANSI(m.renderMessage(Message{Role: "assistant"}, []Part{{Type: "compaction"}}))
+	if strings.Contains(asst, "Compaction") {
+		t.Fatalf("assistant compaction part should be skipped:\n%s", asst)
+	}
+
+	got := stripANSI(m.renderMessage(Message{Role: "user"}, []Part{
+		{Type: "compaction"}, {Type: "compaction"},
+	}))
+	if n := strings.Count(got, "Compaction"); n != 1 {
+		t.Fatalf("want exactly one Compaction divider, got %d:\n%s", n, got)
+	}
+}
+
 func TestH17_ExternalDirectory_ParentDir(t *testing.T) {
 	meta, _ := json.Marshal(map[string]any{
 		"parentDir": "/tmp/outside",
