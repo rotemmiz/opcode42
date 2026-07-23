@@ -34,14 +34,19 @@ func openURLCmd(url string) tea.Cmd {
 }
 
 // openURL launches the system URL handler. Returns an error when no
-// suitable helper is available.
+// suitable helper is available. The helper is started in the background;
+// a reaper goroutine waits so the child does not become a zombie.
 func openURL(url string) error {
 	name, args := browserCommand(runtime.GOOS, url)
 	if name == "" {
 		return errString("open URL unsupported on " + runtime.GOOS)
 	}
 	cmd := exec.Command(name, args...)
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
 }
 
 // browserCommand returns the platform helper + args for opening a URL

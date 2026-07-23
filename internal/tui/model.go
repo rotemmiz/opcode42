@@ -1363,15 +1363,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case openURLDoneMsg:
-		// docs.open / /docs (plan 08f H8). Success is silent (browser takes
-		// focus); failures surface in the status line.
+		// docs.open / /docs (plan 08f H8). Status reflects success or failure.
 		if msg.Err != nil {
 			m.status = "open docs: " + msg.Err.Error()
-			m = m.rerenderChrome()
 		} else {
 			m.status = "opened " + msg.URL
-			m = m.rerenderChrome()
 		}
+		m = m.rerenderChrome()
 		return m, nil
 
 	case clipboardReadMsg:
