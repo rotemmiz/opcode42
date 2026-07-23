@@ -93,14 +93,15 @@ def main() -> int:
         # 4. Start opencode serve in the BACKGROUND (no auth — sandbox is isolated).
         #    opencode serve blocks forever; background=True returns immediately.
         #    Pass OLLAMA_API_KEY inline so opencode auto-detects the ollama-cloud
-        #    provider (provider.ts:1488-1499). Use env to set PATH too, since
-        #    E2B commands.run may not inherit the template's set_envs.
+        #    provider (provider.ts:1488-1499). Redirect output to a log file so
+        #    we can diagnose crashes.
         print(f"worker: starting opencode serve on port {AGENT_PORT} (background)...", flush=True)
         ollama_key = os.environ["OLLAMA_API_KEY"]
         sandbox.commands.run(
             f"cd repo && OLLAMA_API_KEY={ollama_key} "
             f"PATH=/usr/local/go/bin:/usr/local/.bun/bin:/usr/local/bin:$PATH "
-            f"opencode serve --port {AGENT_PORT} --hostname 0.0.0.0",
+            f"opencode serve --port {AGENT_PORT} --hostname 0.0.0.0 "
+            f"> /tmp/opencode.log 2>&1",
             background=True,
         )
         _wait_health(sandbox, AGENT_PORT)
@@ -147,29 +148,37 @@ def main() -> int:
         #      (b) wait for absence (confirms it went idle = done)
         print("worker: waiting for agent to start (busy)...", flush=True)
         for _ in range(150):  # 150 × 1s = 2.5 min
-            status_resp = sandbox.commands.run(
-                f"curl -sf {base}/session/status", timeout=10
-            )
-            if status_resp.exit_code == 0:
-                statuses = json.loads(status_resp.stdout)
-                if statuses.get(sid, {}).get("type") == "busy":
-                    print("worker: agent is busy, waiting for completion (absence=idle)...", flush=True)
-                    break
+            try:
+                status_resp = sandbox.commands.run(
+                    f"curl -sf {base}/session/status", timeout=10
+                )
+                if status_resp.exit_code == 0:
+                    statuses = json.loads(status_resp.stdout)
+                    if statuses.get(sid, {}).get("type") == "busy":
+                        print("worker: agent is busy, waiting for completion (absence=idle)...", flush=True)
+                        break
+            except Exception:
+                pass
             time.sleep(1)
         else:
-            raise SystemExit("agent never entered busy state — check opencode serve logs")
+            _dump_opencode_logs(sandbox)
+            raise SystemExit("agent never entered busy state — check opencode serve logs above")
 
         for _ in range(750):  # 750 × 2s = 25 min cap on the agent step
-            status_resp = sandbox.commands.run(
-                f"curl -sf {base}/session/status", timeout=10
-            )
-            if status_resp.exit_code == 0:
-                statuses = json.loads(status_resp.stdout)
-                if sid not in statuses:
-                    print("worker: agent finished (session absent from status map = idle)", flush=True)
-                    break
+            try:
+                status_resp = sandbox.commands.run(
+                    f"curl -sf {base}/session/status", timeout=10
+                )
+                if status_resp.exit_code == 0:
+                    statuses = json.loads(status_resp.stdout)
+                    if sid not in statuses:
+                        print("worker: agent finished (session absent from status map = idle)", flush=True)
+                        break
+            except Exception:
+                pass
             time.sleep(2)
         else:
+            _dump_opencode_logs(sandbox)
             raise SystemExit("agent did not finish within 25 min — killing sandbox")
 
         # 7. Kill the agent's opencode serve so PORT=4096 is free for conformance
@@ -260,6 +269,15 @@ def main() -> int:
             pass
 
     return 0
+
+
+def _dump_opencode_logs(sandbox: Sandbox) -> None:
+    """Dump opencode serve logs to help diagnose crashes."""
+    try:
+        r = sandbox.commands.run("cat /tmp/opencode.log 2>&1 | tail -50", timeout=5)
+        print(f"worker: opencode.log (last 50 lines):\n{r.stdout}", flush=True)
+    except Exception as e:
+        print(f"worker: could not read opencode.log: {e}", flush=True)
 
 
 def _wait_health(sandbox: Sandbox, port: int, tries: int = 60, delay: float = 0.5) -> None:
