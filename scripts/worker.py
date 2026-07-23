@@ -225,6 +225,39 @@ def main() -> int:
             _dump_opencode_logs(sandbox)
             raise SystemExit("agent produced no changes — git status is empty. Check opencode logs above.")
 
+        # 7c. Android build + test (if the repo has an android/ directory).
+        #     Runs assembleDebug + testDebugUnitTest — no emulator needed.
+        #     Failures are non-fatal (the Go gate is the real quality bar;
+        #     Android build status is reported in the PR but doesn't block).
+        if sandbox.commands.run("cd repo && test -d android && echo yes || echo no", timeout=5).stdout.strip() == "yes":
+            print("worker: running Android assembleDebug...", flush=True)
+            android_build = sandbox.commands.run(
+                "cd repo/android && chmod +x gradlew && "
+                "ANDROID_HOME=/usr/local/android-sdk "
+                "JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 "
+                "./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tail -30",
+                timeout=600,
+            )
+            android_build_ok = android_build.exit_code == 0
+            print(f"worker: assembleDebug {'PASSED' if android_build_ok else 'FAILED'}", flush=True)
+
+            if android_build_ok:
+                print("worker: running Android test...", flush=True)
+                android_test = sandbox.commands.run(
+                    "cd repo/android && "
+                    "ANDROID_HOME=/usr/local/android-sdk "
+                    "JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 "
+                    "./gradlew testDebugUnitTest --no-daemon --stacktrace 2>&1 | tail -30",
+                    timeout=600,
+                )
+                android_test_ok = android_test.exit_code == 0
+                print(f"worker: testDebugUnitTest {'PASSED' if android_test_ok else 'FAILED'}", flush=True)
+            else:
+                android_test_ok = False
+        else:
+            android_build_ok = True
+            android_test_ok = True
+
         # 8. Run the gate (asciinema-recorded, separate process from the agent)
         print("worker: running agent-gate.sh (asciinema-recorded)...", flush=True)
         sandbox.commands.run(
@@ -277,8 +310,15 @@ def main() -> int:
             timeout=60,
         )
 
+        android_status = (
+            f"## Android build\n"
+            f"- assembleDebug: {'✅ PASSED' if android_build_ok else '❌ FAILED'}\n"
+            f"- testDebugUnitTest: {'✅ PASSED' if android_test_ok else '❌ FAILED'}\n\n"
+        ) if not (android_build_ok and android_test_ok) else ""
+
         pr_body = (
             f"## Gate recording\n{asciinema_url}\n\n"
+            f"{android_status}"
             f"## Live preview\n{preview_url}\n\n"
             f"Closes #{issue_number}\n\n"
             "This PR was produced by the agentic-devex worker. "
