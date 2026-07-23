@@ -43,7 +43,7 @@ from e2b import Sandbox
 E2B_TEMPLATE = os.environ.get("E2B_TEMPLATE", "opcode42-builder")
 E2B_TIMEOUT = 1500  # seconds (< Actions timeout-minutes: 30 = 1800s)
 AGENT_PORT = 4096
-OLLAMA_MODEL_PROVIDER = "ollama"
+OLLAMA_MODEL_PROVIDER = "ollama-cloud"
 OLLAMA_MODEL_ID = os.environ.get("OLLAMA_MODEL", "glm-5.2")
 
 
@@ -78,6 +78,12 @@ def main() -> int:
     print(f"worker: sandbox={sandbox.sandbox_id}", flush=True)
 
     try:
+        # Inject OLLAMA_API_KEY into the sandbox so opencode serve auto-detects
+        # the ollama-cloud provider (provider.ts:1488-1499 — env-var auto-detection).
+        sandbox.commands.run(
+            f"export OLLAMA_API_KEY={os.environ['OLLAMA_API_KEY']} >> /root/.bashrc",
+            timeout=10,
+        )
         # 3. Clone repo on agent/<issue-n> branch
         clone_url = (
             f"https://x-access-token:{os.environ['BRANCH_PUSHER_TOKEN']}"
@@ -91,9 +97,10 @@ def main() -> int:
 
         # 4. Start opencode serve in the BACKGROUND (no auth — sandbox is isolated).
         #    opencode serve blocks forever; background=True returns immediately.
+        #    Use bash -lc so /root/.bashrc (PATH + OLLAMA_API_KEY) is sourced.
         print(f"worker: starting opencode serve on port {AGENT_PORT} (background)...", flush=True)
         sandbox.commands.run(
-            f"cd repo && opencode serve --port {AGENT_PORT} --hostname 0.0.0.0",
+            f"cd repo && bash -lc 'opencode serve --port {AGENT_PORT} --hostname 0.0.0.0'",
             background=True,
         )
         _wait_health(sandbox, AGENT_PORT)
@@ -178,7 +185,7 @@ def main() -> int:
         # 10. Restart opencode serve for the preview URL, wait for health
         print("worker: restarting opencode serve for preview URL...", flush=True)
         sandbox.commands.run(
-            f"cd repo && opencode serve --port {AGENT_PORT} --hostname 0.0.0.0",
+            f"cd repo && bash -lc 'opencode serve --port {AGENT_PORT} --hostname 0.0.0.0'",
             background=True,
         )
         _wait_health(sandbox, AGENT_PORT)
@@ -233,7 +240,7 @@ def main() -> int:
 
 def _wait_health(sandbox: Sandbox, port: int, tries: int = 60, delay: float = 0.5) -> None:
     """Wait for opencode serve to respond on /global/health."""
-    for _ in range(tries):
+    for i in range(tries):
         try:
             r = sandbox.commands.run(
                 f"curl -fsS http://127.0.0.1:{port}/global/health", timeout=5
@@ -243,6 +250,13 @@ def _wait_health(sandbox: Sandbox, port: int, tries: int = 60, delay: float = 0.
         except Exception:
             pass
         time.sleep(delay)
+    # Diagnose why it failed before raising
+    print("worker: health check failed — diagnosing...", flush=True)
+    try:
+        diag = sandbox.commands.run("which opencode; echo '---'; ps aux | head -20", timeout=5)
+        print(f"worker: diag: {diag.stdout}", flush=True)
+    except Exception as e:
+        print(f"worker: diag failed: {e}", flush=True)
     raise SystemExit(f"opencode serve did not become healthy on port {port}")
 
 
