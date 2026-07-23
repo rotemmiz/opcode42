@@ -596,8 +596,10 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 		case paThemeSwitchMode:
 			// theme.switch_mode (plan 08f H7 / G.12): flip the dark/light
 			// mode and re-resolve the active theme for the other mode.
+			// Native opcode42-dark/light are mode-specific names (not dual
+			// variants of one name), so also swap the theme name itself.
 			m.termDark = !m.termDark
-			m = m.applyThemeByName(m.themeName)
+			m = m.applyThemeForMode(m.themeName, m.termDark)
 			if m.termDark {
 				m.status = "theme mode: dark"
 			} else {

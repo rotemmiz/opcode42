@@ -139,6 +139,25 @@ func TestH7_Palette_ThemeSwitchMode_FlipsTermDark(t *testing.T) {
 	}
 }
 
+func TestH7_Palette_ThemeSwitchMode_SwapsNativePalette(t *testing.T) {
+	m := New(Config{URL: "http://x"})
+	m.termDark = true
+	m = m.applyThemeByName("opcode42-dark")
+	darkBg := m.styles.P.Bg
+	m.modal, m.modalSel = modalPalette, indexOfAction(paThemeSwitchMode)
+	next, _ := m.modalSelect()
+	nm := next.(Model)
+	if nm.termDark {
+		t.Fatal("expected light mode")
+	}
+	if nm.themeName != "opcode42-light" {
+		t.Fatalf("themeName = %q, want opcode42-light", nm.themeName)
+	}
+	if nm.styles.P.Bg == darkBg {
+		t.Fatalf("palette Bg unchanged after switch to light: %v", nm.styles.P.Bg)
+	}
+}
+
 func TestH7_Palette_ThemeSwitchModeLabel_IsDynamic(t *testing.T) {
 	m := New(Config{URL: "http://x"})
 	m.termDark = true

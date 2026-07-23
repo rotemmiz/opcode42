@@ -536,7 +536,7 @@ func (m Model) Restore() Model {
 		m.themeModeLocked = true
 		if m.termDark != dark {
 			m.termDark = dark
-			m = m.applyThemeByName(m.themeName)
+			m = m.applyThemeForMode(m.themeName, m.termDark)
 		}
 	}
 	if m.cfg.Theme != "" {
@@ -574,7 +574,18 @@ func (m Model) Restore() Model {
 // Resolves the palette for the terminal's dark/light mode (m.termDark) so that
 // embedded opencode themes use the correct dark or light token variant.
 func (m Model) applyThemeByName(name string) Model {
-	if p, ok := theme.ByNameForMode(name, m.termDark); ok {
+	return m.applyThemeForMode(name, m.termDark)
+}
+
+// applyThemeForMode resolves name for the given dark/light mode. Native
+// opcode42-dark / opcode42-light are mode-specific names (not dual variants),
+// so when the active name is one of those, swap to pickDefaultTheme(dark).
+func (m Model) applyThemeForMode(name string, dark bool) Model {
+	switch name {
+	case "opcode42-dark", "opcode42-light", "":
+		name = pickDefaultTheme(dark)
+	}
+	if p, ok := theme.ByNameForMode(name, dark); ok {
 		return m.applyTheme(name, p)
 	}
 	return m
