@@ -20,6 +20,9 @@ from e2b import Template
 
 GO_VERSION = "1.26.3"
 NODE_MAJOR = "20"
+ANDROID_SDK_ROOT = "/usr/local/android-sdk"
+ANDROID_COMPILE_SDK = "35"
+ANDROID_BUILD_TOOLS = "35.0.0"
 
 template = (
     Template()
@@ -42,12 +45,9 @@ template = (
         f"| tar -C /usr/local -xz",
         user="root",
     )
-    # Set PATH system-wide so the runtime 'user' (not root) can find go, bun,
-    # and opencode. E2B's set_envs only applies during build, not at runtime.
-    .run_cmd(
-        'echo "PATH=/usr/local/go/bin:/usr/local/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin" > /etc/environment',
-        user="root",
-    )
+    # Set PATH in /etc/profile.d (for login shells). The final /etc/environment
+    # with all paths (including Android SDK + JDK) is written later after all
+    # installs are done.
     .run_cmd(
         'echo "export PATH=/usr/local/go/bin:/usr/local/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin" > /etc/profile.d/opencode-path.sh',
         user="root",
@@ -104,4 +104,58 @@ template = (
     ], user="root")
     # Verify opencode actually runs (fails the bake if Bun/opencode is broken)
     .run_cmd("opencode --version", user="root")
+    # JDK 21 (required by Android Gradle Plugin 8.9.0 + Kotlin 2.1.20).
+    # Download Temurin JDK 21 directly from Adoptium GitHub releases.
+    # Extract to /usr/lib/jvm/temurin-21-jdk-amd64. Symlink java to
+    # /usr/local/bin so it's in the default PATH at runtime.
+    .run_cmd([
+        "mkdir -p /usr/lib/jvm",
+        "curl -sSL https://github.com/adoptium/temurin21-binaries/releases/download/"
+        "jdk-21.0.6%2B7/OpenJDK21U-jdk_x64_linux_hotspot_21.0.6_7.tar.gz "
+        "| tar -xz -C /usr/lib/jvm",
+        "mv /usr/lib/jvm/jdk-21.0.6+7 /usr/lib/jvm/temurin-21-jdk-amd64",
+        "ln -s /usr/lib/jvm/temurin-21-jdk-amd64/bin/java /usr/local/bin/java",
+        "ln -s /usr/lib/jvm/temurin-21-jdk-amd64/bin/javac /usr/local/bin/javac",
+        "ln -s /usr/lib/jvm/temurin-21-jdk-amd64/bin/keytool /usr/local/bin/keytool",
+    ], user="root")
+    .set_envs({"JAVA_HOME": "/usr/lib/jvm/temurin-21-jdk-amd64"})
+    # Android SDK — cmdline-tools + platform-35 + build-tools + platform-tools.
+    # Needed for ./gradlew assembleDebug and ./gradlew test.
+    .run_cmd([
+        f"mkdir -p {ANDROID_SDK_ROOT}/cmdline-tools",
+        f"curl -sSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip "
+        f"-o /tmp/cmdline-tools.zip",
+        f"unzip -q /tmp/cmdline-tools.zip -d {ANDROID_SDK_ROOT}/cmdline-tools",
+        f"mv {ANDROID_SDK_ROOT}/cmdline-tools/cmdline-tools {ANDROID_SDK_ROOT}/cmdline-tools/latest",
+        f"rm /tmp/cmdline-tools.zip",
+    ], user="root")
+    .run_cmd(
+        f"yes | {ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager "
+        f"--sdk_root={ANDROID_SDK_ROOT} "
+        f"'platform-tools' 'platforms;android-{ANDROID_COMPILE_SDK}' "
+        f"'build-tools;{ANDROID_BUILD_TOOLS}'",
+        user="root",
+    )
+    .set_envs({
+        "JAVA_HOME": "/usr/lib/jvm/temurin-21-jdk-amd64",
+        "ANDROID_HOME": ANDROID_SDK_ROOT,
+        "ANDROID_SDK_ROOT": ANDROID_SDK_ROOT,
+    })
+    # Set all env vars in /etc/environment (read by PAM at session start,
+    # works for the runtime 'user'). E2B's set_envs only applies during build.
+    .run_cmd(
+        f'echo "PATH=/usr/local/go/bin:/usr/local/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:'
+        f'{ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:{ANDROID_SDK_ROOT}/platform-tools:'
+        f'/usr/lib/jvm/temurin-21-jdk-amd64/bin" > /etc/environment && '
+        f'echo "JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64" >> /etc/environment && '
+        f'echo "ANDROID_HOME={ANDROID_SDK_ROOT}" >> /etc/environment && '
+        f'echo "ANDROID_SDK_ROOT={ANDROID_SDK_ROOT}" >> /etc/environment',
+        user="root",
+    )
+    # Accept Android SDK licenses (required by sdkmanager / Gradle)
+    .run_cmd(
+        f"yes | {ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager "
+        f"--sdk_root={ANDROID_SDK_ROOT} --licenses",
+        user="root",
+    )
 )
