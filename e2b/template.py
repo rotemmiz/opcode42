@@ -42,7 +42,7 @@ template = (
         f"| tar -C /usr/local -xz",
         user="root",
     )
-    .set_envs({"PATH": "/usr/local/go/bin:/root/.bun/bin:/root/.local/bin:$PATH"})
+    .set_envs({"PATH": "/usr/local/go/bin:/usr/local/.bun/bin:$PATH"})
     # gh CLI (for branch-pusher to open PRs inside the sandbox — needs root for apt)
     .run_cmd([
         "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg "
@@ -75,12 +75,22 @@ template = (
         f"curl -fsSL https://deb.nodesource.com/setup_{NODE_MAJOR}.x | bash -",
         f"apt-get install -y nodejs",
     ], user="root")
-    # Bun (opencode's runtime — installs to /root/.bun, needs root for /root)
-    .run_cmd("curl -fsSL https://bun.sh/install | bash", user="root")
+    # Bun (opencode's runtime). Install to /usr/local/.bun (shared, accessible
+    # by the runtime 'user' — /root is not accessible at runtime).
+    .run_cmd(
+        "BUN_INSTALL=/usr/local/.bun curl -fsSL https://bun.sh/install | bash && "
+        "chmod -R a+rX /usr/local/.bun",
+        user="root",
+    )
     # opencode (the agent runtime — the thing worker.py drives via HTTP).
     # https://opencode.ai/install (307 → raw.githubusercontent.com/.../install).
-    # https://opencode.ai/install.sh is a 404.
-    .run_cmd("curl -fsSL https://opencode.ai/install | bash", user="root")
+    # The install script puts the binary in ~/.local/bin — but HOME=/root at
+    # build time and HOME=/home/user at runtime, so symlink to /usr/local/bin.
+    .run_cmd(
+        "curl -fsSL https://opencode.ai/install | bash && "
+        "ln -sf /root/.local/bin/opencode /usr/local/bin/opencode",
+        user="root",
+    )
     # Verify opencode actually runs (fails the bake if Bun/opencode is broken)
     .run_cmd("opencode --version", user="root")
 )

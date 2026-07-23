@@ -98,7 +98,7 @@ def main() -> int:
         ollama_key = os.environ["OLLAMA_API_KEY"]
         sandbox.commands.run(
             f"cd repo && OLLAMA_API_KEY={ollama_key} "
-            f"PATH=/usr/local/go/bin:/root/.bun/bin:/root/.local/bin:$PATH "
+            f"PATH=/usr/local/go/bin:/usr/local/.bun/bin:/usr/local/bin:$PATH "
             f"opencode serve --port {AGENT_PORT} --hostname 0.0.0.0",
             background=True,
         )
@@ -185,7 +185,7 @@ def main() -> int:
         print("worker: restarting opencode serve for preview URL...", flush=True)
         sandbox.commands.run(
             f"cd repo && OLLAMA_API_KEY={ollama_key} "
-            f"PATH=/usr/local/go/bin:/root/.bun/bin:/root/.local/bin:$PATH "
+            f"PATH=/usr/local/go/bin:/usr/local/.bun/bin:/usr/local/bin:$PATH "
             f"opencode serve --port {AGENT_PORT} --hostname 0.0.0.0",
             background=True,
         )
