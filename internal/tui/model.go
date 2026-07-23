@@ -973,9 +973,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.command != "" { // a "/command" created this session — run it
 			return m, runCommandCmd(m.ctx, m.client, msg.session.ID, msg.command, msg.arguments)
 		}
-		files := m.pendingFiles
-		m.pendingFiles = nil
-		return m, promptCmd(m.ctx, m.client, msg.session.ID, msg.text, m.model, m.agent, files)
+		return m, promptCmd(m.ctx, m.client, msg.session.ID, msg.text, m.model, m.agent, msg.files)
 
 	case promptSentMsg:
 		if msg.err != nil {
@@ -2123,7 +2121,7 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	// Plan 20: composer cleared → re-render footer.
 	m = m.rerenderChrome()
 	if m.cfg.SessionID == "" {
-		return m, createSessionCmd(m.ctx, m.client, text)
+		return m, createSessionCmd(m.ctx, m.client, text, files)
 	}
 	return m, promptCmd(m.ctx, m.client, m.cfg.SessionID, text, m.model, m.agent, files)
 }

@@ -46,6 +46,7 @@ type (
 		text      string // a prompt to send after creation, or…
 		command   string // …a daemon command to run after creation (with arguments)
 		arguments string
+		files     []pendingFile // clipboard attachments staged before create (08f H2)
 		err       error
 	}
 	configLoadedMsg struct{ provider, model string }
@@ -132,11 +133,12 @@ func promptCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID,
 	}
 }
 
-// createSessionCmd creates a session, carrying the prompt text to send next.
-func createSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, text string) tea.Cmd {
+// createSessionCmd creates a session, carrying the prompt text (and optional
+// clipboard file attachments) to send next.
+func createSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, text string, files []pendingFile) tea.Cmd {
 	return func() tea.Msg {
 		var ss Session
 		err := c.PostJSON(ctx, "/session", map[string]any{}, &ss)
-		return sessionCreatedMsg{session: ss, text: text, err: err}
+		return sessionCreatedMsg{session: ss, text: text, files: files, err: err}
 	}
 }

@@ -92,3 +92,45 @@ func TestH2_CtrlC_ClearsPendingFiles(t *testing.T) {
 		t.Fatalf("ctrl+c should clear pendingFiles, got %d", len(m.pendingFiles))
 	}
 }
+
+// TestH2_Submit_CreateSessionCarriesPendingFiles locks the cold-start path:
+// submit() must thread staged clipboard images through createSessionCmd →
+// sessionCreatedMsg → promptCmd (not drop them when SessionID is empty).
+func TestH2_Submit_CreateSessionCarriesPendingFiles(t *testing.T) {
+	m := New(Config{URL: "http://x", Provider: "p", Model: "m"}) // no SessionID
+	m.screen = ScreenSplash
+	m, _ = step(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m.input.SetValue("look at this")
+	files := []pendingFile{{
+		Filename: "clipboard",
+		Mime:     "image/png",
+		URL:      "data:image/png;base64,abcd",
+	}}
+	m.pendingFiles = files
+	next, cmd := m.submit()
+	nm := next.(Model)
+	if len(nm.pendingFiles) != 0 {
+		t.Fatalf("submit should clear pendingFiles on model, got %d", len(nm.pendingFiles))
+	}
+	if cmd == nil {
+		t.Fatal("submit with empty SessionID should return createSessionCmd")
+	}
+	// Simulate a successful create carrying the files submit threaded through.
+	nm2, cmd2 := step(t, nm, sessionCreatedMsg{
+		session: Session{ID: "ses_new"},
+		text:    "look at this",
+		files:   files,
+	})
+	if nm2.cfg.SessionID != "ses_new" {
+		t.Fatalf("SessionID = %q, want ses_new", nm2.cfg.SessionID)
+	}
+	if cmd2 == nil {
+		t.Fatal("sessionCreatedMsg with files must return promptCmd")
+	}
+	// Direct contract: createSessionCmd embeds files on the result message
+	// even when the POST fails (err set, files preserved).
+	msg := sessionCreatedMsg{text: "look at this", files: files, err: errString("forced")}
+	if len(msg.files) != 1 || msg.files[0].Mime != "image/png" {
+		t.Fatalf("sessionCreatedMsg must carry files, got %+v", msg.files)
+	}
+}

@@ -248,7 +248,7 @@ func TestOpcode42Parity_PermissionRoundTrip(t *testing.T) {
 	d.pump(func(m Model) bool { return m.conn == Connected && m.stream != nil })
 
 	// Open a real session so pendingPermission scope (08f H18) includes it.
-	d.run(createSessionCmd(d.m.ctx, d.m.client, ""))
+	d.run(createSessionCmd(d.m.ctx, d.m.client, "", nil))
 	d.pump(func(m Model) bool {
 		return m.cfg.SessionID != "" && m.screen == ScreenSession && len(m.store.sessions) > 0
 	})
@@ -309,7 +309,7 @@ func TestOpcode42Parity_QuestionRoundTrip(t *testing.T) {
 	d := newDriver(t, r.newModel())
 	d.pump(func(m Model) bool { return m.conn == Connected && m.stream != nil })
 
-	d.run(createSessionCmd(d.m.ctx, d.m.client, ""))
+	d.run(createSessionCmd(d.m.ctx, d.m.client, "", nil))
 	d.pump(func(m Model) bool {
 		return m.cfg.SessionID != "" && m.screen == ScreenSession && len(m.store.sessions) > 0
 	})
@@ -366,7 +366,7 @@ func TestOpcode42Parity_Abort(t *testing.T) {
 	d.pump(func(m Model) bool { return m.conn == Connected && m.stream != nil })
 
 	// Create a session first (abort needs one) via the real wire.
-	d.run(createSessionCmd(d.m.ctx, d.m.client, ""))
+	d.run(createSessionCmd(d.m.ctx, d.m.client, "", nil))
 	d.pump(func(m Model) bool { return m.cfg.SessionID != "" })
 
 	// Abort the (idle) session — opencode/Opcode42 both 200 a no-op abort.
