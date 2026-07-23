@@ -15,9 +15,12 @@ func TestH9_MessageActions_RevertCopyFork(t *testing.T) {
 
 	// Revert
 	m.modal, m.modalSel = modalMessage, 0
-	_, cmd := m.modalSelect()
+	next, cmd := m.modalSelect()
 	if cmd == nil {
 		t.Fatal("Revert should dispatch revertCmd")
+	}
+	if next.(Model).input.Value() != "hello world" {
+		t.Fatalf("Revert should restore prompt, got %q", next.(Model).input.Value())
 	}
 
 	// Copy
@@ -25,7 +28,7 @@ func TestH9_MessageActions_RevertCopyFork(t *testing.T) {
 	m.store.parts["msg_1"] = []Part{{ID: "p1", Type: "text", Text: "hello world"}}
 	m.messageActionID = "msg_1"
 	m.modal, m.modalSel = modalMessage, 1
-	next, cmd := m.modalSelect()
+	next, cmd = m.modalSelect()
 	if cmd == nil {
 		t.Fatal("Copy should dispatch copyClipboardCmd")
 	}

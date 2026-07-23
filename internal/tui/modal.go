@@ -723,6 +723,13 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 			if id == "" {
 				return m, nil
 			}
+			// opencode DialogMessage setPrompt: restore the turn's text into
+			// the composer so the user can edit and resubmit after revert.
+			if txt := m.userPromptText(id); txt != "" {
+				m.input.SetValue(txt)
+				m.input.CursorEnd()
+				m = m.resizeComposer()
+			}
 			m.status = "reverting…"
 			m = m.rerenderChrome()
 			return m, revertCmd(m.ctx, m.client, m.cfg.SessionID, id)
