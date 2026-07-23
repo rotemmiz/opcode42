@@ -104,6 +104,13 @@ template = (
     ], user="root")
     # Verify opencode actually runs (fails the bake if Bun/opencode is broken)
     .run_cmd("opencode --version", user="root")
+    # Google Chrome (headless screenshots of the opencode web UI).
+    # Ubuntu 24.04's chromium-browser is a snap stub — install Chrome deb directly.
+    .run_cmd(
+        "curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb "
+        "-o /tmp/chrome.deb && dpkg -i /tmp/chrome.deb || apt-get install -fy && rm /tmp/chrome.deb",
+        user="root",
+    )
     # JDK 21 (required by Android Gradle Plugin 8.9.0 + Kotlin 2.1.20).
     # Download Temurin JDK 21 directly from Adoptium GitHub releases.
     # Extract to /usr/lib/jvm/temurin-21-jdk-amd64. Symlink java to

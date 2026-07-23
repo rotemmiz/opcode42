@@ -296,6 +296,28 @@ def main() -> int:
         _wait_health(sandbox, AGENT_PORT)
         preview_url = f"https://{sandbox.get_host(AGENT_PORT)}"
 
+        # 10b. Take a screenshot of the opencode web UI (headless Chromium).
+        #      Save to repo/screenshot.png so it gets committed with the branch.
+        #      GitHub renders relative image links in PR bodies, so the PR
+        #      will display the screenshot inline.
+        print("worker: taking screenshot of opencode web UI...", flush=True)
+        screenshot_ok = False
+        try:
+            ss = sandbox.commands.run(
+                f"google-chrome --headless --no-sandbox --disable-gpu "
+                f"--screenshot=repo/screenshot.png --window-size=1280,900 "
+                f"http://127.0.0.1:{AGENT_PORT} 2>/dev/null && "
+                f"test -s repo/screenshot.png && echo OK",
+                timeout=30,
+            )
+            if ss.exit_code == 0 and "OK" in ss.stdout:
+                screenshot_ok = True
+                print("worker: screenshot captured", flush=True)
+            else:
+                print(f"worker: screenshot failed (exit {ss.exit_code})", flush=True)
+        except Exception as e:
+            print(f"worker: screenshot error: {e}", flush=True)
+
         # 11. Push branch + open PR. Stage all changes (including untracked
         #     files the agent created) and commit before pushing. Set git
         #     identity first — the E2B sandbox has no user.name/email configured.
@@ -329,9 +351,14 @@ def main() -> int:
                 apk_size = sandbox.commands.run(f"stat -c %s {apk_path}", timeout=5).stdout.strip()
                 apk_info = f"## APK\nBuilt at `{apk_path}` ({int(apk_size) // 1024}KB in sandbox)\n\n"
 
+        screenshot_section = (
+            "## Screenshot\n"
+            "![opencode web UI](screenshot.png)\n\n"
+        ) if screenshot_ok else ""
+
         pr_body = (
             f"## Gate recording\n{asciinema_url}\n\n"
-            f"{android_status}{apk_info}"
+            f"{screenshot_section}{android_status}{apk_info}"
             f"## Live preview\n{preview_url}\n\n"
             f"Closes #{issue_number}\n\n"
             "This PR was produced by the agentic-devex worker. "
