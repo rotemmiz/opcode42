@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -2309,14 +2310,23 @@ func (m Model) windowTitle() string {
 		return "Opcode42"
 	}
 	title := m.sessionTitle(m.cfg.SessionID)
-	if title == "" || strings.HasPrefix(title, "session ") {
+	if title == "" || isDefaultSessionTitle(title) {
 		return "Opcode42"
 	}
-	if len(title) > 40 {
-		title = title[:37] + "..."
-	}
-	return "OC | " + title
+	return "OC | " + truncate(title, 40)
 }
+
+// isDefaultSessionTitle matches the daemon's untouched auto title
+// ("New session - <RFC3339-millis>") and the TUI's own "session <id>"
+// placeholder — same intent as opencode isDefaultTitle / session.IsDefaultTitle.
+func isDefaultSessionTitle(title string) bool {
+	if strings.HasPrefix(title, "session ") {
+		return true
+	}
+	return defaultSessionTitleRe.MatchString(title)
+}
+
+var defaultSessionTitleRe = regexp.MustCompile(`^New session - \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$`)
 
 // renderView is the v1 render entry, retained as a thin shim around the v2
 // composeView so tests that call renderView() keep working through the

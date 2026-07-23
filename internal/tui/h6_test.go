@@ -17,14 +17,18 @@ func TestH6_WindowTitle_HomeAndSession(t *testing.T) {
 	m.store.sessions = []Session{{ID: "ses_1", Title: "Fix the flaky test suite now please"}}
 	got := m.windowTitle()
 	if got != "OC | Fix the flaky test suite now please" {
-		// title ≤40 chars — this one is under the limit
 		t.Fatalf("session title = %q", got)
 	}
 	m.store.sessions[0].Title = "This is a very long session title that should be truncated for the terminal"
 	got = m.windowTitle()
-	want := "OC | This is a very long session title tha..."
+	want := "OC | " + truncate("This is a very long session title that should be truncated for the terminal", 40)
 	if got != want {
 		t.Fatalf("truncated title = %q, want %q", got, want)
+	}
+	// Daemon auto-title must fall back to Opcode42 (opencode isDefaultTitle).
+	m.store.sessions[0].Title = "New session - 2026-07-23T23:29:11.356Z"
+	if got = m.windowTitle(); got != "Opcode42" {
+		t.Fatalf("default auto-title = %q, want Opcode42", got)
 	}
 }
 
