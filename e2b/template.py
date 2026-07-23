@@ -42,7 +42,7 @@ template = (
         f"| tar -C /usr/local -xz",
         user="root",
     )
-    .set_envs({"PATH": "/usr/local/go/bin:/root/.bun/bin:$PATH"})
+    .set_envs({"PATH": "/usr/local/go/bin:/root/.bun/bin:/root/.local/bin:$PATH"})
     # gh CLI (for branch-pusher to open PRs inside the sandbox — needs root for apt)
     .run_cmd([
         "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg "
