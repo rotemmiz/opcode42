@@ -33,6 +33,7 @@ Sequence:
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 import time
@@ -104,25 +105,39 @@ def main() -> int:
         )
         _wait_health(sandbox, AGENT_PORT)
 
-        # 5. Drive the agent via the HTTP API (NOT via CLI flags — serve has none)
+        # 5. Drive the agent via the HTTP API (NOT via CLI flags — serve has none).
+        #    All HTTP calls run INSIDE the sandbox via curl (the Actions runner
+        #    can't reach 127.0.0.1:4096 — that's localhost inside the sandbox).
         base = f"http://127.0.0.1:{AGENT_PORT}"
         print(f"worker: creating session (model={OLLAMA_MODEL_PROVIDER}/{OLLAMA_MODEL_ID})...", flush=True)
-        sess = requests.post(
-            f"{base}/session",
-            json={
-                "model": {"providerID": OLLAMA_MODEL_PROVIDER, "id": OLLAMA_MODEL_ID},
-                "title": f"issue-{issue_number}",
-            },
+        session_body = json.dumps({
+            "model": {"providerID": OLLAMA_MODEL_PROVIDER, "id": OLLAMA_MODEL_ID},
+            "title": f"issue-{issue_number}",
+        })
+        sess_resp = sandbox.commands.run(
+            f"curl -sf -X POST {base}/session "
+            f"-H 'Content-Type: application/json' "
+            f"-d '{session_body}'",
             timeout=30,
         )
-        sess.raise_for_status()
-        sid = sess.json()["id"]
+        if sess_resp.exit_code != 0:
+            raise SystemExit(f"failed to create session: {sess_resp.stderr}")
+        sid = json.loads(sess_resp.stdout)["id"]
         print(f"worker: session={sid}, sending plan as prompt...", flush=True)
-        requests.post(
-            f"{base}/session/{sid}/message",
-            json={"parts": [{"type": "text", "text": plan_comment}]},
+
+        # Send the plan as the prompt. Use a temp file to avoid shell-escaping
+        # the potentially large plan text.
+        plan_path = "/tmp/plan.json"
+        plan_body = json.dumps({"parts": [{"type": "text", "text": plan_comment}]})
+        sandbox.files.write(plan_path, plan_body.encode())
+        msg_resp = sandbox.commands.run(
+            f"curl -sf -X POST {base}/session/{sid}/message "
+            f"-H 'Content-Type: application/json' "
+            f"-d @{plan_path}",
             timeout=30,
-        ).raise_for_status()
+        )
+        if msg_resp.exit_code != 0:
+            raise SystemExit(f"failed to send message: {msg_resp.stderr}")
 
         # 6. Poll GET /session/status — two-phase wait.
         #    status.ts:42-44 DELETES a session from the map when it goes idle,
@@ -132,19 +147,27 @@ def main() -> int:
         #      (b) wait for absence (confirms it went idle = done)
         print("worker: waiting for agent to start (busy)...", flush=True)
         for _ in range(150):  # 150 × 1s = 2.5 min
-            statuses = requests.get(f"{base}/session/status", timeout=10).json()
-            if statuses.get(sid, {}).get("type") == "busy":
-                print("worker: agent is busy, waiting for completion (absence=idle)...", flush=True)
-                break
+            status_resp = sandbox.commands.run(
+                f"curl -sf {base}/session/status", timeout=10
+            )
+            if status_resp.exit_code == 0:
+                statuses = json.loads(status_resp.stdout)
+                if statuses.get(sid, {}).get("type") == "busy":
+                    print("worker: agent is busy, waiting for completion (absence=idle)...", flush=True)
+                    break
             time.sleep(1)
         else:
             raise SystemExit("agent never entered busy state — check opencode serve logs")
 
         for _ in range(750):  # 750 × 2s = 25 min cap on the agent step
-            statuses = requests.get(f"{base}/session/status", timeout=10).json()
-            if sid not in statuses:
-                print("worker: agent finished (session absent from status map = idle)", flush=True)
-                break
+            status_resp = sandbox.commands.run(
+                f"curl -sf {base}/session/status", timeout=10
+            )
+            if status_resp.exit_code == 0:
+                statuses = json.loads(status_resp.stdout)
+                if sid not in statuses:
+                    print("worker: agent finished (session absent from status map = idle)", flush=True)
+                    break
             time.sleep(2)
         else:
             raise SystemExit("agent did not finish within 25 min — killing sandbox")
