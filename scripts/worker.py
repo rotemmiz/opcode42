@@ -192,18 +192,21 @@ def main() -> int:
             _dump_opencode_logs(sandbox)
             raise SystemExit("agent did not finish within 25 min — killing sandbox")
 
-        # 6b. After the agent finishes, check what it actually did
+        # 6b. After the agent finishes, check what it actually did.
+        #     Query session messages BEFORE killing the server.
         print("worker: checking agent output...", flush=True)
         try:
             msgs_resp = sandbox.commands.run(
-                f"curl -sf {base}/session/{sid}/messages", timeout=10
+                f"curl -s -w '\\n%{{http_code}}' {base}/session/{sid}/messages", timeout=10
             )
             if msgs_resp.exit_code == 0:
-                msgs = json.loads(msgs_resp.stdout)
-                msg_count = len(msgs) if isinstance(msgs, list) else 0
-                print(f"worker: session has {msg_count} messages", flush=True)
-        except Exception:
-            pass
+                resp_parts = msgs_resp.stdout.strip().rsplit("\n", 1)
+                msg_http = resp_parts[-1] if len(resp_parts) > 1 else "???"
+                msg_body = resp_parts[0] if len(resp_parts) > 1 else msgs_resp.stdout
+                print(f"worker: messages endpoint returned HTTP {msg_http}", flush=True)
+                print(f"worker: messages response: {msg_body[:500]}", flush=True)
+        except Exception as e:
+            print(f"worker: could not fetch messages: {e}", flush=True)
 
         # Kill the agent's opencode serve so PORT=4096 is free for conformance
         print("worker: killing agent opencode serve (free port for conformance)...", flush=True)
