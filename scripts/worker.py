@@ -78,12 +78,6 @@ def main() -> int:
     print(f"worker: sandbox={sandbox.sandbox_id}", flush=True)
 
     try:
-        # Inject OLLAMA_API_KEY into the sandbox so opencode serve auto-detects
-        # the ollama-cloud provider (provider.ts:1488-1499 — env-var auto-detection).
-        sandbox.commands.run(
-            f"export OLLAMA_API_KEY={os.environ['OLLAMA_API_KEY']} >> /root/.bashrc",
-            timeout=10,
-        )
         # 3. Clone repo on agent/<issue-n> branch
         clone_url = (
             f"https://x-access-token:{os.environ['BRANCH_PUSHER_TOKEN']}"
@@ -97,10 +91,15 @@ def main() -> int:
 
         # 4. Start opencode serve in the BACKGROUND (no auth — sandbox is isolated).
         #    opencode serve blocks forever; background=True returns immediately.
-        #    Use bash -lc so /root/.bashrc (PATH + OLLAMA_API_KEY) is sourced.
+        #    Pass OLLAMA_API_KEY inline so opencode auto-detects the ollama-cloud
+        #    provider (provider.ts:1488-1499). Use env to set PATH too, since
+        #    E2B commands.run may not inherit the template's set_envs.
         print(f"worker: starting opencode serve on port {AGENT_PORT} (background)...", flush=True)
+        ollama_key = os.environ["OLLAMA_API_KEY"]
         sandbox.commands.run(
-            f"cd repo && bash -lc 'opencode serve --port {AGENT_PORT} --hostname 0.0.0.0'",
+            f"cd repo && OLLAMA_API_KEY={ollama_key} "
+            f"PATH=/usr/local/go/bin:/root/.bun/bin:/root/.local/bin:$PATH "
+            f"opencode serve --port {AGENT_PORT} --hostname 0.0.0.0",
             background=True,
         )
         _wait_health(sandbox, AGENT_PORT)
@@ -185,7 +184,9 @@ def main() -> int:
         # 10. Restart opencode serve for the preview URL, wait for health
         print("worker: restarting opencode serve for preview URL...", flush=True)
         sandbox.commands.run(
-            f"cd repo && bash -lc 'opencode serve --port {AGENT_PORT} --hostname 0.0.0.0'",
+            f"cd repo && OLLAMA_API_KEY={ollama_key} "
+            f"PATH=/usr/local/go/bin:/root/.bun/bin:/root/.local/bin:$PATH "
+            f"opencode serve --port {AGENT_PORT} --hostname 0.0.0.0",
             background=True,
         )
         _wait_health(sandbox, AGENT_PORT)
