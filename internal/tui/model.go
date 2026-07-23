@@ -2111,12 +2111,12 @@ func (m Model) resizeComposer() Model {
 	}
 	m.input.SetWidth(cols)
 	h := visualRows(m.input.Value(), cols)
-	cap := maxComposerRows
+	maxRows := maxComposerRows
 	if m.composerMaxRows > 0 {
-		cap = m.composerMaxRows
+		maxRows = m.composerMaxRows
 	}
-	if h > cap {
-		h = cap
+	if h > maxRows {
+		h = maxRows
 	}
 	m.input.SetHeight(h)
 	return m
