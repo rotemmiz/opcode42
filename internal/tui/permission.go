@@ -46,19 +46,32 @@ import (
 // prompts surface in the current view (plan 08f §PC.3 / G.21).
 //
 // Mirrors opencode routes/session/index.tsx:207-236:
-//   - no open session → empty (splash/home shows no overlay)
+//   - not on the session screen / no open session → empty
+//   - open session not yet in store.sessions → empty (don't guess parent vs child)
 //   - open session is a child (ParentID != "") → empty (child views do not
 //     aggregate; prompts are answered from the parent)
 //   - open session is a parent/root → {open} ∪ direct children (flat, one level)
 func (m Model) pendingScopeIDs() map[string]bool {
+	if m.screen != ScreenSession {
+		return nil
+	}
 	sid := m.cfg.SessionID
 	if sid == "" {
 		return nil
 	}
+	found := false
 	for _, s := range m.store.sessions {
-		if s.ID == sid && s.ParentID != "" {
+		if s.ID != sid {
+			continue
+		}
+		found = true
+		if s.ParentID != "" {
 			return nil
 		}
+		break
+	}
+	if !found {
+		return nil
 	}
 	out := map[string]bool{sid: true}
 	for _, c := range m.childrenOf(sid) {

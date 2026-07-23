@@ -32,6 +32,7 @@ import (
 func TestPermissionView_FooterPanelNotCentered(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 80, 24
 	m.store.permissions = []Permission{{
 		ID:         "perm_1",
@@ -66,6 +67,7 @@ func TestPermissionView_FooterPanelNotCentered(t *testing.T) {
 func TestQuestionView_FooterPanelNotCentered(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 80, 24
 	m.store.questions = []Question{{
 		ID:        "qst_1",
@@ -95,6 +97,7 @@ func TestQuestionView_FooterPanelNotCentered(t *testing.T) {
 func TestPermissionReplied_PanelDisappearsImmediately(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 80, 24
 	m.store.permissions = []Permission{{
 		ID:         "perm_1",
@@ -133,6 +136,7 @@ func TestPermissionReplied_PanelDisappearsImmediately(t *testing.T) {
 func TestPermissionPriorityOverQuestion(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 80, 24
 	m.store.permissions = []Permission{{
 		ID:         "perm_1",
@@ -165,6 +169,7 @@ func TestPermissionPriorityOverQuestion(t *testing.T) {
 func TestPermissionPanel_HeightIncludesBase(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 80, 24
 	m.store.permissions = []Permission{{
 		ID:         "perm_1",
@@ -199,6 +204,7 @@ func TestPermission_DiffRendersInline(t *testing.T) {
 	mb, _ := json.Marshal(meta)
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 100, 40
 	m.store.permissions = []Permission{{
 		ID:         "perm_1",
@@ -226,6 +232,7 @@ func TestPermission_DiffRendersInline(t *testing.T) {
 func TestPermission_AlwaysStageShowsPatterns(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 80, 24
 	m.store.permissions = []Permission{{
 		ID:         "perm_1",
@@ -263,6 +270,7 @@ func TestPermission_AlwaysStageShowsPatterns(t *testing.T) {
 func TestQuestion_MultiQuestionTabs(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 100, 40
 	m.store.questions = []Question{{
 		ID:        "qst_1",
@@ -290,6 +298,7 @@ func TestQuestion_MultiQuestionTabs(t *testing.T) {
 func TestQuestion_CustomTextOption(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 100, 40
 	m.store.questions = []Question{{
 		ID:        "qst_1",
@@ -316,6 +325,7 @@ func TestQuestion_CustomTextOption(t *testing.T) {
 func TestFooterPanel_BgElevBackground(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 80, 24
 	m = m.applyThemeByName("opcode42-dark")
 	m.store.permissions = []Permission{{
@@ -363,6 +373,7 @@ func TestFooterPanel_BgElevBackground(t *testing.T) {
 func TestFooterPanel_BgElevBackground_Question(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 80, 24
 	m = m.applyThemeByName("opcode42-dark")
 	m.store.questions = []Question{{
@@ -409,6 +420,7 @@ func TestFooterPanel_BgElevBackground_Question(t *testing.T) {
 func TestPermission_RejectStageShowsMessageField(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 80, 24
 	m.store.permissions = []Permission{{
 		ID:         "perm_1",
@@ -439,6 +451,7 @@ func TestPermission_RejectStageShowsMessageField(t *testing.T) {
 func TestQuestion_ConfirmReviewTab(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 100, 40
 	m.store.questions = []Question{{
 		ID:        "qst_1",
@@ -474,6 +487,7 @@ func TestQuestion_ConfirmReviewTab(t *testing.T) {
 func TestQuestion_TabNavigation(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 100, 40
 	m.store.questions = []Question{{
 		ID:        "qst_1",
@@ -514,6 +528,7 @@ func TestQuestion_TabNavigation(t *testing.T) {
 func TestFooterPanel_StreamStaysVisible_B(t *testing.T) {
 	m := New(Config{URL: "http://x", SessionID: "ses_1"})
 	m.screen = ScreenSession
+	m.store.sessions = []Session{{ID: "ses_1"}}
 	m.width, m.height = 80, 24
 	m.store.sessions = []Session{{ID: "ses_1", Title: "Stream B session"}}
 	m.store.messages["ses_1"] = []Message{

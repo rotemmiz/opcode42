@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"encoding/json"
 	"testing"
+
+	opcode42client "github.com/rotemmiz/opcode42/sdk/go"
 )
 
 // TestPendingScope_ParentAggregatesChildren pins plan 08f H18 / opencode
@@ -40,21 +43,22 @@ func TestPendingScope_ParentAggregatesChildren(t *testing.T) {
 		t.Fatalf("child view pendingQuestion = %+v, want nil", got)
 	}
 
-	// Splash / no open session: nothing pending.
+	// Splash / no open session / not on session screen: nothing pending.
 	m.cfg.SessionID = ""
 	if got := m.pendingPermission(); got != nil {
 		t.Fatalf("splash pendingPermission = %+v, want nil", got)
 	}
-	if got := m.pendingQuestion(); got != nil {
-		t.Fatalf("splash pendingQuestion = %+v, want nil", got)
+	m.cfg.SessionID = "ses_parent"
+	m.screen = ScreenSplash
+	if got := m.pendingPermission(); got != nil {
+		t.Fatalf("ScreenSplash pendingPermission = %+v, want nil", got)
 	}
 }
 
 // TestPendingScope_RootWithoutChildrenStillSeesOwn verifies a lone root
 // session still surfaces its own pending prompts (scope = {self}).
 func TestPendingScope_RootWithoutChildrenStillSeesOwn(t *testing.T) {
-	m := New(Config{URL: "http://x", SessionID: "ses_1"})
-	m.store.sessions = []Session{{ID: "ses_1"}}
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m.store.permissions = []Permission{
 		{ID: "p_other", SessionID: "ses_x", Permission: "bash"},
 		{ID: "p_own", SessionID: "ses_1", Permission: "edit"},
@@ -67,7 +71,7 @@ func TestPendingScope_RootWithoutChildrenStillSeesOwn(t *testing.T) {
 // TestPendingScopeIDs_FlatOneLevel verifies grandchildren are NOT in scope
 // (opencode aggregates one level only).
 func TestPendingScopeIDs_FlatOneLevel(t *testing.T) {
-	m := New(Config{URL: "http://x", SessionID: "ses_parent"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_parent")
 	m.store.sessions = []Session{
 		{ID: "ses_parent"},
 		{ID: "ses_child", ParentID: "ses_parent"},
@@ -79,5 +83,40 @@ func TestPendingScopeIDs_FlatOneLevel(t *testing.T) {
 	}
 	if scope["ses_grand"] {
 		t.Fatalf("scope must not include grandchild: %v", scope)
+	}
+}
+
+// TestPendingScopeIDs_UnloadedSessionIsEmpty verifies we do not guess
+// parent-vs-child when the open session is not yet in store.sessions.
+func TestPendingScopeIDs_UnloadedSessionIsEmpty(t *testing.T) {
+	m := New(Config{URL: "http://x", SessionID: "ses_maybe_child"})
+	m.screen = ScreenSession
+	if scope := m.pendingScopeIDs(); scope != nil {
+		t.Fatalf("unloaded session scope = %v, want nil", scope)
+	}
+}
+
+// TestQuestionSSE_DeferUsesRequestIDNotScope pins that an in-flight reply
+// still defers question.replied after navigating out of scope (child view),
+// so recordLocalAnsweredQuestion can run before the store clears.
+func TestQuestionSSE_DeferUsesRequestIDNotScope(t *testing.T) {
+	m := withSubagents()
+	m.store.questions = []Question{{
+		ID: "qst_1", SessionID: "ses_parent",
+		Questions: []QuestionInfo{{Question: "Q", Options: []QuestionOption{opt("a")}}},
+	}}
+	m.qBody = questionBodyState{requestID: "qst_1", answers: [][]string{{"a"}}, replying: true}
+	// Navigate into a child while the reply is in flight — pendingQuestion
+	// becomes nil (H18), but the SSE defer must still fire.
+	m.cfg.SessionID = "ses_child1"
+	props, _ := json.Marshal(map[string]any{"requestID": "qst_1"})
+	m, _ = step(t, m, sseEventMsg{ev: opcode42client.SSEEvent{
+		Type: "question.replied", Properties: props,
+	}})
+	if m.qDeferredSSE.Type != "question.replied" {
+		t.Fatalf("expected deferred SSE while replying out of scope; got type=%q", m.qDeferredSSE.Type)
+	}
+	if len(m.store.questions) != 1 {
+		t.Fatalf("deferred SSE must not clear the store yet; got %+v", m.store.questions)
 	}
 }
