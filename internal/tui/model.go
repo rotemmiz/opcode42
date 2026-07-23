@@ -74,6 +74,11 @@ type Config struct {
 	// (ctrl+x i); this flag only flips the capability probe so sixel escapes
 	// are emitted instead of the placeholder when images are enabled.
 	Sixel bool
+
+	// NoOSC52 forces the OSC 52 clipboard-write escape off regardless of the
+	// environment-based default or any persisted preference (plan 08f H11 /
+	// G.13). Set by --no-osc52.
+	NoOSC52 bool
 }
 
 // Model is the Bubble Tea application state.
@@ -312,6 +317,11 @@ type Model struct {
 	// OPENCODE_DISABLE_TERMINAL_TITLE is set.
 	terminalTitleEnabled bool
 
+	// osc52Enabled gates OSC 52 clipboard-write escapes (plan 08f H11 / G.13).
+	// Default on locally, off over SSH (SSH_CONNECTION / SSH_TTY set);
+	// persisted as osc52_write_enabled KV; forced off by --no-osc52.
+	osc52Enabled bool
+
 	// pasteSummaryEnabled collapses large pastes to [Pasted ~N lines] chips
 	// (plan 08f H3). Default true; persisted as paste_summary_enabled.
 	pasteSummaryEnabled bool
@@ -422,6 +432,10 @@ func New(cfg Config) Model {
 	// --sixel: force Sixel capability on for terminals that support it but
 	// don't advertise it via $TERM (plan 08e §E2).
 	m.sixel = cfg.Sixel
+	// OSC 52 clipboard writes default on locally, off over SSH; --no-osc52
+	// forces off regardless (plan 08f H11 / G.13). Restore() will apply any
+	// persisted KV override when the CLI flag was not passed.
+	m.osc52Enabled = !cfg.NoOSC52 && defaultOsc52WriteEnabled()
 	// Auto-pick light vs dark by terminal background — mirrors opencode's
 	// theme_mode_lock behaviour. Restore() will override with any pinned KV theme.
 	// cfg.Theme (--theme flag) wins over both auto-pick and KV.
@@ -526,6 +540,12 @@ func (m Model) Restore() Model {
 	// (plan 08f H7 / G.11: "CLI --no-anim still forces off").
 	if !m.cfg.NoAnim {
 		m.noAnim = !kvAnimationsEnabled(kv)
+	}
+	// --no-osc52 always wins (New() already applied cfg.NoOSC52); only
+	// consult the persisted preference when the CLI flag was not passed
+	// (plan 08f H11 / G.13: mirrors --no-anim's "CLI still forces off").
+	if !m.cfg.NoOSC52 {
+		m.osc52Enabled = kvOsc52WriteEnabled(kv)
 	}
 	// Theme mode lock (plan 08f H7 / G.12): pins m.termDark across launches,
 	// overriding the live terminal-background probe New() just performed.
@@ -1165,7 +1185,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.status = "shared · " + sh.URL + " (copied)"
 				// Plan 20: store + status changed → re-render all.
 				m = m.rerenderFull()
-				return m, copyClipboardCmd(sh.URL)
+				return m, copyClipboardCmd(sh.URL, m.osc52Enabled)
 			}
 			m.status = "shared"
 		} else {
@@ -1930,7 +1950,7 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.status = "copied turn"
 					// Plan 20: status changed → re-render footer.
 					m = m.rerenderChrome()
-					return m, copyClipboardCmd(txt)
+					return m, copyClipboardCmd(txt, m.osc52Enabled)
 				}
 			}
 		}
@@ -2077,7 +2097,7 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.status = "copied last response"
 			// Plan 20: status changed → re-render footer.
 			m = m.rerenderChrome()
-			return m, copyClipboardCmd(txt)
+			return m, copyClipboardCmd(txt, m.osc52Enabled)
 		}
 		m.status = "nothing to copy"
 		// Plan 20: status changed → re-render footer.

@@ -143,7 +143,7 @@ func (m Model) shareOrCopyLink() (Model, tea.Cmd) {
 	if cur != nil && cur.Share != nil && cur.Share.URL != "" {
 		m.status = "shared · " + cur.Share.URL + " (copied)"
 		m = m.rerenderChrome()
-		return m, copyClipboardCmd(cur.Share.URL)
+		return m, copyClipboardCmd(cur.Share.URL, m.osc52Enabled)
 	}
 	m.status = "sharing…"
 	m = m.rerenderChrome()
@@ -169,5 +169,5 @@ func (m Model) copyTranscript() (Model, tea.Cmd) {
 	}
 	m.status = "copied transcript"
 	m = m.rerenderChrome()
-	return m, copyClipboardCmd(txt)
+	return m, copyClipboardCmd(txt, m.osc52Enabled)
 }
