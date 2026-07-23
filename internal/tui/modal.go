@@ -67,6 +67,17 @@ const (
 	paUndo          // messages_undo (08f H1b)
 	paRedo          // messages_redo (08f H1b)
 	paTerminalTitle // terminal.title.toggle (08f H6)
+
+	// Display toggles (08f H7 / plan G.11 — opencode app.toggle.*).
+	paToggleAnimations       // app.toggle.animations
+	paToggleFileContext      // app.toggle.file_context (no render consumer yet)
+	paToggleDiffTree         // closest Opcode42 surface to app.toggle.diffwrap (reuses diffTreeHidden)
+	paTogglePasteSummary     // app.toggle.paste_summary
+	paToggleSessionDirFilter // app.toggle.session_directory_filter (no render consumer yet)
+
+	// Theme mode + lock (08f H7 / plan G.12).
+	paThemeSwitchMode // theme.switch_mode
+	paThemeModeLock   // theme.mode.lock
 )
 
 type paletteCmd struct {
@@ -103,6 +114,54 @@ var paletteItems = []paletteCmd{
 	{"Keybindings / help", paHelp},
 	{"Refresh sessions", paRefresh},
 	{"Toggle terminal title", paTerminalTitle},
+	{"Disable animations", paToggleAnimations},    // label resolved dynamically — paletteLabel
+	{"Disable file context", paToggleFileContext}, // label resolved dynamically — paletteLabel
+	{"Toggle diff file tree", paToggleDiffTree},
+	{"Disable paste summary", paTogglePasteSummary},                   // label resolved dynamically — paletteLabel
+	{"Disable session directory filtering", paToggleSessionDirFilter}, // label resolved dynamically — paletteLabel
+	{"Switch to light mode", paThemeSwitchMode},                       // label resolved dynamically — paletteLabel
+	{"Lock theme mode", paThemeModeLock},                              // label resolved dynamically — paletteLabel
+}
+
+// paletteLabel resolves a palette entry's display label, substituting live
+// on/off or mode text for entries whose title reflects current state —
+// mirrors opencode's dynamic command titles (app.tsx: kv.get(...) ? "Disable
+// …" : "Enable …"). Entries not listed here just use their static label.
+func (m Model) paletteLabel(it paletteCmd) string {
+	switch it.action {
+	case paToggleAnimations:
+		if m.noAnim {
+			return "Enable animations"
+		}
+		return "Disable animations"
+	case paToggleFileContext:
+		if m.fileContextEnabled {
+			return "Disable file context"
+		}
+		return "Enable file context"
+	case paTogglePasteSummary:
+		if m.pasteSummaryEnabled {
+			return "Disable paste summary"
+		}
+		return "Enable paste summary"
+	case paToggleSessionDirFilter:
+		if m.sessionDirFilterEnabled {
+			return "Disable session directory filtering"
+		}
+		return "Enable session directory filtering"
+	case paThemeSwitchMode:
+		if m.termDark {
+			return "Switch to light mode"
+		}
+		return "Switch to dark mode"
+	case paThemeModeLock:
+		if m.themeModeLocked {
+			return "Unlock theme mode"
+		}
+		return "Lock theme mode"
+	default:
+		return it.label
+	}
 }
 
 // Modal action results.
@@ -210,7 +269,7 @@ func (m Model) modalItems() (title string, rows []string, footer string) {
 	switch m.modal {
 	case modalPalette:
 		for _, it := range paletteItems {
-			rows = append(rows, it.label)
+			rows = append(rows, m.paletteLabel(it))
 		}
 		return "Commands", rows, "↑↓ move · enter select · esc close"
 	case modalSessions:
@@ -469,6 +528,96 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 			}
 			m.persist()
 			m = m.rerenderChrome()
+			return m, nil
+		case paToggleAnimations:
+			// app.toggle.animations (plan 08f H7 / G.11). --no-anim still
+			// forces animations off — the palette entry is a no-op then.
+			if m.cfg.NoAnim {
+				m.status = "animations forced off (--no-anim)"
+				return m, nil
+			}
+			m.noAnim = !m.noAnim
+			if m.noAnim {
+				m.status = "animations: off"
+			} else {
+				m.status = "animations: on"
+			}
+			m.persist()
+			m = m.rerenderChrome()
+			return m, m.maybeKickAnim()
+		case paToggleFileContext:
+			// app.toggle.file_context (plan 08f H7 / G.11) — no render
+			// consumer yet; toggle+persist ahead of the feature landing.
+			m.fileContextEnabled = !m.fileContextEnabled
+			if m.fileContextEnabled {
+				m.status = "file context: on"
+			} else {
+				m.status = "file context: off"
+			}
+			m.persist()
+			return m, nil
+		case paToggleDiffTree:
+			// Closest Opcode42 surface to app.toggle.diffwrap: Opcode42 has no
+			// diff line-wrap mode, so this reuses the diff reviewer's
+			// file-tree pane preference (same field as the diff 't' key).
+			m.diffTreeHidden = !m.diffTreeHidden
+			if m.diff.open {
+				m.diff.showTree = !m.diffTreeHidden
+			}
+			if m.diffTreeHidden {
+				m.status = "diff file tree: hidden"
+			} else {
+				m.status = "diff file tree: shown"
+			}
+			m.persist()
+			m = m.rerenderChrome()
+			return m, nil
+		case paTogglePasteSummary:
+			// app.toggle.paste_summary (plan 08f H7 / G.11).
+			m.pasteSummaryEnabled = !m.pasteSummaryEnabled
+			if m.pasteSummaryEnabled {
+				m.status = "paste summary: on"
+			} else {
+				m.status = "paste summary: off"
+			}
+			m.persist()
+			return m, nil
+		case paToggleSessionDirFilter:
+			// app.toggle.session_directory_filter (plan 08f H7 / G.11) — no
+			// render consumer yet; toggle+persist ahead of the feature landing.
+			m.sessionDirFilterEnabled = !m.sessionDirFilterEnabled
+			if m.sessionDirFilterEnabled {
+				m.status = "session directory filter: on"
+			} else {
+				m.status = "session directory filter: off"
+			}
+			m.persist()
+			return m, nil
+		case paThemeSwitchMode:
+			// theme.switch_mode (plan 08f H7 / G.12): flip the dark/light
+			// mode and re-resolve the active theme for the other mode.
+			m.termDark = !m.termDark
+			m = m.applyThemeByName(m.themeName)
+			if m.termDark {
+				m.status = "theme mode: dark"
+			} else {
+				m.status = "theme mode: light"
+			}
+			m.persist()
+			return m, nil
+		case paThemeModeLock:
+			// theme.mode.lock (plan 08f H7 / G.12): pin/unpin the current
+			// dark/light mode across launches.
+			m.themeModeLocked = !m.themeModeLocked
+			switch {
+			case m.themeModeLocked && m.termDark:
+				m.status = "theme mode locked · dark"
+			case m.themeModeLocked:
+				m.status = "theme mode locked · light"
+			default:
+				m.status = "theme mode unlocked"
+			}
+			m.persist()
 			return m, nil
 		}
 	case modalSessions:

@@ -318,6 +318,21 @@ type Model struct {
 
 	// pasteParts are smart-pasted blobs staged for the next submit (08f H3).
 	pasteParts []pastePart
+
+	// fileContextEnabled and sessionDirFilterEnabled mirror opencode's
+	// file_context_enabled / session_directory_filter_enabled kv toggles
+	// (plan 08f H7 / G.11). Default true; persisted. Neither has a render
+	// consumer yet in Opcode42 (no @-mention file-context injection or
+	// session directory scoping exists to gate) — the palette entries
+	// toggle+persist the preference so the KV contract exists ahead of
+	// those features landing; documented future work.
+	fileContextEnabled      bool
+	sessionDirFilterEnabled bool
+
+	// themeModeLocked pins the dark/light mode (m.termDark) across launches
+	// when true, mirroring opencode's theme_mode_lock (plan 08f H7 / G.12).
+	// When false, New() re-detects the terminal background on every launch.
+	themeModeLocked bool
 }
 
 // pickDefaultTheme returns the appropriate default theme name based on whether
@@ -373,20 +388,22 @@ func New(cfg Config) Model {
 		initialStatus = "ready"
 	}
 	m := Model{
-		cfg:                  cfg,
-		screen:               ScreenSplash,
-		conn:                 Connecting,
-		status:               initialStatus,
-		ctx:                  ctx,
-		cancel:               cancel,
-		store:                newStore(),
-		input:                ta,
-		renameInput:          ri,
-		connectURLInput:      ci,
-		serverProbe:          map[string]serverProbeState{},
-		model:                promptModel{Provider: cfg.Provider, Model: cfg.Model},
-		terminalTitleEnabled: true, // plan 08f H6 — default on (opencode kv default)
-		pasteSummaryEnabled:  true, // plan 08f H3 — default on
+		cfg:                     cfg,
+		screen:                  ScreenSplash,
+		conn:                    Connecting,
+		status:                  initialStatus,
+		ctx:                     ctx,
+		cancel:                  cancel,
+		store:                   newStore(),
+		input:                   ta,
+		renameInput:             ri,
+		connectURLInput:         ci,
+		serverProbe:             map[string]serverProbeState{},
+		model:                   promptModel{Provider: cfg.Provider, Model: cfg.Model},
+		terminalTitleEnabled:    true, // plan 08f H6 — default on (opencode kv default)
+		pasteSummaryEnabled:     true, // plan 08f H3 — default on
+		fileContextEnabled:      true, // plan 08f H7 — default on
+		sessionDirFilterEnabled: true, // plan 08f H7 — default on
 	}
 	// The bg-pulse is on by default for the splash (plan 08e §B2). It is
 	// turned off when the session screen is entered (sessionOpenedMsg /
@@ -499,8 +516,28 @@ func (m Model) Restore() Model {
 	m.diffTreeHidden = kv.HideDiffTree
 	m.terminalTitleEnabled = kvTitleEnabled(kv)
 	m.pasteSummaryEnabled = kvPasteSummaryEnabled(kv)
+	m.fileContextEnabled = kvFileContextEnabled(kv)
+	m.sessionDirFilterEnabled = kvSessionDirFilterEnabled(kv)
 	if os.Getenv("OPENCODE_DISABLE_TERMINAL_TITLE") != "" {
 		m.terminalTitleEnabled = false
+	}
+	// --no-anim always wins (New() already set m.noAnim = cfg.NoAnim); only
+	// consult the persisted preference when the CLI flag was not passed
+	// (plan 08f H7 / G.11: "CLI --no-anim still forces off").
+	if !m.cfg.NoAnim {
+		m.noAnim = !kvAnimationsEnabled(kv)
+	}
+	// Theme mode lock (plan 08f H7 / G.12): pins m.termDark across launches,
+	// overriding the live terminal-background probe New() just performed.
+	// Re-resolve the already-selected theme name (chosen in New() using the
+	// pre-override termDark) for the corrected mode before the explicit
+	// theme overrides below run with the now-locked termDark.
+	if dark, locked := kvThemeModeLocked(kv); locked {
+		m.themeModeLocked = true
+		if m.termDark != dark {
+			m.termDark = dark
+			m = m.applyThemeByName(m.themeName)
+		}
 	}
 	if m.cfg.Theme != "" {
 		// CLI --theme flag takes highest priority — deterministic capture / testing.

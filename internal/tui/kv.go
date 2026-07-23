@@ -23,6 +23,18 @@ type kvData struct {
 	HideDiffTree         bool     `json:"hideDiffTree,omitempty"`           // diff reviewer file-tree pane off
 	TerminalTitleEnabled *bool    `json:"terminal_title_enabled,omitempty"` // nil = default on (08f H6)
 	PasteSummaryEnabled  *bool    `json:"paste_summary_enabled,omitempty"`  // nil = default on (08f H3)
+
+	// Display toggles (08f H7 / plan G.11). All nil = default on, matching
+	// opencode's kv.get(key, true) defaults (packages/tui/src/app.tsx).
+	AnimationsEnabled       *bool `json:"animations_enabled,omitempty"`
+	FileContextEnabled      *bool `json:"file_context_enabled,omitempty"`             // no render consumer yet — toggle+persist only (documented future work)
+	SessionDirFilterEnabled *bool `json:"session_directory_filter_enabled,omitempty"` // no render consumer yet — toggle+persist only (documented future work)
+
+	// ThemeModeLock pins the dark/light mode across launches (08f H7 /
+	// plan G.12), mirroring opencode's theme_mode_lock kv key. nil = unlocked
+	// (auto-detect the terminal background on every launch); non-nil = locked,
+	// with the value carrying the locked mode itself (true = dark).
+	ThemeModeLock *bool `json:"theme_mode_lock,omitempty"`
 }
 
 func kvPath() string {
@@ -69,17 +81,31 @@ func (m Model) persist() {
 		return
 	}
 	saveKV(kvData{
-		Theme:                m.themeName,
-		Provider:             m.model.Provider,
-		Model:                m.model.Model,
-		Variant:              m.model.Variant,
-		ServerURL:            m.cfg.URL,
-		History:              m.history,
-		Stash:                m.stash,
-		HideDiffTree:         m.diffTreeHidden,
-		TerminalTitleEnabled: boolPtr(m.terminalTitleEnabled),
-		PasteSummaryEnabled:  boolPtr(m.pasteSummaryEnabled),
+		Theme:                   m.themeName,
+		Provider:                m.model.Provider,
+		Model:                   m.model.Model,
+		Variant:                 m.model.Variant,
+		ServerURL:               m.cfg.URL,
+		History:                 m.history,
+		Stash:                   m.stash,
+		HideDiffTree:            m.diffTreeHidden,
+		TerminalTitleEnabled:    boolPtr(m.terminalTitleEnabled),
+		PasteSummaryEnabled:     boolPtr(m.pasteSummaryEnabled),
+		AnimationsEnabled:       boolPtr(!m.noAnim),
+		FileContextEnabled:      boolPtr(m.fileContextEnabled),
+		SessionDirFilterEnabled: boolPtr(m.sessionDirFilterEnabled),
+		ThemeModeLock:           themeModeLockValue(m),
 	})
+}
+
+// themeModeLockValue returns the persisted theme_mode_lock value: nil when
+// unlocked (auto-detect on every launch), else a pointer to the locked
+// dark/light mode (08f H7 / plan G.12).
+func themeModeLockValue(m Model) *bool {
+	if !m.themeModeLocked {
+		return nil
+	}
+	return boolPtr(m.termDark)
 }
 
 func boolPtr(v bool) *bool { return &v }
@@ -98,6 +124,46 @@ func kvPasteSummaryEnabled(kv kvData) bool {
 		return true
 	}
 	return *kv.PasteSummaryEnabled
+}
+
+// kvAnimationsEnabled returns the animations preference (default on). The
+// CLI --no-anim flag still forces animations off regardless of this value —
+// callers only consult it when the flag was not passed (08f H7 / plan G.11).
+func kvAnimationsEnabled(kv kvData) bool {
+	if kv.AnimationsEnabled == nil {
+		return true
+	}
+	return *kv.AnimationsEnabled
+}
+
+// kvFileContextEnabled returns the file-context preference (default on).
+// No renderer consumes this yet — the KV round-trip is future work (08f H7).
+func kvFileContextEnabled(kv kvData) bool {
+	if kv.FileContextEnabled == nil {
+		return true
+	}
+	return *kv.FileContextEnabled
+}
+
+// kvSessionDirFilterEnabled returns the session-directory-filter preference
+// (default on). No renderer consumes this yet — future work (08f H7).
+func kvSessionDirFilterEnabled(kv kvData) bool {
+	if kv.SessionDirFilterEnabled == nil {
+		return true
+	}
+	return *kv.SessionDirFilterEnabled
+}
+
+// kvThemeModeLocked reports whether the theme mode is pinned and, if so, the
+// locked dark/light value (08f H7 / plan G.12). ok is false when unlocked
+// (kv.ThemeModeLock == nil), matching the other kv* helpers' "default"
+// convention but surfacing the two-value tri-state explicitly since there is
+// no meaningful bool default for a lock's target mode.
+func kvThemeModeLocked(kv kvData) (dark bool, ok bool) {
+	if kv.ThemeModeLock == nil {
+		return false, false
+	}
+	return *kv.ThemeModeLock, true
 }
 
 // persistServerURL pins a daemon URL to the KV (server_url key, plan 08e §D3)
