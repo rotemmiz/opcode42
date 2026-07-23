@@ -1730,6 +1730,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if msg.ev.Type != "" {
+			if nm, cmd, ok := m.handleTUIControlEvent(msg.ev); ok {
+				cmds := []tea.Cmd{listenCmd(m.stream)}
+				if cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+				if kick := nm.maybeKickAnim(); kick != nil {
+					cmds = append(cmds, kick)
+				}
+				return nm, tea.Batch(cmds...)
+			}
 			// Plan 18 §A3-simple: capture tail state BEFORE the body grows,
 			// then re-pin to the tail if we were there. When scrolled up
 			// (Offset>0) the offset is left untouched — the simple tail-sticky
