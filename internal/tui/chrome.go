@@ -541,14 +541,14 @@ func (m Model) usageChip() string {
 	if tokens <= 0 {
 		return ""
 	}
-	context := humanInt(tokens)
+	context := formatNumber(tokens)
 	limit := m.contextLimitForActiveModel()
 	if limit <= 0 {
 		limit = defaultContextLimit
 	}
 	if limit > 0 {
 		pct := int(math.Round(float64(tokens) / float64(limit) * 100))
-		context = fmt.Sprintf("%s (%d%%)", humanInt(tokens), pct)
+		context = fmt.Sprintf("%s (%d%%)", formatNumber(tokens), pct)
 	}
 	parts := []string{context}
 	if ss := m.currentSession(); ss != nil && ss.Cost > 0 {

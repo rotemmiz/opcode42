@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -396,40 +395,6 @@ func reasoningSummary(text string) (title, body string) {
 	}
 	body = strings.TrimSpace(after)
 	return title, body
-}
-
-// formatDuration mirrors opencode's Locale.duration (util/locale.ts:39-59):
-//
-//	<1000ms          → "<n>ms"
-//	<60s             → "<s.s>s"
-//	<60m             → "<m>m <s>s"
-//	<24h             → "<h>h <m>m"
-//	otherwise        → "<d>d <h>h"
-//
-// Returns "" for non-positive input (the caller gates on Time.Done() so this
-// is defensive).
-func formatDuration(ms int64) string {
-	if ms <= 0 {
-		return ""
-	}
-	switch {
-	case ms < 1000:
-		return strconv.FormatInt(ms, 10) + "ms"
-	case ms < 60_000:
-		return strconv.FormatFloat(float64(ms)/1000, 'f', 1, 64) + "s"
-	case ms < 3_600_000:
-		mins := ms / 60_000
-		secs := (ms % 60_000) / 1000
-		return strconv.FormatInt(mins, 10) + "m " + strconv.FormatInt(secs, 10) + "s"
-	case ms < 86_400_000:
-		hrs := ms / 3_600_000
-		mins := (ms % 3_600_000) / 60_000
-		return strconv.FormatInt(hrs, 10) + "h " + strconv.FormatInt(mins, 10) + "m"
-	default:
-		d := ms / 86_400_000
-		hrs := (ms % 86_400_000) / 3_600_000
-		return strconv.FormatInt(d, 10) + "d " + strconv.FormatInt(hrs, 10) + "h"
-	}
 }
 
 // toolRow is defined in toolrender.go (plan 08c M7): per-tool headers,
