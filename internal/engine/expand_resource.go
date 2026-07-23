@@ -20,10 +20,11 @@ type resourceSource struct {
 const maxMCPResourceBlobBytes = 10 * 1024 * 1024
 
 var supportedMCPResourceAttachmentMIMEs = map[string]bool{
-	"image/jpeg": true,
-	"image/png":  true,
-	"image/gif":  true,
-	"image/webp": true,
+	"image/jpeg":      true,
+	"image/png":       true,
+	"image/gif":       true,
+	"image/webp":      true,
+	"application/pdf": true,
 }
 
 // expandPromptParts expands client-supplied resource file parts into synthetic

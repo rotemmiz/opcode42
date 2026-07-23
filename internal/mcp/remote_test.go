@@ -328,4 +328,3 @@ func TestResources_ListsFromConnectedServer(t *testing.T) {
 	}
 	m.Close()
 }
-

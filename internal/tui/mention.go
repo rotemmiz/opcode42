@@ -166,12 +166,3 @@ func (m Model) mcpResourceByName(name string) *mcpResource {
 	}
 	return nil
 }
-
-// mcpResourceURI returns the URI for a resource listed by name, or "" when
-// name is not an MCP resource (i.e. it's a normal file path).
-func (m Model) mcpResourceURI(name string) string {
-	if r := m.mcpResourceByName(name); r != nil {
-		return r.URI
-	}
-	return ""
-}
