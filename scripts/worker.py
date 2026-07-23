@@ -316,13 +316,30 @@ def main() -> int:
             f"- testDebugUnitTest: {'✅ PASSED' if android_test_ok else '❌ FAILED'}\n\n"
         ) if not (android_build_ok and android_test_ok) else ""
 
+        # Try to find and upload the APK as a Gist (base64-encoded if too large
+        # for a comment, or just note the path in the sandbox).
+        apk_info = ""
+        if android_build_ok:
+            apk_find = sandbox.commands.run(
+                "find repo/android/app/build/outputs/apk/debug -name '*.apk' 2>/dev/null | head -1",
+                timeout=5,
+            )
+            if apk_find.stdout.strip():
+                apk_path = apk_find.stdout.strip()
+                apk_size = sandbox.commands.run(f"stat -c %s {apk_path}", timeout=5).stdout.strip()
+                apk_info = f"## APK\nBuilt at `{apk_path}` ({int(apk_size) // 1024}KB in sandbox)\n\n"
+
         pr_body = (
             f"## Gate recording\n{asciinema_url}\n\n"
-            f"{android_status}"
+            f"{android_status}{apk_info}"
             f"## Live preview\n{preview_url}\n\n"
             f"Closes #{issue_number}\n\n"
             "This PR was produced by the agentic-devex worker. "
-            "Review the gate recording + poke the preview URL, then merge."
+            "Review the gate recording + poke the preview URL, then merge.\n\n"
+            "To connect an Android emulator to the live preview:\n"
+            "```\n"
+            f"scripts/connect-emulator.sh {preview_url}\n"
+            "```"
         )
         print(f"worker: opening PR for issue #{issue_number}...", flush=True)
         pr = requests.post(
