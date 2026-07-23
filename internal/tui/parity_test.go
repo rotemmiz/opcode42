@@ -148,7 +148,7 @@ func TestPalette_IncludesSessionOps(t *testing.T) {
 	want := map[paletteAction]bool{
 		paRename: false, paFork: false, paSummarize: false, paAbort: false,
 		paShare: false, paUnshare: false, paDelete: false, paMCP: false,
-		paSkills: false, paHelp: false,
+		paSkills: false, paHelp: false, paUndo: false, paRedo: false,
 	}
 	for _, it := range paletteItems {
 		if _, ok := want[it.action]; ok {

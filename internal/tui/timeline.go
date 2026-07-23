@@ -51,6 +51,67 @@ func revertCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID,
 	}
 }
 
+// unrevertCmd restores the last revert (POST /session/:id/unrevert) —
+// messages_redo / plan 08f H1b.
+func unrevertCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID string) tea.Cmd {
+	return func() tea.Msg {
+		err := c.PostJSON(ctx, "/session/"+sessionID+"/unrevert", map[string]any{}, nil)
+		return revertedMsg{err: err}
+	}
+}
+
+// undoLastTurn reverts the most recent user turn (messages_undo / <leader>u).
+func (m Model) undoLastTurn() (Model, tea.Cmd) {
+	if m.cfg.SessionID == "" {
+		m.status = "no session to undo"
+		m = m.rerenderChrome()
+		return m, nil
+	}
+	items := m.timelineItems()
+	if len(items) == 0 {
+		m.status = "nothing to undo"
+		m = m.rerenderChrome()
+		return m, nil
+	}
+	last := items[len(items)-1]
+	m.status = "undoing…"
+	m = m.rerenderChrome()
+	return m, revertCmd(m.ctx, m.client, m.cfg.SessionID, last.messageID)
+}
+
+// redoTurn restores the last revert (messages_redo).
+func (m Model) redoTurn() (Model, tea.Cmd) {
+	if m.cfg.SessionID == "" {
+		m.status = "no session to redo"
+		m = m.rerenderChrome()
+		return m, nil
+	}
+	m.status = "redoing…"
+	m = m.rerenderChrome()
+	return m, unrevertCmd(m.ctx, m.client, m.cfg.SessionID)
+}
+
+// jumpLastUser scrolls the stream toward older content so the last user turn
+// is more likely in view (messages_last_user). Without a retained message→line
+// map this is approximate: jump halfway up from the tail when scrolled, else
+// a large Back step.
+func (m Model) jumpLastUser() Model {
+	items := m.timelineItems()
+	if len(items) == 0 {
+		m.status = "no user turns"
+		return m.rerenderChrome()
+	}
+	bodyH := m.scrollBodyHeight()
+	if bodyH < 1 {
+		bodyH = 1
+	}
+	// Prefer a large scroll-back so the latest user turn (near the end of the
+	// stream, just above the trailing assistant reply) enters the viewport.
+	m.scroll.Back(bodyH)
+	m.status = "jumped to last user turn"
+	return m.rerenderChrome()
+}
+
 // statusLines is the read-only diagnostics shown by the Status modal — all from
 // local state, nothing fetched or fabricated.
 func (m Model) statusLines() []string {

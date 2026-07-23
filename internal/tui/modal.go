@@ -64,6 +64,8 @@ const (
 	paSkills
 	paHelp
 	paConnect // open the connect overlay (plan 08e §D2)
+	paUndo    // messages_undo (08f H1b)
+	paRedo    // messages_redo (08f H1b)
 )
 
 type paletteCmd struct {
@@ -80,6 +82,8 @@ var paletteItems = []paletteCmd{
 	{"Switch agent", paSwitchAgent},
 	{"Switch theme", paSwitchTheme},
 	{"Timeline", paTimeline},
+	{"Undo last turn", paUndo},
+	{"Redo (unrevert)", paRedo},
 	{"Status", paStatus},
 	{"Rename session", paRename},
 	{"Fork session", paFork},
@@ -392,6 +396,10 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 		case paTimeline:
 			m.modal, m.modalSel = modalTimeline, 0
 			return m, nil
+		case paUndo:
+			return m.undoLastTurn()
+		case paRedo:
+			return m.redoTurn()
 		case paStatus:
 			m.modal, m.modalSel = modalStatus, 0
 			return m, nil
