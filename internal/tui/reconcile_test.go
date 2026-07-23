@@ -324,7 +324,7 @@ func TestPermissionReplied_Non404StillSurfaces(t *testing.T) {
 // per-request answer state (qBody.tab/answers/replying) is reset so the overlay
 // closes cleanly instead of pointing at a vanished request.
 func TestQuestionsReconciled_ResetsActiveQuestionState(t *testing.T) {
-	m := New(Config{URL: "http://x"})
+	m := openSes(New(Config{URL: "http://x"}), "ses_1")
 	m.store.questions = []Question{{ID: "qst_active", SessionID: "ses_1", Questions: []QuestionInfo{{Question: "q"}}}}
 	m.qBody = questionBodyState{tab: 1, answers: [][]string{{"a1"}}, replying: true}
 

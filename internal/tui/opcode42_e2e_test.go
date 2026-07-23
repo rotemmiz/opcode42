@@ -247,13 +247,20 @@ func TestOpcode42Parity_PermissionRoundTrip(t *testing.T) {
 	d := newDriver(t, r.newModel())
 	d.pump(func(m Model) bool { return m.conn == Connected && m.stream != nil })
 
+	// Open a real session so pendingPermission scope (08f H18) includes it.
+	d.run(createSessionCmd(d.m.ctx, d.m.client, ""))
+	d.pump(func(m Model) bool {
+		return m.cfg.SessionID != "" && m.screen == ScreenSession && len(m.store.sessions) > 0
+	})
+	sid := d.m.cfg.SessionID
+
 	// Drive a real permission ask through the daemon's manager (the same call the
 	// engine's executor makes for a tool that needs approval). It blocks until the
 	// TUI replies over the wire.
 	askDone := make(chan error, 1)
 	go func() {
 		askDone <- r.inst.Permissions.Ask(context.Background(), permission.AskInput{
-			SessionID:  "ses_x",
+			SessionID:  sid,
 			Permission: "bash",
 			Patterns:   []string{"rm -rf /"},
 			Metadata:   map[string]any{"command": "rm -rf /"},
@@ -302,9 +309,15 @@ func TestOpcode42Parity_QuestionRoundTrip(t *testing.T) {
 	d := newDriver(t, r.newModel())
 	d.pump(func(m Model) bool { return m.conn == Connected && m.stream != nil })
 
+	d.run(createSessionCmd(d.m.ctx, d.m.client, ""))
+	d.pump(func(m Model) bool {
+		return m.cfg.SessionID != "" && m.screen == ScreenSession && len(m.store.sessions) > 0
+	})
+	sid := d.m.cfg.SessionID
+
 	askDone := make(chan error, 1)
 	go func() {
-		_, err := r.inst.Questions.Ask(context.Background(), "ses_x",
+		_, err := r.inst.Questions.Ask(context.Background(), sid,
 			[]question.Info{{
 				Question: "Pick a color",
 				Header:   "Color",
