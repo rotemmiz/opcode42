@@ -155,11 +155,14 @@ def main() -> int:
             timeout=600,
         )
 
-        # 9. Upload the gate recording as a GitHub Gist
+        # 9. Upload the gate recording as a GitHub Gist.
+        #    Requires GIST_TOKEN — a classic PAT with `gist` scope. Fine-grained
+        #    PATs (like BRANCH_PUSHER_TOKEN) cannot create Gists at all, so there
+        #    is no fallback. If GIST_TOKEN is unset, fail loudly here.
         print("worker: uploading gate recording to Gist...", flush=True)
         cast_bytes = sandbox.files.read("/tmp/gate.cast")
         cast = cast_bytes.decode() if isinstance(cast_bytes, bytes) else cast_bytes
-        gist_token = os.environ.get("GIST_TOKEN") or os.environ["BRANCH_PUSHER_TOKEN"]
+        gist_token = os.environ["GIST_TOKEN"]  # required — no fallback (fine-grained PATs can't do Gists)
         gist = requests.post(
             "https://api.github.com/gists",
             headers={

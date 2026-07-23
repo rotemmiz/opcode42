@@ -29,12 +29,12 @@ template = (
         "make",
         "build-essential",
         "asciinema",
-        "fuser",            # for fuser -k 4096/tcp (kill the agent server before the gate)
+        "psmisc",           # provides fuser — for fuser -k 4096/tcp (kill the agent server before the gate)
     ])
     # Go toolchain
     .run_cmd(
         f"curl -sSL https://go.dev/dl/go{GO_VERSION}.linux-amd64.tar.gz "
-        f"| tar -Cz - -C /usr/local"
+        f"| tar -C /usr/local -xz"
     )
     .set_envs({"PATH": "/usr/local/go/bin:/root/.bun/bin:$PATH"})
     # gh CLI (for branch-pusher to open PRs inside the sandbox)
@@ -50,10 +50,13 @@ template = (
         "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh "
         "| sh -s -- -b /usr/local/bin"
     )
-    # gitleaks (secret scanner — used in the gate)
+    # gitleaks (secret scanner — used in the gate). Pin a version — the
+    # "latest/download/" path serves versioned filenames that don't match the
+    # versionless URL pattern, and the asset name uses lowercase "linux".
     .run_cmd(
-        "curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/"
-        "gitleaks_$(uname -s)_x64.tar.gz | tar -xz -C /usr/local/bin gitleaks"
+        "curl -sSL https://github.com/gitleaks/gitleaks/releases/download/"
+        "v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz "
+        "| tar -xz -C /usr/local/bin gitleaks"
     )
     # Node.js 20 (opencode is a Bun/Node app — needs the runtime)
     .run_cmd([
@@ -62,8 +65,10 @@ template = (
     ])
     # Bun (opencode's runtime)
     .run_cmd("curl -fsSL https://bun.sh/install | bash")
-    # opencode (the agent runtime — the thing worker.py drives via HTTP)
-    .run_cmd("curl -fsSL https://opencode.ai/install.sh | bash")
+    # opencode (the agent runtime — the thing worker.py drives via HTTP).
+    # https://opencode.ai/install (307 → raw.githubusercontent.com/.../install).
+    # https://opencode.ai/install.sh is a 404.
+    .run_cmd("curl -fsSL https://opencode.ai/install | bash")
     # Verify opencode actually runs (fails the bake if Bun/opencode is broken)
     .run_cmd("opencode --version")
 )

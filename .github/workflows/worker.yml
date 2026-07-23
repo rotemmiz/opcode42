@@ -32,7 +32,8 @@ jobs:
     permissions:
       issues: write
       pull-requests: write
-      contents: write
+      # contents: write is NOT needed — the push uses BRANCH_PUSHER_TOKEN (a
+      # PAT), not the auto GITHUB_TOKEN. Don't grant write to the auto token.
     steps:
       - uses: actions/checkout@v4
 
