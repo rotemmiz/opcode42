@@ -58,10 +58,13 @@ data class SessionListUiState(
     /** sessionID → first pending question, for an inline reply field in the menu. */
     val pendingQuestions: Map<String, QuestionRequest> = emptyMap(),
     /**
-     * parentID → child sessions (the sub-agent `task` spawn of a parent turn). Children are
-     * always excluded from the top-level list (they carry `parentID`); this map surfaces them so
-     * a parent row in the rail can render an expandable subtree of its subagents. Recency-ordered
-     * within each parent; an entry exists only for parents that have at least one child.
+     * parentID → *active* child sessions (the sub-agent `task` spawn of a parent turn). Children
+     * are always excluded from the top-level list (they carry `parentID`); this map surfaces the
+     * currently-running ones so a parent row in the rail can render an expandable subtree of its
+     * subagents. A subagent is active when its status is non-terminal (`busy` or `retry` —
+     * anything `isSessionBusy` accepts); finished/idle subagents are filtered out so the dropdown
+     * only lists in-flight work and collapses entirely when none remain. Recency-ordered within
+     * each parent; an entry exists only for parents that have at least one active child.
      */
     val childrenByParent: Map<String, List<Session>> = emptyMap(),
     val isLoading: Boolean = false,
@@ -93,6 +96,29 @@ internal data class SessionInputs(
 )
 
 /**
+ * Pure projection of a parent session's *active* subagent children — the list rendered in the
+ * per-session subagent dropdown. A subagent is a child session (`parentID != null`); it is
+ * **active** when its status is non-terminal, i.e. `isSessionBusy(status)` is true (`busy` or
+ * `retry` — the two non-`idle` values of the opencode `SessionStatus.type` enum, see
+ * `SessionStatus.kt:64-66`). A subagent waiting on a permission/question still reports a
+ * non-idle status and is correctly treated as active.
+ *
+ * Returns a `parentID → active children` map, recency-ordered within each parent. A parent with
+ * only finished/idle subagents has no entry, so the dropdown collapses entirely (no "0
+ * subagents" empty state). Kept side-effect-free and top-level so it unit-tests without a
+ * ViewModel; [projectSessionList] delegates to it.
+ */
+internal fun projectActiveSubagents(
+    sessions: List<Session>,
+    statuses: Map<String, String>,
+): Map<String, List<Session>> = sessions
+    .filter { it.parentID != null && isSessionBusy(statuses[it.id]) }
+    .groupBy { it.parentID!! }
+    .mapValues { (_, kids) ->
+        kids.sortedByDescending { it.time?.updated ?: it.time?.created ?: 0L }
+    }
+
+/**
  * Pure projection from the store slice to the list UI state. Kept side-effect-free and
  * top-level so the child-hiding, tab counts, search/filter, recency ordering, and date
  * grouping can be unit-tested without a ViewModel or coroutines. Takes [SessionInputs]
@@ -112,14 +138,13 @@ internal fun projectSessionList(
     val (archived, active) = topLevel.partition { it.isArchived }
 
     // Sub-agent children keyed by their parent, recency-ordered, for the rail's expandable
-    // subtree. Children are never top-level (filtered above); archived children are kept so a
-    // parent that has archived a spawn still shows it under its subtree.
-    val childrenByParent: Map<String, List<Session>> = inputs.sessions
-        .filter { it.parentID != null }
-        .groupBy { it.parentID!! }
-        .mapValues { (_, kids) ->
-            kids.sortedByDescending { it.time?.updated ?: it.time?.created ?: 0L }
-        }
+    // subtree. Children are never top-level (filtered above); only *active* children are kept so
+    // the per-session subagent dropdown lists in-flight subagents only and collapses when none
+    // remain. A subagent is active when its status is non-terminal (`busy`/`retry` — anything
+    // `isSessionBusy` accepts); a subagent with a pending permission/question is still active.
+    val childrenByParent: Map<String, List<Session>> = projectActiveSubagents(
+        inputs.sessions, inputs.sessionStatus,
+    )
 
     val statuses = inputs.sessionStatus
     // First pending request per session — the menu shows one actionable affordance per row.
