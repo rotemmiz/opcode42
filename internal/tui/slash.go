@@ -390,7 +390,7 @@ func (m Model) autocompleteView() string {
 			return "" // nothing matched (or still searching) — no panel
 		}
 		for _, f := range m.ac.files {
-			rows = append(rows, acRow{name: truncate(f, 58)})
+			rows = append(rows, acRow{name: truncateMiddle(f, 58)})
 		}
 	default: // acSlash
 		if len(m.ac.items) == 0 {
