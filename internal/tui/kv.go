@@ -22,6 +22,7 @@ type kvData struct {
 	Stash                []string `json:"stash,omitempty"`                  // parked prompt drafts (plan 08b §6)
 	HideDiffTree         bool     `json:"hideDiffTree,omitempty"`           // diff reviewer file-tree pane off
 	TerminalTitleEnabled *bool    `json:"terminal_title_enabled,omitempty"` // nil = default on (08f H6)
+	PasteSummaryEnabled  *bool    `json:"paste_summary_enabled,omitempty"`  // nil = default on (08f H3)
 }
 
 func kvPath() string {
@@ -77,6 +78,7 @@ func (m Model) persist() {
 		Stash:                m.stash,
 		HideDiffTree:         m.diffTreeHidden,
 		TerminalTitleEnabled: boolPtr(m.terminalTitleEnabled),
+		PasteSummaryEnabled:  boolPtr(m.pasteSummaryEnabled),
 	})
 }
 
@@ -88,6 +90,14 @@ func kvTitleEnabled(kv kvData) bool {
 		return true
 	}
 	return *kv.TerminalTitleEnabled
+}
+
+// kvPasteSummaryEnabled returns the smart-paste preference (default on).
+func kvPasteSummaryEnabled(kv kvData) bool {
+	if kv.PasteSummaryEnabled == nil {
+		return true
+	}
+	return *kv.PasteSummaryEnabled
 }
 
 // persistServerURL pins a daemon URL to the KV (server_url key, plan 08e §D3)

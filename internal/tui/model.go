@@ -311,6 +311,13 @@ type Model struct {
 	// Default true; persisted as terminal_title_enabled KV; suppressed when
 	// OPENCODE_DISABLE_TERMINAL_TITLE is set.
 	terminalTitleEnabled bool
+
+	// pasteSummaryEnabled collapses large pastes to [Pasted ~N lines] chips
+	// (plan 08f H3). Default true; persisted as paste_summary_enabled.
+	pasteSummaryEnabled bool
+
+	// pasteParts are smart-pasted blobs staged for the next submit (08f H3).
+	pasteParts []pastePart
 }
 
 // pickDefaultTheme returns the appropriate default theme name based on whether
@@ -379,6 +386,7 @@ func New(cfg Config) Model {
 		serverProbe:          map[string]serverProbeState{},
 		model:                promptModel{Provider: cfg.Provider, Model: cfg.Model},
 		terminalTitleEnabled: true, // plan 08f H6 — default on (opencode kv default)
+		pasteSummaryEnabled:  true, // plan 08f H3 — default on
 	}
 	// The bg-pulse is on by default for the splash (plan 08e §B2). It is
 	// turned off when the session screen is entered (sessionOpenedMsg /
@@ -490,6 +498,7 @@ func (m Model) Restore() Model {
 	m.stash = kv.Stash
 	m.diffTreeHidden = kv.HideDiffTree
 	m.terminalTitleEnabled = kvTitleEnabled(kv)
+	m.pasteSummaryEnabled = kvPasteSummaryEnabled(kv)
 	if os.Getenv("OPENCODE_DISABLE_TERMINAL_TITLE") != "" {
 		m.terminalTitleEnabled = false
 	}
@@ -589,23 +598,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.PasteMsg:
-		// Bracketed paste (DECSET 2004): bubbletea v2 parses \x1b[200~…\x1b[201~
-		// into PasteMsg{Content}. The bubbles v2 textarea handles it directly
-		// (textarea.go:1223-1224); we forward, re-fit the composer to the new
-		// content, and refresh the slash/mention popup — mirroring the composer
-		// fallthrough at the end of the KeyPressMsg case. Without this case the
-		// message is dropped and cmd+v (macOS bracketed paste) does nothing.
+		// Bracketed paste (DECSET 2004). Large pastes may collapse to a
+		// smart-paste chip (plan 08f H3); otherwise forward to the textarea.
 		m.histIdx = -1
-		m.exiting = false  // pasting is input activity — cancel the exit guard
-		m.deleting = false // and the delete-session guard (08f H1a)
-		var cmd, acCmd tea.Cmd
-		m.input, cmd = m.input.Update(msg)
-		m = m.resizeComposer()
-		m, acCmd = m.refreshAutocomplete()
-		// Plan 20: composer text changed → re-render the footer (and sidebar,
-		// in case the composer grew and shifted the body/sidebar boundary).
-		m = m.rerenderFull()
-		return m, tea.Batch(cmd, acCmd)
+		m.exiting = false
+		m.deleting = false
+		return m.maybeSmartPaste(msg.Content)
 
 	case tea.MouseWheelMsg:
 		// Plan 18 §A2: mouse wheel scrolls the stream. Ignore when an overlay
@@ -656,9 +654,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// timeout cancels it. A focused PTY keeps the unconditional quit
 		// above via handlePTYKey.
 		if msg.String() == "ctrl+c" {
-			if strings.TrimSpace(m.input.Value()) != "" || len(m.pendingFiles) > 0 {
+			if strings.TrimSpace(m.input.Value()) != "" || len(m.pendingFiles) > 0 || len(m.pasteParts) > 0 {
 				m.input.SetValue("")
 				m.pendingFiles = nil
+				m.pasteParts = nil
 				m = m.resizeComposer()
 				m, acCmd := m.refreshAutocomplete()
 				// Plan 20: composer cleared → re-render footer.
@@ -2127,7 +2126,7 @@ func (m Model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // then prompts. In shell mode it runs the text as a shell command instead.
 // Requires a resolved model.
 func (m Model) submit() (tea.Model, tea.Cmd) {
-	text := strings.TrimSpace(m.input.Value())
+	text := m.composeSubmitText()
 	if text == "" && len(m.pendingFiles) == 0 {
 		return m, nil
 	}
@@ -2145,6 +2144,7 @@ func (m Model) submit() (tea.Model, tea.Cmd) {
 	m.persist()
 	files := m.pendingFiles
 	m.pendingFiles = nil
+	m.pasteParts = nil
 	// Shell mode: run the text as a command in the open session; output streams
 	// back as tool parts. Requires an existing session (no implicit create).
 	if m.shellMode {
@@ -2268,7 +2268,7 @@ func (m Model) applyClipboardRead(msg clipboardReadMsg) (Model, tea.Cmd) {
 		return m.insertComposerText(marker)
 	}
 	// text/plain (and any non-image fallback)
-	return m.insertComposerText(string(msg.Data))
+	return m.maybeSmartPaste(string(msg.Data))
 }
 
 // insertComposerText inserts s at the cursor via the textarea's PasteMsg
