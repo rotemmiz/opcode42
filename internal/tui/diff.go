@@ -171,10 +171,10 @@ func (m Model) handleDiffKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "ctrl+d", "pgdown", "pgdn":
-		m.diff.scroll += scrollStep
+		m.diff.scroll += m.scrollLines()
 		return m, nil
 	case "ctrl+u", "pgup":
-		m.diff.scroll -= scrollStep
+		m.diff.scroll -= m.scrollLines()
 		if m.diff.scroll < 0 {
 			m.diff.scroll = 0
 		}
