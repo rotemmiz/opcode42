@@ -49,7 +49,21 @@ type (
 		items []lspItem
 		err   error
 	}
+	mcpResourcesLoadedMsg struct {
+		items []mcpResource
+		err   error
+	}
 )
+
+// mcpResource is one MCP resource from GET /experimental/resource
+// (openapi McpResource; plan 08f H10 / G.10).
+type mcpResource struct {
+	Name        string `json:"name"`
+	URI         string `json:"uri"`
+	Client      string `json:"client"`
+	Description string `json:"description,omitempty"`
+	MimeType    string `json:"mimeType,omitempty"`
+}
 
 // loadMCPCmd fetches the configured MCP servers' status.
 func loadMCPCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
@@ -66,6 +80,26 @@ func loadMCPCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
 		}
 		sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
 		return mcpLoadedMsg{items: items}
+	}
+}
+
+// loadMCPResourcesCmd fetches available MCP resources (GET /experimental/resource)
+// for the @-mention popup (plan 08f H10 / G.10; opencode sync.data.mcp_resource).
+func loadMCPResourcesCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cmd {
+	return func() tea.Msg {
+		var raw map[string]mcpResource
+		if err := c.GetJSON(ctx, "/experimental/resource", &raw); err != nil {
+			return mcpResourcesLoadedMsg{err: err}
+		}
+		items := make([]mcpResource, 0, len(raw))
+		for _, r := range raw {
+			if r.Name == "" || r.URI == "" {
+				continue
+			}
+			items = append(items, r)
+		}
+		sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+		return mcpResourcesLoadedMsg{items: items}
 	}
 }
 

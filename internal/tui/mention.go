@@ -44,15 +44,17 @@ type filesFoundMsg struct {
 	files []string
 }
 
-// findFilesCmd fuzzy-searches files (GET /find/file?query=). An empty query is
-// not searched (the daemon requires one) — the popup just shows nothing.
-func findFilesCmd(ctx context.Context, c *opcode42client.Opcode42Client, query string) tea.Cmd {
+// findFilesCmd fuzzy-searches files (GET /find/file?query=) and merges matching
+// MCP resource names into the @-mention options (plan 08f H10 / G.10). An empty
+// query skips the file search (daemon requires one) but still lists matching
+// MCP resources (all of them when query is empty).
+func findFilesCmd(ctx context.Context, c *opcode42client.Opcode42Client, query string, resources []mcpResource) tea.Cmd {
 	return func() tea.Msg {
-		if strings.TrimSpace(query) == "" {
-			return filesFoundMsg{query: query}
-		}
 		var files []string
-		_ = c.GetJSON(ctx, "/find/file?query="+url.QueryEscape(query), &files)
+		if strings.TrimSpace(query) != "" {
+			_ = c.GetJSON(ctx, "/find/file?query="+url.QueryEscape(query), &files)
+		}
+		files = mergeMentionOptions(files, filterMCPResourceNames(resources, query))
 		if len(files) > maxMentionRows {
 			files = files[:maxMentionRows]
 		}
@@ -60,8 +62,45 @@ func findFilesCmd(ctx context.Context, c *opcode42client.Opcode42Client, query s
 	}
 }
 
+// filterMCPResourceNames returns resource names that match query
+// (case-insensitive substring; empty query matches all). Matches on name only
+// — same as opencode autocomplete.tsx (value: res.name).
+func filterMCPResourceNames(resources []mcpResource, query string) []string {
+	q := strings.ToLower(strings.TrimSpace(query))
+	var out []string
+	for _, r := range resources {
+		if r.Name == "" {
+			continue
+		}
+		if q == "" || strings.Contains(strings.ToLower(r.Name), q) {
+			out = append(out, r.Name)
+		}
+	}
+	return out
+}
+
+// mergeMentionOptions appends resource names that aren't already present as
+// file paths, preserving file-search order first.
+func mergeMentionOptions(files, resources []string) []string {
+	seen := make(map[string]struct{}, len(files))
+	for _, f := range files {
+		seen[f] = struct{}{}
+	}
+	for _, r := range resources {
+		if _, ok := seen[r]; ok {
+			continue
+		}
+		files = append(files, r)
+		seen[r] = struct{}{}
+	}
+	return files
+}
+
 // acceptMention replaces the trailing "@token" with the selected "@path " so the
-// daemon resolves it to a file part.
+// daemon resolves it to a file part. For MCP resource rows (plan 08f H10), the
+// selected label is the resource name — insert the resource URI instead so the
+// composer carries a resolvable locator (opencode inserts a file part with
+// url=res.uri).
 func (m Model) acceptMention() Model {
 	v := m.input.Value()
 	// Don't trust the open state alone — only edit when there's a live @token.
@@ -74,6 +113,9 @@ func (m Model) acceptMention() Model {
 		return m
 	}
 	path := m.ac.files[m.ac.sel]
+	if uri := m.mcpResourceURI(path); uri != "" {
+		path = uri
+	}
 	if i := strings.LastIndex(v, "@"); i >= 0 {
 		v = v[:i] + "@" + path + " "
 	}
@@ -81,4 +123,15 @@ func (m Model) acceptMention() Model {
 	m.input.CursorEnd()
 	m.ac = autocomplete{}
 	return m.resizeComposer()
+}
+
+// mcpResourceURI returns the URI for a resource listed by name, or "" when
+// name is not an MCP resource (i.e. it's a normal file path).
+func (m Model) mcpResourceURI(name string) string {
+	for _, r := range m.mcpResources {
+		if r.Name == name {
+			return r.URI
+		}
+	}
+	return ""
 }
