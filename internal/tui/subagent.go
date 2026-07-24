@@ -109,17 +109,46 @@ func titlecase(s string) string {
 }
 
 // openSession switches the open session to id (loading its stream + children).
-// A no-op when id is empty or already current.
+// A no-op when id is empty or already current. Saves/restores the composer
+// draft per session (plan 08f H19 / G.22; opencode prompt stash on route change).
 func (m Model) openSession(id string) (Model, tea.Cmd) {
 	if id == "" || id == m.cfg.SessionID {
 		return m, nil
 	}
+	m = m.saveSessionDraft(m.cfg.SessionID)
 	m.cfg.SessionID = id
 	m.screen = ScreenSession
 	m.scroll.ToTail() // snap to the live tail of the new stream
+	m = m.restoreSessionDraft(id)
 	// loadMessagesCmd's completion also fetches this session's children, so the
 	// sub-agent footer is fresh without a second call here.
 	return m, loadMessagesCmd(m.ctx, m.client, id)
+}
+
+// saveSessionDraft parks the current composer text under sessionID
+// (including empty, so a previously-saved draft is cleared on switch away
+// after the user emptied the composer).
+func (m Model) saveSessionDraft(sessionID string) Model {
+	if sessionID == "" {
+		return m
+	}
+	if m.sessionDrafts == nil {
+		m.sessionDrafts = map[string]string{}
+	}
+	m.sessionDrafts[sessionID] = m.input.Value()
+	return m
+}
+
+// restoreSessionDraft loads a parked draft for sessionID into the composer
+// (or clears it when none was saved).
+func (m Model) restoreSessionDraft(sessionID string) Model {
+	text := ""
+	if m.sessionDrafts != nil {
+		text = m.sessionDrafts[sessionID]
+	}
+	m.input.SetValue(text)
+	m.input.CursorEnd()
+	return m.resizeComposer()
 }
 
 // enterFirstChild descends into the current session's first sub-agent child.

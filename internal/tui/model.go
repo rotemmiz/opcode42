@@ -201,6 +201,9 @@ type Model struct {
 	// Chrome.
 	agent  string      // active agent (status bar "mode"); empty → default
 	agents []agentItem // selectable agents (GET /agent)
+	// sessionDrafts retains composer text per session across openSession
+	// switches (plan 08f H19 / G.22).
+	sessionDrafts map[string]string
 	// startupPromptArmed is set when Config.Prompt is non-empty; cleared after
 	// the first auto-submit (plan 08f H14 / G.16).
 	startupPromptArmed bool
