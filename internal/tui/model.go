@@ -1362,6 +1362,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.rerenderChrome()
 		return m, cmd
 
+	case openURLDoneMsg:
+		// docs.open / /docs (plan 08f H8). Status reflects success or failure.
+		if msg.Err != nil {
+			m.status = "open docs: " + msg.Err.Error()
+		} else {
+			m.status = "opened " + msg.URL
+		}
+		m = m.rerenderChrome()
+		return m, nil
+
 	case clipboardReadMsg:
 		// ctrl+v / prompt.paste result (plan 08f H2).
 		return m.applyClipboardRead(msg)

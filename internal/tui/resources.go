@@ -205,6 +205,6 @@ func helpRows() []string {
 		"  /new /sessions /models /agents /themes",
 		"  /timeline /diff /terminal /variant /stash",
 		"  /status /connect /help /share /unshare",
-		"  /compact /export /copy",
+		"  /compact /export /copy /docs",
 	}
 }

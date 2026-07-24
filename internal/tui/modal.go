@@ -63,6 +63,7 @@ const (
 	paMCP
 	paSkills
 	paHelp
+	paDocs          // docs.open (08f H8 / G.1)
 	paConnect       // open the connect overlay (plan 08e §D2)
 	paUndo          // messages_undo (08f H1b)
 	paRedo          // messages_redo (08f H1b)
@@ -113,6 +114,7 @@ var paletteItems = []paletteCmd{
 	{"Skills", paSkills},
 	{"Connect to daemon", paConnect},
 	{"Keybindings / help", paHelp},
+	{"Open docs", paDocs},
 	{"Refresh sessions", paRefresh},
 	{"Toggle terminal title", paTerminalTitle},
 	{"Toggle OSC 52 clipboard", paToggleOsc52},    // label resolved dynamically — paletteLabel
@@ -523,6 +525,8 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 		case paHelp:
 			m.modal, m.modalSel = modalHelp, 0
 			return m, nil
+		case paDocs:
+			return m, openDocsCmd()
 		case paRefresh:
 			return m, loadSessionsCmd(m.ctx, m.client)
 		case paTerminalTitle:
