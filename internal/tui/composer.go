@@ -46,6 +46,7 @@ type (
 		text      string // a prompt to send after creation, or…
 		command   string // …a daemon command to run after creation (with arguments)
 		arguments string
+		files     []pendingFile // clipboard attachments staged before create (08f H2)
 		err       error
 	}
 	configLoadedMsg struct{ provider, model string }
@@ -85,8 +86,11 @@ type promptModelWire struct {
 }
 
 type partInput struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	Mime     string `json:"mime,omitempty"`
+	URL      string `json:"url,omitempty"`
+	Filename string `json:"filename,omitempty"`
 }
 
 // loadConfigCmd fetches /config to resolve a default model when no --provider/
@@ -105,24 +109,36 @@ func loadConfigCmd(ctx context.Context, c *opcode42client.Opcode42Client) tea.Cm
 }
 
 // promptCmd submits a prompt to an existing session (under the given agent).
-func promptCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID, text string, pm promptModel, agent string) tea.Cmd {
+// files are optional clipboard/image attachments (plan 08f H2).
+func promptCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID, text string, pm promptModel, agent string, files []pendingFile) tea.Cmd {
 	return func() tea.Msg {
+		parts := make([]partInput, 0, 1+len(files))
+		parts = append(parts, partInput{Type: "text", Text: text})
+		for _, f := range files {
+			parts = append(parts, partInput{
+				Type:     "file",
+				Mime:     f.Mime,
+				URL:      f.URL,
+				Filename: f.Filename,
+			})
+		}
 		body := promptBody{
 			Model:   promptModelWire{ProviderID: pm.Provider, ModelID: pm.Model},
 			Agent:   agent,
 			Variant: pm.effectiveVariant(),
-			Parts:   []partInput{{Type: "text", Text: text}},
+			Parts:   parts,
 		}
 		err := c.PostJSON(ctx, "/session/"+sessionID+"/message", body, nil)
 		return promptSentMsg{err: err}
 	}
 }
 
-// createSessionCmd creates a session, carrying the prompt text to send next.
-func createSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, text string) tea.Cmd {
+// createSessionCmd creates a session, carrying the prompt text (and optional
+// clipboard file attachments) to send next.
+func createSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, text string, files []pendingFile) tea.Cmd {
 	return func() tea.Msg {
 		var ss Session
 		err := c.PostJSON(ctx, "/session", map[string]any{}, &ss)
-		return sessionCreatedMsg{session: ss, text: text, err: err}
+		return sessionCreatedMsg{session: ss, text: text, files: files, err: err}
 	}
 }
