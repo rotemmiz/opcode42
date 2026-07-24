@@ -58,6 +58,22 @@ type Config struct {
 	Model     string // prompt model id
 	Theme     string // override theme name (empty = auto-pick or KV-pinned; for deterministic capture)
 
+	// Continue opens the most-recent parent session after bootstrap
+	// (plan 08f H14 / G.16; opencode --continue / -c). Ignored when SessionID
+	// is already set.
+	Continue bool
+	// Fork forks the --session / --continue target before navigating
+	// (plan 08f H14 / G.16). Requires Continue or SessionID.
+	Fork bool
+	// Prompt pre-fills the composer and auto-submits once connected with a
+	// model (plan 08f H14 / G.16; opencode --prompt).
+	Prompt string
+	// Agent sets the active agent on start (plan 08f H14 / G.16).
+	Agent string
+	// AutoPermissions auto-replies "once" to permission prompts that are not
+	// explicitly denied (plan 08f H14 / G.16; opencode --auto / --yolo).
+	AutoPermissions bool
+
 	// NoDiscover disables mDNS browsing in the connect overlay (plan 08e §D3).
 	// Set by --no-discover for airgapped / CI / scripted runs. The manual URL
 	// field still works; only the nearby-servers list is suppressed.
@@ -183,19 +199,28 @@ type Model struct {
 	ac       autocomplete // composer "/" popup state
 
 	// Chrome.
-	agent          string              // active agent (status bar "mode"); empty → default
-	agents         []agentItem         // selectable agents (GET /agent)
-	themeName      string              // active theme name (theme switcher)
-	sidebarHidden  bool                // right sidebar visibility (toggle: ctrl+x b)
-	streamWidth    int                 // transient: stream column width when the sidebar is shown
-	leader         bool                // ctrl+x leader pressed, awaiting the chord key
-	tasksOpen      bool                // tasks dock visibility (toggle: ctrl+x t)
-	todos          []Todo              // current session's todos (tasks dock)
-	scroll         scrollregion.Region // stream scrollback viewport (0 == live tail)
-	view           viewState           // display toggles (timestamps, tool output, thinking)
-	history        []string            // submitted prompts (persisted; recalled with up/down when empty)
-	histIdx        int                 // browse cursor into history (-1 = not browsing)
-	persistEnabled bool                // gate local-KV reads/writes (off in tests; on via Restore)
+	agent  string      // active agent (status bar "mode"); empty → default
+	agents []agentItem // selectable agents (GET /agent)
+	// startupPromptArmed is set when Config.Prompt is non-empty; cleared after
+	// the first auto-submit (plan 08f H14 / G.16).
+	startupPromptArmed bool
+	// startupForkDone prevents double-forking when sessions reload after a
+	// --fork startup (plan 08f H14 / G.16).
+	startupForkDone bool
+	// startupSessionReady is set once --continue/--session/--fork resolution
+	// has finished so --prompt does not race ahead into the wrong session.
+	startupSessionReady bool
+	themeName           string              // active theme name (theme switcher)
+	sidebarHidden       bool                // right sidebar visibility (toggle: ctrl+x b)
+	streamWidth         int                 // transient: stream column width when the sidebar is shown
+	leader              bool                // ctrl+x leader pressed, awaiting the chord key
+	tasksOpen           bool                // tasks dock visibility (toggle: ctrl+x t)
+	todos               []Todo              // current session's todos (tasks dock)
+	scroll              scrollregion.Region // stream scrollback viewport (0 == live tail)
+	view                viewState           // display toggles (timestamps, tool output, thinking)
+	history             []string            // submitted prompts (persisted; recalled with up/down when empty)
+	histIdx             int                 // browse cursor into history (-1 = not browsing)
+	persistEnabled      bool                // gate local-KV reads/writes (off in tests; on via Restore)
 	// revertMessageID is the local undo checkpoint (opencode session.revert.messageID).
 	// Set after a successful revert; cleared on unrevert. undoLastTurn skips user
 	// messages at/after this id so repeated undos walk further back (08f H1b).
@@ -493,6 +518,14 @@ func New(cfg Config) Model {
 	// forces off regardless (plan 08f H11 / G.13). Restore() will apply any
 	// persisted KV override when the CLI flag was not passed.
 	m.osc52Enabled = !cfg.NoOSC52 && defaultOsc52WriteEnabled()
+	if cfg.Agent != "" {
+		m.agent = cfg.Agent
+	}
+	if strings.TrimSpace(cfg.Prompt) != "" {
+		m.startupPromptArmed = true
+		m.input.SetValue(cfg.Prompt)
+		m.input.CursorEnd()
+	}
 	// OPENCODE_FAST_BOOT skips the splash "screen" (plan 08f H12 / G.14,
 	// opencode app.tsx:272-273): jump straight to ScreenSession when a
 	// session id is already known (--session), otherwise freeze the splash
@@ -1142,6 +1175,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// model) + sidebar (context limit reads m.model).
 			m = m.rerenderFull()
 		}
+		if next, cmd, ok := m.maybeSubmitStartupPrompt(); ok {
+			return next, cmd
+		}
 		return m, nil
 
 	case providersLoadedMsg:
@@ -1335,6 +1371,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cfg.SessionID, m.screen = msg.session.ID, ScreenSession
 		m.view.bgPulse = false // session screen — no bg-pulse (plan 08e §B2)
 		m.status = "forked"
+		m.startupSessionReady = true
 		if msg.prompt != "" {
 			m.input.SetValue(msg.prompt)
 			m.input.CursorEnd()
@@ -1342,6 +1379,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Plan 20: session switch → re-render body + footer + sidebar.
 		m = m.rerenderFull()
+		if next, cmd, ok := m.maybeSubmitStartupPrompt(); ok {
+			return next, tea.Batch(loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID), cmd)
+		}
 		return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
 
 	case mcpLoadedMsg:
@@ -1571,7 +1611,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.store.sessions = upsertSession(m.store.sessions, ss)
 		}
 		m.store.version++
-		// Open the requested session, else the newest.
+		var forkCmd tea.Cmd
+		m, forkCmd = m.applyStartupSessionArgs(msg.sessions)
+		if forkCmd != nil {
+			m = m.rerenderFull()
+			return m, forkCmd
+		}
+		// Open the requested/--continue session, else the newest list entry.
 		if m.cfg.SessionID == "" && len(msg.sessions) > 0 {
 			m.cfg.SessionID = msg.sessions[0].ID
 		}
@@ -1582,10 +1628,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// subsequent messagesLoadedMsg will trigger another re-render once
 			// the stream is loaded).
 			m = m.rerenderFull()
-			return m, loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)
+			cmds := []tea.Cmd{loadMessagesCmd(m.ctx, m.client, m.cfg.SessionID)}
+			if next, cmd, ok := m.maybeSubmitStartupPrompt(); ok {
+				cmds = append(cmds, cmd)
+				return next, tea.Batch(cmds...)
+			}
+			return m, tea.Batch(cmds...)
 		}
 		// Plan 20: store changed → re-render all.
 		m = m.rerenderFull()
+		if next, cmd, ok := m.maybeSubmitStartupPrompt(); ok {
+			return next, cmd
+		}
 		return m, nil
 
 	case messagesLoadedMsg:
@@ -1724,6 +1778,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// on every SSE event.  (plan 08c M9 — spinner.go)
 		if kick := m.maybeKickAnim(); kick != nil {
 			cmds = append(cmds, kick)
+		}
+		// --auto: reply "once" to the permission just asked (plan 08f H14 /
+		// G.16). Reply against the event's own id (not pendingPermission) so
+		// concurrent permission.asked events each get a reply — opencode's
+		// sync.tsx fires permission.reply per event with no shared in-flight
+		// guard.
+		if m.cfg.AutoPermissions && msg.ev.Type == "permission.asked" {
+			var p struct {
+				ID string `json:"id"`
+			}
+			if decode(msg.ev.Properties, &p) && p.ID != "" {
+				cmds = append(cmds, replyPermissionCmd(m.ctx, m.client, p.ID, "once", ""))
+			}
 		}
 		return m, tea.Batch(cmds...)
 
