@@ -33,6 +33,8 @@ const (
 	modalVariant // model-variant picker (plan 08b §7)
 	modalStash   // stashed prompt drafts (plan 08b §6)
 	modalConnect // mDNS server picker + manual URL entry (plan 08e §D2)
+	modalMessage // DialogMessage: revert/copy/fork a user turn (08f H9)
+	modalFork    // DialogForkFromTimeline: full or anchored fork (08f H9)
 )
 
 // paletteAction identifies a command-palette entry (dispatched by id, not index,
@@ -337,7 +339,21 @@ func (m Model) modalItems() (title string, rows []string, footer string) {
 		if len(rows) == 0 {
 			rows = []string{"(no turns yet)"}
 		}
-		return "Timeline", rows, "enter revert here · esc close"
+		return "Timeline", rows, "enter message actions · esc close"
+	case modalMessage:
+		rows = []string{
+			"Revert  undo messages and file changes",
+			"Copy  message text to clipboard",
+			"Fork  create a new session",
+		}
+		return "Message Actions", rows, "enter select · esc close"
+	case modalFork:
+		rows = append(rows, "Full session")
+		items := m.timelineItems()
+		for i := len(items) - 1; i >= 0; i-- {
+			rows = append(rows, truncate(items[i].title, 52))
+		}
+		return "Fork session", rows, "enter fork · esc close"
 	case modalStatus:
 		for _, line := range m.statusLines() {
 			rows = append(rows, truncate(line, 52)) // keep within the panel
@@ -491,8 +507,10 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 			if m.cfg.SessionID == "" {
 				return m, nil
 			}
-			m.status = "forking…"
-			return m, forkSessionCmd(m.ctx, m.client, m.cfg.SessionID)
+			// DialogForkFromTimeline (plan 08f H9) — pick full session or
+			// an anchored user turn instead of forking immediately.
+			m.modal, m.modalSel = modalFork, 0
+			return m, nil
 		case paDelete:
 			if m.cfg.SessionID == "" {
 				return m, nil
@@ -688,13 +706,68 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 		}
 	case modalTimeline:
 		items := m.timelineItems()
-		m.modal = modalNone
 		if m.modalSel < len(items) {
-			m.status = "reverting…"
-			// Plan 20: status changed → re-render footer.
-			m = m.rerenderChrome()
-			return m, revertCmd(m.ctx, m.client, m.cfg.SessionID, items[m.modalSel].messageID)
+			// DialogMessage (plan 08f H9) — open revert/copy/fork actions
+			// for the selected user turn (opencode dialog-timeline.tsx).
+			m.messageActionID = items[m.modalSel].messageID
+			m.modal, m.modalSel = modalMessage, 0
+			return m, nil
 		}
+		m.modal = modalNone
+	case modalMessage:
+		id := m.messageActionID
+		sel := m.modalSel
+		m.modal, m.modalSel, m.messageActionID = modalNone, 0, ""
+		switch sel {
+		case 0: // Revert
+			if id == "" {
+				return m, nil
+			}
+			// opencode DialogMessage setPrompt: restore the turn's text into
+			// the composer so the user can edit and resubmit after revert.
+			if txt := m.userPromptText(id); txt != "" {
+				m.input.SetValue(txt)
+				m.input.CursorEnd()
+				m = m.resizeComposer()
+			}
+			m.status = "reverting…"
+			m = m.rerenderChrome()
+			return m, revertCmd(m.ctx, m.client, m.cfg.SessionID, id)
+		case 1: // Copy
+			if txt := m.userPromptText(id); txt != "" {
+				m.status = "copied turn"
+				m = m.rerenderChrome()
+				return m, copyClipboardCmd(txt, m.osc52Enabled)
+			}
+			return m, nil
+		case 2: // Fork (anchored)
+			if id == "" || m.cfg.SessionID == "" {
+				return m, nil
+			}
+			m.status = "forking…"
+			m = m.rerenderChrome()
+			return m, forkSessionCmd(m.ctx, m.client, m.cfg.SessionID, id, m.userPromptText(id))
+		}
+	case modalFork:
+		sel := m.modalSel
+		m.modal, m.modalSel = modalNone, 0
+		if m.cfg.SessionID == "" {
+			return m, nil
+		}
+		m.status = "forking…"
+		m = m.rerenderChrome()
+		if sel == 0 {
+			// Full session (no message anchor).
+			return m, forkSessionCmd(m.ctx, m.client, m.cfg.SessionID, "", "")
+		}
+		items := m.timelineItems()
+		// Rows after "Full session" are newest-first (opencode reverse()).
+		idx := len(items) - sel
+		if idx < 0 || idx >= len(items) {
+			return m, nil
+		}
+		id := items[idx].messageID
+		return m, forkSessionCmd(m.ctx, m.client, m.cfg.SessionID, id, m.userPromptText(id))
 	case modalVariant:
 		vs := m.activeVariants()
 		m.modal = modalNone

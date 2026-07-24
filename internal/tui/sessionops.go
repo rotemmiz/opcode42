@@ -26,6 +26,7 @@ type (
 	abortedMsg    struct{ err error }
 	forkedMsg     struct {
 		session Session
+		prompt  string // composer text restored after an anchored fork (08f H9)
 		err     error
 	}
 )
@@ -74,11 +75,18 @@ func abortSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id s
 }
 
 // forkSessionCmd branches a session (POST /session/{id}/fork → new Session).
-func forkSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id string) tea.Cmd {
+// When messageID is non-empty, the fork is anchored at that user turn
+// (plan 08f H9 / DialogForkFromTimeline). prompt is restored into the
+// composer after navigation when the fork was anchored.
+func forkSessionCmd(ctx context.Context, c *opcode42client.Opcode42Client, id, messageID, prompt string) tea.Cmd {
 	return func() tea.Msg {
+		body := map[string]any{}
+		if messageID != "" {
+			body["messageID"] = messageID
+		}
 		var ss Session
-		err := c.PostJSON(ctx, "/session/"+id+"/fork", map[string]any{}, &ss)
-		return forkedMsg{session: ss, err: err}
+		err := c.PostJSON(ctx, "/session/"+id+"/fork", body, &ss)
+		return forkedMsg{session: ss, prompt: prompt, err: err}
 	}
 }
 
