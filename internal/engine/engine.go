@@ -121,12 +121,13 @@ func New(cfg Config) *Engine {
 // these are populated both by the client (structured mentions) and by
 // ResolvePromptParts when it expands `@file`/`@dir`/`@symbol` mentions.
 type PartInput struct {
-	Type     string          `json:"type"` // "text" | "file"
-	Text     string          `json:"text,omitempty"`
-	MIME     string          `json:"mime,omitempty"`
-	URL      string          `json:"url,omitempty"`
-	Filename string          `json:"filename,omitempty"`
-	Source   json.RawMessage `json:"source,omitempty"`
+	Type      string          `json:"type"` // "text" | "file"
+	Text      string          `json:"text,omitempty"`
+	MIME      string          `json:"mime,omitempty"`
+	URL       string          `json:"url,omitempty"`
+	Filename  string          `json:"filename,omitempty"`
+	Source    json.RawMessage `json:"source,omitempty"`
+	Synthetic bool            `json:"synthetic,omitempty"`
 }
 
 // PromptInput is a request to prompt a session.
@@ -164,7 +165,7 @@ func (e *Engine) Prompt(ctx context.Context, in PromptInput) (message.WithParts,
 	e.emitMessage(message.Info{User: user})
 
 	var parts []message.Part
-	for _, pin := range e.ResolvePromptParts(in.Parts) {
+	for _, pin := range e.expandPromptParts(ctx, e.ResolvePromptParts(in.Parts)) {
 		part := toPart(pin, user.SessionID, user.ID)
 		if part == nil {
 			continue
@@ -295,7 +296,7 @@ func toPart(in PartInput, sessionID, messageID string) message.Part {
 		if in.Text == "" {
 			return nil
 		}
-		return &message.TextPart{PartBase: base, Type: "text", Text: in.Text}
+		return &message.TextPart{PartBase: base, Type: "text", Text: in.Text, Synthetic: in.Synthetic}
 	}
 }
 

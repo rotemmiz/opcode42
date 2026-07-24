@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"runtime"
@@ -25,11 +26,14 @@ type clipboardReadMsg struct {
 }
 
 // pendingFile is a composer-side file attachment staged by clipboard image
-// paste (opencode pasteAttachment). Sent as a file part on the next submit.
+// paste or MCP resource mention (opencode pasteAttachment / insertPart).
+// Sent as a file part on the next submit. Source is optional ResourceSource /
+// FileSource provenance (JSON), matching openapi FilePartInput.source.
 type pendingFile struct {
 	Filename string
 	Mime     string
-	URL      string // data:<mime>;base64,<payload>
+	URL      string          // data:<mime>;base64,<payload> or resource URI
+	Source   json.RawMessage `json:"source,omitempty"`
 }
 
 // copyClipboardCmd copies text to the system clipboard via the OSC-52 escape

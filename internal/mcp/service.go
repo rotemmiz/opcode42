@@ -209,7 +209,7 @@ func (m *Manager) connectOne(ctx context.Context, name string, s Server) {
 		return
 	}
 
-	c, tl, err := m.dialAndList(ctx, name, s)
+	c, tl, res, err := m.dialAndList(ctx, name, s)
 	if err != nil {
 		st := m.dialErrorStatus(ctx, name, s, err)
 		m.mu.Lock()
@@ -232,6 +232,7 @@ func (m *Manager) connectOne(ctx context.Context, name string, s Server) {
 	m.ensureMaps()
 	m.clients[name] = c
 	m.tools[name] = tl
+	m.resources[name] = res
 	m.status[name] = Status{Status: "connected"}
 	m.mu.Unlock()
 }
@@ -248,6 +249,9 @@ func (m *Manager) ensureMaps() {
 	if m.tools == nil {
 		m.tools = map[string][]mcp.Tool{}
 	}
+	if m.resources == nil {
+		m.resources = map[string][]mcp.Resource{}
+	}
 }
 
 // closeLocked closes and forgets the client cached for name (idempotent). Caller
@@ -258,4 +262,5 @@ func (m *Manager) closeLocked(name string) {
 		delete(m.clients, name)
 	}
 	delete(m.tools, name)
+	delete(m.resources, name)
 }

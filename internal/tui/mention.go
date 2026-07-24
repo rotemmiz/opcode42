@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"strings"
 
@@ -13,6 +14,9 @@ import (
 // @-mention file picker: a trailing "@token" in the composer opens a popup of
 // matching file paths (GET /find/file), inserted as "@path " on accept — the
 // wire syntax opencode turns into file parts (design app.jsx onInput @-branch).
+// MCP resources (plan 08f H10) are merged into the same popup; accepting one
+// stages a structured file part with source.type=resource (opencode
+// autocomplete.tsx insertPart) and inserts "@name " in the composer.
 
 // mentionQuery returns the active "@token" at the end of text: the token must
 // start at the beginning or just after whitespace, and run to the end with no
@@ -64,7 +68,9 @@ func findFilesCmd(ctx context.Context, c *opcode42client.Opcode42Client, query s
 
 // filterMCPResourceNames returns resource names that match query
 // (case-insensitive substring; empty query matches all). Matches on name only
-// — same as opencode autocomplete.tsx (value: res.name).
+// — same field as opencode autocomplete.tsx (value: res.name). Matching is a
+// Go TUI simplification of opencode's fuzzysort+frecency ranking, not full
+// behavioral parity.
 func filterMCPResourceNames(resources []mcpResource, query string) []string {
 	q := strings.ToLower(strings.TrimSpace(query))
 	var out []string
@@ -79,28 +85,37 @@ func filterMCPResourceNames(resources []mcpResource, query string) []string {
 	return out
 }
 
-// mergeMentionOptions appends resource names that aren't already present as
-// file paths, preserving file-search order first.
+// mergeMentionOptions puts matching MCP resource names before file-search
+// results so truncation (maxMentionRows) cannot starve resources when the file
+// query is broad (opencode lists non-file options before files). Exact name
+// collisions keep the resource row (first-wins); files and resources resolve
+// differently, so prefer the MCP option when labels collide.
 func mergeMentionOptions(files, resources []string) []string {
-	seen := make(map[string]struct{}, len(files))
-	for _, f := range files {
-		seen[f] = struct{}{}
-	}
+	seen := make(map[string]struct{}, len(files)+len(resources))
+	out := make([]string, 0, len(files)+len(resources))
 	for _, r := range resources {
 		if _, ok := seen[r]; ok {
 			continue
 		}
-		files = append(files, r)
 		seen[r] = struct{}{}
+		out = append(out, r)
 	}
-	return files
+	for _, f := range files {
+		if _, ok := seen[f]; ok {
+			continue
+		}
+		seen[f] = struct{}{}
+		out = append(out, f)
+	}
+	return out
 }
 
 // acceptMention replaces the trailing "@token" with the selected "@path " so the
 // daemon resolves it to a file part. For MCP resource rows (plan 08f H10), the
-// selected label is the resource name — insert the resource URI instead so the
-// composer carries a resolvable locator (opencode inserts a file part with
-// url=res.uri).
+// selected label is the resource name — insert "@name " and stage a structured
+// file part with source.type=resource (opencode autocomplete.tsx:378-394), so
+// the daemon expands it via mcp.readResource rather than the text mention
+// scanner.
 func (m Model) acceptMention() Model {
 	v := m.input.Value()
 	// Don't trust the open state alone — only edit when there's a live @token.
@@ -113,8 +128,24 @@ func (m Model) acceptMention() Model {
 		return m
 	}
 	path := m.ac.files[m.ac.sel]
-	if uri := m.mcpResourceURI(path); uri != "" {
-		path = uri
+	if res := m.mcpResourceByName(path); res != nil {
+		mime := res.MimeType
+		if mime == "" {
+			mime = "text/plain"
+		}
+		src, _ := json.Marshal(map[string]any{
+			"type":       "resource",
+			"clientName": res.Client,
+			"uri":        res.URI,
+			"text":       map[string]any{"start": 0, "end": 0, "value": ""},
+		})
+		m.pendingFiles = append(m.pendingFiles, pendingFile{
+			Filename: res.Name,
+			Mime:     mime,
+			URL:      res.URI,
+			Source:   src,
+		})
+		path = res.Name // display name in composer (opencode insertPart)
 	}
 	if i := strings.LastIndex(v, "@"); i >= 0 {
 		v = v[:i] + "@" + path + " "
@@ -125,13 +156,13 @@ func (m Model) acceptMention() Model {
 	return m.resizeComposer()
 }
 
-// mcpResourceURI returns the URI for a resource listed by name, or "" when
-// name is not an MCP resource (i.e. it's a normal file path).
-func (m Model) mcpResourceURI(name string) string {
-	for _, r := range m.mcpResources {
-		if r.Name == name {
-			return r.URI
+// mcpResourceByName returns the MCP resource listed under name, or nil when
+// name is a normal file-path option.
+func (m Model) mcpResourceByName(name string) *mcpResource {
+	for i := range m.mcpResources {
+		if m.mcpResources[i].Name == name {
+			return &m.mcpResources[i]
 		}
 	}
-	return ""
+	return nil
 }

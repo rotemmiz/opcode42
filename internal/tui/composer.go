@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -86,11 +87,12 @@ type promptModelWire struct {
 }
 
 type partInput struct {
-	Type     string `json:"type"`
-	Text     string `json:"text,omitempty"`
-	Mime     string `json:"mime,omitempty"`
-	URL      string `json:"url,omitempty"`
-	Filename string `json:"filename,omitempty"`
+	Type     string          `json:"type"`
+	Text     string          `json:"text,omitempty"`
+	Mime     string          `json:"mime,omitempty"`
+	URL      string          `json:"url,omitempty"`
+	Filename string          `json:"filename,omitempty"`
+	Source   json.RawMessage `json:"source,omitempty"`
 }
 
 // loadConfigCmd fetches /config to resolve a default model when no --provider/
@@ -120,6 +122,7 @@ func promptCmd(ctx context.Context, c *opcode42client.Opcode42Client, sessionID,
 				Mime:     f.Mime,
 				URL:      f.URL,
 				Filename: f.Filename,
+				Source:   f.Source,
 			})
 		}
 		body := promptBody{
