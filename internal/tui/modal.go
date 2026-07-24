@@ -67,6 +67,7 @@ const (
 	paUndo          // messages_undo (08f H1b)
 	paRedo          // messages_redo (08f H1b)
 	paTerminalTitle // terminal.title.toggle (08f H6)
+	paToggleOsc52   // clipboard.osc52.toggle (08f H11 / plan G.13)
 
 	// Display toggles (08f H7 / plan G.11 — opencode app.toggle.*).
 	paToggleAnimations       // app.toggle.animations
@@ -114,6 +115,7 @@ var paletteItems = []paletteCmd{
 	{"Keybindings / help", paHelp},
 	{"Refresh sessions", paRefresh},
 	{"Toggle terminal title", paTerminalTitle},
+	{"Toggle OSC 52 clipboard", paToggleOsc52},    // label resolved dynamically — paletteLabel
 	{"Disable animations", paToggleAnimations},    // label resolved dynamically — paletteLabel
 	{"Disable file context", paToggleFileContext}, // label resolved dynamically — paletteLabel
 	{"Toggle diff file tree", paToggleDiffTree},
@@ -129,6 +131,11 @@ var paletteItems = []paletteCmd{
 // …" : "Enable …"). Entries not listed here just use their static label.
 func (m Model) paletteLabel(it paletteCmd) string {
 	switch it.action {
+	case paToggleOsc52:
+		if m.osc52Enabled {
+			return "Disable OSC 52 clipboard"
+		}
+		return "Enable OSC 52 clipboard"
 	case paToggleAnimations:
 		if m.noAnim {
 			return "Enable animations"
@@ -528,6 +535,22 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 			}
 			m.persist()
 			m = m.rerenderChrome()
+			return m, nil
+		case paToggleOsc52:
+			// clipboard.osc52.toggle (plan 08f H11 / G.13). --no-osc52
+			// forces off — the palette entry is a no-op then, mirroring
+			// paToggleAnimations / --no-anim.
+			if m.cfg.NoOSC52 {
+				m.status = "OSC 52 clipboard forced off (--no-osc52)"
+				return m, nil
+			}
+			m.osc52Enabled = !m.osc52Enabled
+			if m.osc52Enabled {
+				m.status = "OSC 52 clipboard: on"
+			} else {
+				m.status = "OSC 52 clipboard: off"
+			}
+			m.persist()
 			return m, nil
 		case paToggleAnimations:
 			// app.toggle.animations (plan 08f H7 / G.11). --no-anim still

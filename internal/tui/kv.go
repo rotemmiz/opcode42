@@ -23,6 +23,10 @@ type kvData struct {
 	HideDiffTree         bool     `json:"hideDiffTree,omitempty"`           // diff reviewer file-tree pane off
 	TerminalTitleEnabled *bool    `json:"terminal_title_enabled,omitempty"` // nil = default on (08f H6)
 	PasteSummaryEnabled  *bool    `json:"paste_summary_enabled,omitempty"`  // nil = default on (08f H3)
+	// Osc52WriteEnabled gates the OSC 52 clipboard-write escape (08f H11 /
+	// plan G.13). nil = environment-based default (on locally, off over
+	// SSH) rather than a fixed default, unlike the other toggles above.
+	Osc52WriteEnabled *bool `json:"osc52_write_enabled,omitempty"`
 
 	// Display toggles (08f H7 / plan G.11). All nil = default on, matching
 	// opencode's kv.get(key, true) defaults (packages/tui/src/app.tsx).
@@ -91,6 +95,7 @@ func (m Model) persist() {
 		HideDiffTree:            m.diffTreeHidden,
 		TerminalTitleEnabled:    boolPtr(m.terminalTitleEnabled),
 		PasteSummaryEnabled:     boolPtr(m.pasteSummaryEnabled),
+		Osc52WriteEnabled:       boolPtr(m.osc52Enabled),
 		AnimationsEnabled:       boolPtr(!m.noAnim),
 		FileContextEnabled:      boolPtr(m.fileContextEnabled),
 		SessionDirFilterEnabled: boolPtr(m.sessionDirFilterEnabled),
@@ -124,6 +129,18 @@ func kvPasteSummaryEnabled(kv kvData) bool {
 		return true
 	}
 	return *kv.PasteSummaryEnabled
+}
+
+// kvOsc52WriteEnabled returns the persisted OSC 52 clipboard-write
+// preference (plan 08f H11 / G.13). Unlike the other kv* toggles above, a
+// nil value here does not fall back to a fixed default — it falls back to
+// the environment-based default (on locally, off over SSH), since the
+// escape leaks to the wrong terminal over an SSH hop.
+func kvOsc52WriteEnabled(kv kvData) bool {
+	if kv.Osc52WriteEnabled == nil {
+		return defaultOsc52WriteEnabled()
+	}
+	return *kv.Osc52WriteEnabled
 }
 
 // kvAnimationsEnabled returns the animations preference (default on). The

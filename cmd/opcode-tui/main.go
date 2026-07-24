@@ -5,6 +5,7 @@
 //	opcode-tui --url http://127.0.0.1:4096 --dir "$PWD"
 //	opcode-tui --theme opcode42-light           # pin theme for deterministic capture
 //	opcode-tui --no-anim                        # static logo + frozen spinner (capture / a11y)
+//	opcode-tui --no-osc52                       # force OSC 52 clipboard-write escapes off
 package main
 
 import (
@@ -30,6 +31,7 @@ func main() {
 	noDiscover := flag.Bool("no-discover", false, "disable mDNS browsing in the connect overlay (plan 08e §D3)")
 	noAnim := flag.Bool("no-anim", false, "disable per-frame animation (static logo, frozen spinner, peak bg-pulse) for capture / accessibility")
 	sixel := flag.Bool("sixel", false, "force Sixel capability on for image rendering (plan 08e §E2); images still require ctrl+x i to display")
+	noOSC52 := flag.Bool("no-osc52", false, "force the OSC 52 clipboard-write escape off (default: on locally, off over SSH)")
 	flag.Parse()
 
 	// When --url is omitted, the TUI defers to tui.Restore: a KV-pinned
@@ -47,6 +49,7 @@ func main() {
 		NoDiscover: *noDiscover,
 		NoAnim:     *noAnim,
 		Sixel:      *sixel,
+		NoOSC52:    *noOSC52,
 	}).Restore() // restore persisted theme/model/history + enable persistence
 
 	// AltScreen (and other terminal toggles) moved from NewProgram options to

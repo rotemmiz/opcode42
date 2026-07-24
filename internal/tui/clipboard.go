@@ -37,14 +37,38 @@ type pendingFile struct {
 // bypasses Bubble Tea's renderer instead of corrupting a frame. OSC-52 works
 // over SSH and needs no platform clipboard binary; terminals that don't support
 // it simply ignore the sequence. Failure (no tty) is a silent no-op.
-func copyClipboardCmd(text string) tea.Cmd {
+//
+// enabled gates the actual write (plan 08f H11 / G.13): callers pass
+// m.osc52Enabled, which defaults to on locally / off over SSH and can be
+// forced off by --no-osc52 or toggled from the command palette. The msg is
+// still emitted when disabled so callers' "copied" status/UI feedback is
+// unaffected — only the escape-sequence write is skipped.
+func copyClipboardCmd(text string, enabled bool) tea.Cmd {
 	return func() tea.Msg {
-		if f, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
-			_, _ = f.WriteString(ansi.SetSystemClipboard(text))
-			_ = f.Close()
+		if osc52WriteWouldHappen(enabled) {
+			if f, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
+				_, _ = f.WriteString(ansi.SetSystemClipboard(text))
+				_ = f.Close()
+			}
 		}
 		return clipboardCopiedMsg{}
 	}
+}
+
+// osc52WriteWouldHappen reports whether copyClipboardCmd would attempt the
+// OSC 52 tty write for the given enabled state. Split out as a pure helper
+// so tests can assert the gating decision without needing a real /dev/tty
+// (plan 08f H11 / G.13).
+func osc52WriteWouldHappen(enabled bool) bool {
+	return enabled
+}
+
+// defaultOsc52WriteEnabled reports the environment-based OSC 52 default: off
+// when running over SSH (SSH_CONNECTION or SSH_TTY set — the escape would
+// leak to the remote host's terminal rather than the user's local clipboard),
+// on otherwise (plan 08f H11 / G.13).
+func defaultOsc52WriteEnabled() bool {
+	return os.Getenv("SSH_CONNECTION") == "" && os.Getenv("SSH_TTY") == ""
 }
 
 // readClipboardCmd reads the system clipboard (plan 08f H2). Mirrors
