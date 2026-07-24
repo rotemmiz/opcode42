@@ -118,6 +118,7 @@ type Model struct {
 	modalSel    int
 	renameInput textinput.Model // text-input overlay (rename current session)
 	mcpServers  []mcpItem       // read-only MCP list (GET /mcp)
+	lspServers  []lspItem       // read-only LSP status list (GET /lsp; refreshed on lsp.updated)
 	skills      []skillItem     // read-only skills list (GET /skill)
 	// permState is the 3-stage permission UI state machine (plan 17 §B3):
 	// permission → always confirm → reject message. The render path
@@ -886,8 +887,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.rerenderChrome()
 		// Subscribe to events, bootstrap the session list, resolve the model, and
 		// preload the provider + command catalogs so the switcher/slash popup open
-		// populated.
-		return m, tea.Batch(openSSECmd(m.ctx, m.client), loadSessionsCmd(m.ctx, m.client), loadConfigCmd(m.ctx, m.client), loadProvidersCmd(m.ctx, m.client), loadCommandsCmd(m.ctx, m.client), loadAgentsCmd(m.ctx, m.client))
+		// populated. Also bootstrap the LSP/MCP status chrome (plan 08f G.5/G.6)
+		// so the sidebar/footer counts are populated without opening either modal.
+		return m, tea.Batch(openSSECmd(m.ctx, m.client), loadSessionsCmd(m.ctx, m.client), loadConfigCmd(m.ctx, m.client), loadProvidersCmd(m.ctx, m.client), loadCommandsCmd(m.ctx, m.client), loadAgentsCmd(m.ctx, m.client), loadLSPCmd(m.ctx, m.client), loadMCPCmd(m.ctx, m.client))
 
 	case configLoadedMsg:
 		if !m.model.ok() {
@@ -1103,7 +1105,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.mcpServers = msg.items
-		// Plan 20: MCP count changed → re-render sidebar (LSP count) + footer.
+		// Plan 20: MCP count changed → re-render sidebar + footer (MCP counts).
+		m = m.rerenderFull()
+		return m, nil
+
+	case lspLoadedMsg:
+		if msg.err != nil {
+			// Best-effort: the LSP section simply shows "0 LSP" until the next
+			// successful fetch (bootstrap retries via the next lsp.updated event
+			// or reconnect); no modal surfaces this status today.
+			return m, nil
+		}
+		m.lspServers = msg.items
+		// Plan 20: LSP count changed → re-render sidebar + footer (LSP counts).
 		m = m.rerenderFull()
 		return m, nil
 
@@ -1421,6 +1435,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A todowrite tool part changed the todos — refetch (no todo SSE event).
 		if m.tasksOpen && m.cfg.SessionID != "" && isTodoWriteEvent(msg.ev) {
 			cmds = append(cmds, loadTodosCmd(m.ctx, m.client, m.cfg.SessionID))
+		}
+		// G.5/G.6: a client spawned/handshook — refetch LSP status so the
+		// sidebar/footer counts stay current (lsp/lsp.ts:294 fires lsp.updated
+		// after each first-successful-client spawn; the event carries no
+		// payload, so re-fetch rather than reduce it into the store).
+		if msg.ev.Type == "lsp.updated" {
+			cmds = append(cmds, loadLSPCmd(m.ctx, m.client))
 		}
 		// E3: when the open session goes idle, reconcile pending permissions/
 		// questions. A cancelled-without-event request (agent finalizer) would
