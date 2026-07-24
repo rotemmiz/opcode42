@@ -13,14 +13,15 @@ import (
 const historyMax = 100
 
 type kvData struct {
-	Theme        string   `json:"theme,omitempty"`
-	Provider     string   `json:"provider,omitempty"`
-	Model        string   `json:"model,omitempty"`
-	Variant      string   `json:"variant,omitempty"`    // active model variant (plan 08b §7)
-	ServerURL    string   `json:"server_url,omitempty"` // pinned daemon URL (plan 08e §D3)
-	History      []string `json:"history,omitempty"`
-	Stash        []string `json:"stash,omitempty"`        // parked prompt drafts (plan 08b §6)
-	HideDiffTree bool     `json:"hideDiffTree,omitempty"` // diff reviewer file-tree pane off
+	Theme                string   `json:"theme,omitempty"`
+	Provider             string   `json:"provider,omitempty"`
+	Model                string   `json:"model,omitempty"`
+	Variant              string   `json:"variant,omitempty"`    // active model variant (plan 08b §7)
+	ServerURL            string   `json:"server_url,omitempty"` // pinned daemon URL (plan 08e §D3)
+	History              []string `json:"history,omitempty"`
+	Stash                []string `json:"stash,omitempty"`                  // parked prompt drafts (plan 08b §6)
+	HideDiffTree         bool     `json:"hideDiffTree,omitempty"`           // diff reviewer file-tree pane off
+	TerminalTitleEnabled *bool    `json:"terminal_title_enabled,omitempty"` // nil = default on (08f H6)
 }
 
 func kvPath() string {
@@ -67,15 +68,26 @@ func (m Model) persist() {
 		return
 	}
 	saveKV(kvData{
-		Theme:        m.themeName,
-		Provider:     m.model.Provider,
-		Model:        m.model.Model,
-		Variant:      m.model.Variant,
-		ServerURL:    m.cfg.URL,
-		History:      m.history,
-		Stash:        m.stash,
-		HideDiffTree: m.diffTreeHidden,
+		Theme:                m.themeName,
+		Provider:             m.model.Provider,
+		Model:                m.model.Model,
+		Variant:              m.model.Variant,
+		ServerURL:            m.cfg.URL,
+		History:              m.history,
+		Stash:                m.stash,
+		HideDiffTree:         m.diffTreeHidden,
+		TerminalTitleEnabled: boolPtr(m.terminalTitleEnabled),
 	})
+}
+
+func boolPtr(v bool) *bool { return &v }
+
+// kvTitleEnabled returns the persisted terminal-title preference (default on).
+func kvTitleEnabled(kv kvData) bool {
+	if kv.TerminalTitleEnabled == nil {
+		return true
+	}
+	return *kv.TerminalTitleEnabled
 }
 
 // persistServerURL pins a daemon URL to the KV (server_url key, plan 08e §D3)

@@ -63,9 +63,10 @@ const (
 	paMCP
 	paSkills
 	paHelp
-	paConnect // open the connect overlay (plan 08e §D2)
-	paUndo    // messages_undo (08f H1b)
-	paRedo    // messages_redo (08f H1b)
+	paConnect       // open the connect overlay (plan 08e §D2)
+	paUndo          // messages_undo (08f H1b)
+	paRedo          // messages_redo (08f H1b)
+	paTerminalTitle // terminal.title.toggle (08f H6)
 )
 
 type paletteCmd struct {
@@ -101,6 +102,7 @@ var paletteItems = []paletteCmd{
 	{"Connect to daemon", paConnect},
 	{"Keybindings / help", paHelp},
 	{"Refresh sessions", paRefresh},
+	{"Toggle terminal title", paTerminalTitle},
 }
 
 // Modal action results.
@@ -457,6 +459,17 @@ func (m Model) modalSelect() (tea.Model, tea.Cmd) {
 			return m, nil
 		case paRefresh:
 			return m, loadSessionsCmd(m.ctx, m.client)
+		case paTerminalTitle:
+			// terminal.title.toggle (plan 08f H6).
+			m.terminalTitleEnabled = !m.terminalTitleEnabled
+			if m.terminalTitleEnabled {
+				m.status = "terminal title: on"
+			} else {
+				m.status = "terminal title: off"
+			}
+			m.persist()
+			m = m.rerenderChrome()
+			return m, nil
 		}
 	case modalSessions:
 		m.modal = modalNone

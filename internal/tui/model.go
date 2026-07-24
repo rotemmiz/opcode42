@@ -7,6 +7,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -304,6 +306,11 @@ type Model struct {
 	// pendingFiles are clipboard image attachments staged for the next
 	// submit (plan 08f H2 / opencode pasteAttachment). Cleared on send.
 	pendingFiles []pendingFile
+
+	// terminalTitleEnabled gates OSC 0 window titles (plan 08f H6 / G.7).
+	// Default true; persisted as terminal_title_enabled KV; suppressed when
+	// OPENCODE_DISABLE_TERMINAL_TITLE is set.
+	terminalTitleEnabled bool
 }
 
 // pickDefaultTheme returns the appropriate default theme name based on whether
@@ -359,18 +366,19 @@ func New(cfg Config) Model {
 		initialStatus = "ready"
 	}
 	m := Model{
-		cfg:             cfg,
-		screen:          ScreenSplash,
-		conn:            Connecting,
-		status:          initialStatus,
-		ctx:             ctx,
-		cancel:          cancel,
-		store:           newStore(),
-		input:           ta,
-		renameInput:     ri,
-		connectURLInput: ci,
-		serverProbe:     map[string]serverProbeState{},
-		model:           promptModel{Provider: cfg.Provider, Model: cfg.Model},
+		cfg:                  cfg,
+		screen:               ScreenSplash,
+		conn:                 Connecting,
+		status:               initialStatus,
+		ctx:                  ctx,
+		cancel:               cancel,
+		store:                newStore(),
+		input:                ta,
+		renameInput:          ri,
+		connectURLInput:      ci,
+		serverProbe:          map[string]serverProbeState{},
+		model:                promptModel{Provider: cfg.Provider, Model: cfg.Model},
+		terminalTitleEnabled: true, // plan 08f H6 — default on (opencode kv default)
 	}
 	// The bg-pulse is on by default for the splash (plan 08e §B2). It is
 	// turned off when the session screen is entered (sessionOpenedMsg /
@@ -481,6 +489,10 @@ func (m Model) Restore() Model {
 	m.history, m.histIdx = kv.History, -1
 	m.stash = kv.Stash
 	m.diffTreeHidden = kv.HideDiffTree
+	m.terminalTitleEnabled = kvTitleEnabled(kv)
+	if os.Getenv("OPENCODE_DISABLE_TERMINAL_TITLE") != "" {
+		m.terminalTitleEnabled = false
+	}
 	if m.cfg.Theme != "" {
 		// CLI --theme flag takes highest priority — deterministic capture / testing.
 		m = m.applyThemeByName(m.cfg.Theme)
@@ -727,6 +739,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 			return m, readClipboardCmd()
+		case "ctrl+z":
+			// terminal.suspend (opencode ctrl+z) — plan 08f H6 / G.8.
+			// Bubble Tea puts the terminal in raw mode, so we must emit
+			// SuspendMsg ourselves. Disabled on Windows (opencode hides it).
+			if runtime.GOOS == "windows" {
+				break
+			}
+			if m.modal != modalNone || m.diff.open ||
+				(m.pty.open && m.pty.focused) ||
+				m.pendingPermission() != nil || m.pendingQuestion() != nil {
+				break
+			}
+			return m, tea.Suspend
 		case "ctrl+d":
 			// session_delete (opencode ctrl+d) with two-press confirm — plan 08f
 			// H1a. Only when the composer is empty: with text, fall through so
@@ -2271,8 +2296,37 @@ func (m Model) View() tea.View {
 	v := tea.NewView(m.composeView())
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
+	v.WindowTitle = m.windowTitle()
 	return v
 }
+
+// windowTitle returns the OSC 0 title for the current screen (plan 08f H6 /
+// opencode app.tsx:447-471). Empty when titles are disabled.
+func (m Model) windowTitle() string {
+	if !m.terminalTitleEnabled {
+		return ""
+	}
+	if m.screen != ScreenSession || m.cfg.SessionID == "" {
+		return "Opcode42"
+	}
+	title := m.sessionTitle(m.cfg.SessionID)
+	if title == "" || isDefaultSessionTitle(title) {
+		return "Opcode42"
+	}
+	return "OC | " + truncate(title, 40)
+}
+
+// isDefaultSessionTitle matches the daemon's untouched auto title
+// ("New session - <RFC3339-millis>") and the TUI's own "session <id>"
+// placeholder — same intent as opencode isDefaultTitle / session.IsDefaultTitle.
+func isDefaultSessionTitle(title string) bool {
+	if strings.HasPrefix(title, "session ") {
+		return true
+	}
+	return defaultSessionTitleRe.MatchString(title)
+}
+
+var defaultSessionTitleRe = regexp.MustCompile(`^New session - \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$`)
 
 // renderView is the v1 render entry, retained as a thin shim around the v2
 // composeView so tests that call renderView() keep working through the
