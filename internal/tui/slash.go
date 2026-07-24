@@ -229,19 +229,54 @@ func (m Model) handleAutocompleteKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) 
 		m = m.rerenderChrome()
 		return true, m, nil
 	case "enter":
-		if m.ac.mode == acMention {
-			m = m.acceptMention()
-			// Plan 20: composer text changed → re-render footer.
-			m = m.rerenderChrome()
-			return true, m, nil
-		}
-		nm, cmd := m.acceptSlash()
-		m = nm.(Model)
-		// Plan 20: composer text + status changed → re-render footer.
-		m = m.rerenderChrome()
+		m, cmd := m.acceptAutocomplete()
 		return true, m, cmd
 	}
 	return false, m, nil
+}
+
+// acceptAutocomplete runs the selected row's action — a mention insert or a
+// slash-command run — and re-renders the footer for the composer/status
+// change. Shared by the "enter" key (handleAutocompleteKey) and a mouse click
+// on a row (plan 08f H4 / G.3), so both paths behave identically.
+func (m Model) acceptAutocomplete() (Model, tea.Cmd) {
+	if m.ac.mode == acMention {
+		m = m.acceptMention()
+		// Plan 20: composer text changed → re-render footer.
+		m = m.rerenderChrome()
+		return m, nil
+	}
+	nm, cmd := m.acceptSlash()
+	m = nm.(Model)
+	// Plan 20: composer text + status changed → re-render footer.
+	m = m.rerenderChrome()
+	return m, cmd
+}
+
+// acRowAtY maps a mouse position to an autocomplete row index for hover/click
+// (plan 08f H4 / G.3). The popup renders at (acPopupX, acPopupY) with a
+// 1-row top border and no vertical padding (Padding(0,1) is horizontal
+// only — canvas.go autocompleteView), so row i sits at Y = acPopupY()+1+i.
+// Returns ok=false when the popup is closed or the point falls outside it.
+func (m Model) acRowAtY(x, y int) (int, bool) {
+	if !m.ac.open {
+		return 0, false
+	}
+	view := m.autocompleteView()
+	if view == "" {
+		return 0, false
+	}
+	px, py := m.acPopupX(), m.acPopupY()
+	pw, ph := lipgloss.Width(view), lipgloss.Height(view)
+	if x < px || x >= px+pw || y < py || y >= py+ph {
+		return 0, false
+	}
+	const borderTop = 1
+	row := y - py - borderTop
+	if row < 0 || row >= m.ac.count() {
+		return 0, false
+	}
+	return row, true
 }
 
 // completeSlash fills the composer with the selected command name (keeping the
