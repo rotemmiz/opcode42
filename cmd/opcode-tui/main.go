@@ -41,15 +41,19 @@ func main() {
 	// can distinguish "no --url" from "--url=http://…".
 	urlVal := *url
 
+	// OPENCODE_TUI_CONFIG (plan 08f H12 / G.14, mirrors opencode
+	// flag.ts:60-62) is stashed on Config for plan 08f H13 (G.15 config
+	// file resolution) to consume; the TUI itself doesn't read it yet.
 	model := tui.New(tui.Config{
 		URL: urlVal, Directory: *dir, SessionID: *session,
 		Username: *username, Password: *password,
 		Provider: *provider, Model: *modelID,
-		Theme:      *themeFlag,
-		NoDiscover: *noDiscover,
-		NoAnim:     *noAnim,
-		Sixel:      *sixel,
-		NoOSC52:    *noOSC52,
+		Theme:         *themeFlag,
+		NoDiscover:    *noDiscover,
+		NoAnim:        *noAnim,
+		Sixel:         *sixel,
+		NoOSC52:       *noOSC52,
+		TUIConfigPath: os.Getenv("OPENCODE_TUI_CONFIG"),
 	}).Restore() // restore persisted theme/model/history + enable persistence
 
 	// AltScreen (and other terminal toggles) moved from NewProgram options to
