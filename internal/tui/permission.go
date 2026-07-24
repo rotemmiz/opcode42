@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -330,11 +331,21 @@ func (m Model) permissionStageLines(p *Permission, panelW int) []string {
 		lipgloss.NewStyle().Foreground(s.P.Fg).Render(title))
 	lines = append(lines, "")
 
-	// Info lines: the tool title + detail (footer.permission.tsx:277-283).
-	infoTitle := permissionTitle(*p)
-	lines = append(lines, " "+s.Base.Render(truncate(infoTitle, innerW)))
-	if detail := permissionDetail(*p); detail != "" {
-		lines = append(lines, " "+s.Faint.Render(truncate(detail, innerW)))
+	// Info lines: icon + title + body (permission.tsx info(); plan 08f G.20).
+	info := permissionBody(*p)
+	titleLine := info.Title
+	if info.Icon != "" {
+		titleLine = info.Icon + " " + info.Title
+	}
+	lines = append(lines, " "+s.Base.Render(truncate(titleLine, innerW)))
+	for i, detail := range info.Body {
+		style := s.Faint
+		// external_directory pattern bullets use theme.text (Base); the
+		// "Patterns" label stays muted (permission.tsx:350-353).
+		if p.Permission == "external_directory" && i > 0 {
+			style = s.Base
+		}
+		lines = append(lines, " "+style.Render(truncate(detail, innerW)))
 	}
 	lines = append(lines, "")
 
@@ -422,6 +433,74 @@ func (m Model) permissionButtons(opts []permOption, innerW int) string {
 	}
 	row := strings.Join(cells, " ")
 	return s.Surface(s.P.BgElev).Width(innerW).Render(row)
+}
+
+// permBody is the icon/title/body triple for a permission kind
+// (opencode permission.tsx info(); plan 08f G.20).
+type permBody struct {
+	Icon  string
+	Title string
+	Body  []string
+}
+
+// permissionBody dispatches on request.permission to build the panel's
+// icon + title + body lines. Edge kinds external_directory / doom_loop are
+// handled here; other kinds fall through to permissionTitle/permissionDetail.
+func permissionBody(p Permission) permBody {
+	switch p.Permission {
+	case "external_directory":
+		dir := externalDirectoryDir(p)
+		title := "Access external directory"
+		if dir != "" {
+			title += " " + dir
+		}
+		var body []string
+		if len(p.Patterns) > 0 {
+			body = append(body, "Patterns")
+			for _, pat := range p.Patterns {
+				body = append(body, "- "+pat)
+			}
+		}
+		return permBody{Icon: "←", Title: title, Body: body}
+	case "doom_loop":
+		return permBody{
+			Icon:  "⟳",
+			Title: "Continue after repeated failures",
+			Body:  []string{"This keeps the session running despite repeated failures."},
+		}
+	default:
+		title := permissionTitle(p)
+		var body []string
+		if d := permissionDetail(p); d != "" {
+			body = []string{d}
+		}
+		return permBody{Title: title, Body: body}
+	}
+}
+
+// externalDirectoryDir derives the directory shown in the
+// external_directory title: parentDir ?? filepath ?? (dirname(pattern) when
+// the first pattern contains "*", else the pattern itself)
+// (permission.tsx:333-341).
+func externalDirectoryDir(p Permission) string {
+	var meta map[string]any
+	if len(p.Metadata) > 0 {
+		_ = json.Unmarshal(p.Metadata, &meta)
+	}
+	if parent, ok := meta["parentDir"].(string); ok && strings.TrimSpace(parent) != "" {
+		return parent
+	}
+	if fp, ok := meta["filepath"].(string); ok && strings.TrimSpace(fp) != "" {
+		return fp
+	}
+	if len(p.Patterns) == 0 {
+		return ""
+	}
+	pattern := p.Patterns[0]
+	if strings.Contains(pattern, "*") {
+		return filepath.Dir(pattern)
+	}
+	return pattern
 }
 
 // permissionTitle is a human line for the request (the action + tool).
